@@ -1,0 +1,20 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Id": "io.github.v3DJG6GL.iframe-plasma",
+        "Name": "iframe Plasma",
+        "Description": "Embed authenticated web content (Grafana panels, dashboards) as a Plasma 6 widget.",
+        "Icon": "applications-internet",
+        "Category": "System Information",
+        "License": "AGPL-3.0-or-later",
+        "Authors": [
+            {
+                "Name": "v3DJG6GL",
+                "Email": "72495210+v3DJG6GL@users.noreply.github.com"
+            }
+        ],
+        "Website": "https://github.com/v3DJG6GL/iframe-plasma",
+        "Version": "0.4.2"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

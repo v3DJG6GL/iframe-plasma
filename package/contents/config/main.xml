@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    SPDX-FileCopyrightText: 2026 v3DJG6GL <72495210+v3DJG6GL@users.noreply.github.com>
+    SPDX-License-Identifier: AGPL-3.0-or-later
+-->
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0
+                          http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+    <kcfgfile name=""/>
+    <group name="General">
+        <entry name="urlsJson" type="String">
+            <default>[{"label":"KDE","url":"https://www.kde.org"}]</default>
+        </entry>
+        <entry name="currentTabIndex" type="Int">
+            <default>0</default>
+        </entry>
+        <entry name="autoCycleEnabled" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="autoCycleIntervalSec" type="Int">
+            <default>30</default>
+        </entry>
+    </group>
+    <group name="Display">
+        <entry name="zoomFactor" type="Int">
+            <default>100</default>
+        </entry>
+        <entry name="themeMode" type="String">
+            <default>auto</default>
+        </entry>
+        <entry name="preferredWidth" type="Int">
+            <default>800</default>
+        </entry>
+        <entry name="preferredHeight" type="Int">
+            <default>500</default>
+        </entry>
+        <entry name="showTabBar" type="Bool">
+            <default>true</default>
+        </entry>
+        <entry name="compactPreviewEnabled" type="Bool">
+            <default>true</default>
+        </entry>
+        <!-- "auto" (default) → thumbnail follows the popup's currentTabIndex.
+             "fixed" → thumbnail uses compactPreviewTabIndex below. -->
+        <entry name="compactPreviewMode" type="String">
+            <default>auto</default>
+        </entry>
+        <entry name="compactPreviewTabIndex" type="Int">
+            <default>0</default>
+        </entry>
+        <!-- When true, render the URL's `label` field as a semi-transparent
+             bar across the top of the panel-slot thumbnail. -->
+        <entry name="compactPreviewShowLabel" type="Bool">
+            <default>false</default>
+        </entry>
+        <!-- Long-axis size of the panel-slot preview in pixels. On a
+             horizontal panel this is the slot's WIDTH (height = panel
+             thickness, set by Plasma). On a vertical panel this is the
+             slot's HEIGHT (width = panel thickness). On the desktop both
+             axes inherit this as the implicit size. -->
+        <entry name="compactPreviewLongAxisPx" type="Int">
+            <default>160</default>
+        </entry>
+    </group>
+    <group name="Auth">
+        <!-- Named auth profiles (UUID-keyed). Each profile has metadata
+             (id, name, authType, username, autheliaHost); the secret value
+             is stored in KWallet under `profile:<uuid>` with multi-field
+             content (password / bearerToken / rawHeader). URLs reference a
+             profile by its id in urlsJson.authProfileId. -->
+        <entry name="authProfilesJson" type="String">
+            <default>[]</default>
+        </entry>
+        <!-- DEPRECATED in 0.4.0: was the global Authelia host, now per-
+             profile. Kept readable so the one-shot migration in main.qml
+             can copy the old value as the default for migrated profiles. -->
+        <entry name="autheliaHost" type="String">
+            <default></default>
+        </entry>
+        <entry name="useBasicAuthInjection" type="Bool">
+            <default>false</default>
+        </entry>
+    </group>
+    <group name="Advanced">
+        <entry name="privateBrowsing" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="userAgentOverride" type="String">
+            <default></default>
+        </entry>
+        <entry name="remoteDebuggingPort" type="Int">
+            <default>0</default>
+        </entry>
+    </group>
+</kcfg>

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    SPDX-FileCopyrightText: 2026 v3DJG6GL <72495210+v3DJG6GL@users.noreply.github.com>
+    SPDX-License-Identifier: AGPL-3.0-or-later
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+    <defs>
+        <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#4f9bff"/>
+            <stop offset="1" stop-color="#1d62c4"/>
+        </linearGradient>
+    </defs>
+    <!-- Window frame -->
+    <rect x="6" y="10" width="52" height="44" rx="4" fill="url(#g)"/>
+    <rect x="6" y="10" width="52" height="9" rx="4" fill="#1d62c4"/>
+    <rect x="6" y="15" width="52" height="4" fill="#1d62c4"/>
+    <!-- Window dots -->
+    <circle cx="12" cy="14.5" r="1.5" fill="#ff6b6b"/>
+    <circle cx="18" cy="14.5" r="1.5" fill="#ffd166"/>
+    <circle cx="24" cy="14.5" r="1.5" fill="#06d6a0"/>
+    <!-- Embedded graph bars (Grafana panel idea) -->
+    <g fill="#ffffff" opacity="0.95">
+        <rect x="13" y="42" width="5" height="8"/>
+        <rect x="21" y="36" width="5" height="14"/>
+        <rect x="29" y="30" width="5" height="20"/>
+        <rect x="37" y="24" width="5" height="26"/>
+        <rect x="45" y="33" width="5" height="17"/>
+    </g>
+    <!-- Trend line on top of bars -->
+    <polyline points="15.5,40 23.5,33 31.5,27 39.5,22 47.5,30" fill="none" stroke="#ffe066" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -1,0 +1,16 @@
+build/
+build-*/
+*.user
+*.user.*
+*.qmlc
+*.jsc
+.cache/
+.kdev4/
+*.kdev4
+.vscode/
+.idea/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
