@@ -5,6 +5,7 @@
 #pragma once
 
 #include <QHash>
+#include <QReadWriteLock>
 #include <QString>
 #include <QStringList>
 #include <QWebEngineUrlRequestInterceptor>
@@ -39,6 +40,9 @@ public:
     void interceptRequest(QWebEngineUrlRequestInfo &info) override;
 
 private:
-    // host (lowercased) -> precomputed "Basic <base64>" / "Bearer …" / raw header value
+    // host (lowercased) -> precomputed "Basic <base64>" / "Bearer …" / raw header value.
+    // interceptRequest() runs on Chromium's IO thread; applyProfile()/clearAll()
+    // run on the UI thread — guard the hash with a read/write lock.
     QHash<QString, QByteArray> m_headers;
+    mutable QReadWriteLock m_headersLock;
 };

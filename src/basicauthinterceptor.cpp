@@ -19,6 +19,7 @@ BasicAuthInterceptor::BasicAuthInterceptor(QObject *parent)
 
 void BasicAuthInterceptor::clearAll()
 {
+    QWriteLocker locker(&m_headersLock);
     m_headers.clear();
 }
 
@@ -54,8 +55,11 @@ void BasicAuthInterceptor::applyProfile(const QString &profileId,
         return;
     }
 
-    for (const QString &h : hosts) {
-        m_headers.insert(h.toLower(), header);
+    {
+        QWriteLocker locker(&m_headersLock);
+        for (const QString &h : hosts) {
+            m_headers.insert(h.toLower(), header);
+        }
     }
     qCInfo(lcIframeAuth) << "applyProfile: id=" << profileId
                          << "type=" << authType
@@ -65,14 +69,25 @@ void BasicAuthInterceptor::applyProfile(const QString &profileId,
 
 void BasicAuthInterceptor::interceptRequest(QWebEngineUrlRequestInfo &info)
 {
-    // Runs on Chromium's IO thread. Keep allocation cheap.
+    // Runs on Chromium's IO thread. Keep allocation cheap and release the
+    // read lock before touching `info` / logging so UI-thread mutations
+    // don't stall.
     const QString host = info.requestUrl().host().toLower();
-    const auto it = m_headers.constFind(host);
-    if (it != m_headers.cend()) {
-        info.setHttpHeader(QByteArrayLiteral("Authorization"), it.value());
+    QByteArray header;
+    bool hadAny = false;
+    {
+        QReadLocker locker(&m_headersLock);
+        const auto it = m_headers.constFind(host);
+        if (it != m_headers.cend()) {
+            header = it.value();
+        }
+        hadAny = !m_headers.isEmpty();
+    }
+    if (!header.isEmpty()) {
+        info.setHttpHeader(QByteArrayLiteral("Authorization"), header);
         qCInfo(lcIframeAuth).noquote() << "interceptor: injected Authorization for"
             << info.requestUrl().toString().left(120);
-    } else if (!m_headers.isEmpty()) {
+    } else if (hadAny) {
         // Only log near-misses if we have any creds at all
         qCInfo(lcIframeAuth).noquote() << "interceptor: NO MATCH host=" << host
             << "url=" << info.requestUrl().toString().left(120);
