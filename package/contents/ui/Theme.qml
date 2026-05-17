@@ -18,19 +18,17 @@ QtObject {
     readonly property color fgDim:       "#7e89ac"
     readonly property color fgMute:      "#545c7e"
     readonly property color accent:      "#7aa2f7"   // blue
-    readonly property color accentBright:"#bb9af7"   // purple highlight
     readonly property color success:     "#9ece6a"
     readonly property color warning:     "#e0af68"
     readonly property color error:       "#f7768e"
     readonly property color magenta:     "#bb9af7"
     readonly property color cyan:        "#7dcfff"
 
-    // Fonts — both verified installed via fc-list on Ubuntu 25.10 (Hack, IBM Plex Mono).
-    // If a target system lacks them, Qt falls through to the next name in `*Fallback`.
+    // Hack + IBM Plex Mono are both verified installed via fc-list on
+    // Ubuntu 25.10. On systems without them, Qt's own font matching falls
+    // back to the platform default monospace.
     readonly property string fontHeader: "Hack"
     readonly property string fontBody:   "IBM Plex Mono"
-    readonly property var    fontHeaderFallback: ["Hack", "JetBrains Mono", "Fira Code", "monospace"]
-    readonly property var    fontBodyFallback:   ["IBM Plex Mono", "Cascadia Code", "monospace"]
 
     // Spacing scale
     readonly property int s1: 4
@@ -41,7 +39,6 @@ QtObject {
 
     // Component metrics
     readonly property int radius:        4
-    readonly property int borderWidth:   1
     readonly property int tabHeight:     30
     readonly property int toolbarHeight: 26
     readonly property int chipHeight:    18
