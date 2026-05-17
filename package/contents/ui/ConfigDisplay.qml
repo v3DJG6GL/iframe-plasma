@@ -11,8 +11,6 @@ import org.kde.kirigami as Kirigami
 KCM.SimpleKCM {
     property alias cfg_zoomFactor: zoom.value
     property alias cfg_themeMode: themeStore.value
-    property alias cfg_preferredWidth: widthBox.value
-    property alias cfg_preferredHeight: heightBox.value
     property alias cfg_showTabBar: tabBarSwitch.checked
     property alias cfg_compactPreviewEnabled: compactSwitch.checked
     property alias cfg_compactPreviewMode: modeStore.value
@@ -67,35 +65,19 @@ KCM.SimpleKCM {
 
         Item { Kirigami.FormData.isSection: true }
 
-        QQC.SpinBox {
-            id: widthBox
-            Kirigami.FormData.label: i18n("Preferred width:")
-            from: 200; to: 4000; stepSize: 50; value: 800
-            editable: true
-            textFromValue: (v) => v + " px"
-            valueFromText: (text) => {
-                const n = parseInt(String(text).replace(/[^0-9-]/g, ''), 10);
-                return isNaN(n) ? value : Math.max(from, Math.min(to, n));
-            }
-            NoWheel {}
-        }
-        QQC.SpinBox {
-            id: heightBox
-            Kirigami.FormData.label: i18n("Preferred height:")
-            from: 150; to: 4000; stepSize: 50; value: 500
-            editable: true
-            textFromValue: (v) => v + " px"
-            valueFromText: (text) => {
-                const n = parseInt(String(text).replace(/[^0-9-]/g, ''), 10);
-                return isNaN(n) ? value : Math.max(from, Math.min(to, n));
-            }
-            NoWheel {}
-        }
         QQC.CheckBox {
             id: tabBarSwitch
             Kirigami.FormData.label: i18n("Tab bar:")
             text: i18n("Show tab bar when multiple URLs are configured")
             checked: true
+        }
+        QQC.Label {
+            Layout.fillWidth: true
+            Layout.maximumWidth: Kirigami.Units.gridUnit * 22
+            text: i18n("Tip: drag the popup's edges to resize it. The size is remembered across sessions.")
+            wrapMode: Text.WordWrap
+            color: Kirigami.Theme.disabledTextColor
+            font.pixelSize: Kirigami.Theme.defaultFont.pixelSize - 1
         }
 
         Item { Kirigami.FormData.isSection: true }

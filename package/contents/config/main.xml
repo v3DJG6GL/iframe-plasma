@@ -29,12 +29,6 @@
         <entry name="themeMode" type="String">
             <default>auto</default>
         </entry>
-        <entry name="preferredWidth" type="Int">
-            <default>800</default>
-        </entry>
-        <entry name="preferredHeight" type="Int">
-            <default>500</default>
-        </entry>
         <entry name="showTabBar" type="Bool">
             <default>true</default>
         </entry>

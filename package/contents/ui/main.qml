@@ -1015,10 +1015,13 @@ PlasmoidItem {
     }
 
     fullRepresentation: ColumnLayout {
+        // Layout.preferred* only applies on first-ever open; once the user
+        // drag-resizes the popup, Plasma persists `popupWidth/popupHeight`
+        // in appletsrc and that value wins on subsequent opens.
         Layout.minimumWidth:  Kirigami.Units.gridUnit * 20
         Layout.minimumHeight: Kirigami.Units.gridUnit * 14
-        Layout.preferredWidth:  Plasmoid.configuration.preferredWidth
-        Layout.preferredHeight: Plasmoid.configuration.preferredHeight
+        Layout.preferredWidth:  800
+        Layout.preferredHeight: 500
         spacing: 0
 
         CyberToolbar {
