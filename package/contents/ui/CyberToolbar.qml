@@ -187,7 +187,7 @@ Rectangle {
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
-                onClicked: timeMenu.popup(timeChip, 0, timeChip.height)
+                onClicked: timeMenu.opened ? timeMenu.close() : timeMenu.open()
             }
 
             QQC.ToolTip {
@@ -197,30 +197,25 @@ Rectangle {
             }
         }
 
-        QQC.Menu {
+        CyberDropdown {
             id: timeMenu
-            Instantiator {
-                model: [
-                    { val: "",    label: i18nc("time range: keep URL's existing from/to", "(URL default)") },
-                    { val: "5m",  label: i18n("Last 5 minutes")  },
-                    { val: "15m", label: i18n("Last 15 minutes") },
-                    { val: "30m", label: i18n("Last 30 minutes") },
-                    { val: "1h",  label: i18n("Last 1 hour")     },
-                    { val: "6h",  label: i18n("Last 6 hours")    },
-                    { val: "12h", label: i18n("Last 12 hours")   },
-                    { val: "24h", label: i18n("Last 24 hours")   },
-                    { val: "7d",  label: i18n("Last 7 days")     },
-                    { val: "30d", label: i18n("Last 30 days")    }
-                ]
-                delegate: QQC.MenuItem {
-                    text: modelData.label
-                    checkable: true
-                    checked: modelData.val === tb.timeRange
-                    onTriggered: tb.selectTimeRange(modelData.val)
-                }
-                onObjectAdded:   (i, obj) => timeMenu.insertItem(i, obj)
-                onObjectRemoved: (_, obj) => timeMenu.removeItem(obj)
-            }
+            parent: timeChip
+            x: 0
+            y: timeChip.height + 2
+            currentValue: tb.timeRange
+            model: [
+                { val: "",    label: i18nc("time range: keep URL's existing from/to", "(URL default)") },
+                { val: "5m",  label: i18n("Last 5 minutes")  },
+                { val: "15m", label: i18n("Last 15 minutes") },
+                { val: "30m", label: i18n("Last 30 minutes") },
+                { val: "1h",  label: i18n("Last 1 hour")     },
+                { val: "6h",  label: i18n("Last 6 hours")    },
+                { val: "12h", label: i18n("Last 12 hours")   },
+                { val: "24h", label: i18n("Last 24 hours")   },
+                { val: "7d",  label: i18n("Last 7 days")     },
+                { val: "30d", label: i18n("Last 30 days")    }
+            ]
+            onValueSelected: (v) => tb.selectTimeRange(v)
         }
 
         // --- Refresh-interval chip dropdown ---------------------------------
@@ -275,7 +270,7 @@ Rectangle {
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
-                onClicked: refreshMenu.popup(refreshChip, 0, refreshChip.height)
+                onClicked: refreshMenu.opened ? refreshMenu.close() : refreshMenu.open()
             }
 
             QQC.ToolTip {
@@ -285,26 +280,21 @@ Rectangle {
             }
         }
 
-        QQC.Menu {
+        CyberDropdown {
             id: refreshMenu
-            Instantiator {
-                model: [
-                    { val: "",    label: i18nc("refresh off", "Off (no auto-refresh)") },
-                    { val: "5s",  label: i18n("Every 5 seconds")   },
-                    { val: "30s", label: i18n("Every 30 seconds")  },
-                    { val: "1m",  label: i18n("Every 1 minute")    },
-                    { val: "5m",  label: i18n("Every 5 minutes")   },
-                    { val: "30m", label: i18n("Every 30 minutes")  }
-                ]
-                delegate: QQC.MenuItem {
-                    text: modelData.label
-                    checkable: true
-                    checked: modelData.val === tb.refreshInterval
-                    onTriggered: tb.selectRefreshInterval(modelData.val)
-                }
-                onObjectAdded:   (i, obj) => refreshMenu.insertItem(i, obj)
-                onObjectRemoved: (_, obj) => refreshMenu.removeItem(obj)
-            }
+            parent: refreshChip
+            x: 0
+            y: refreshChip.height + 2
+            currentValue: tb.refreshInterval
+            model: [
+                { val: "",    label: i18nc("refresh off", "Off (no auto-refresh)") },
+                { val: "5s",  label: i18n("Every 5 seconds")   },
+                { val: "30s", label: i18n("Every 30 seconds")  },
+                { val: "1m",  label: i18n("Every 1 minute")    },
+                { val: "5m",  label: i18n("Every 5 minutes")   },
+                { val: "30m", label: i18n("Every 30 minutes")  }
+            ]
+            onValueSelected: (v) => tb.selectRefreshInterval(v)
         }
 
         // --- HTTP status chip ----------------------------------------------
