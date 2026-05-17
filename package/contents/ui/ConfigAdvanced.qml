@@ -42,6 +42,7 @@ KCM.SimpleKCM {
             Kirigami.FormData.label: i18n("Remote DevTools port:")
             from: 0; to: 65535; value: 0
             textFromValue: (v) => v === 0 ? i18n("disabled") : String(v)
+            NoWheel {}
         }
         QQC.Label {
             Layout.fillWidth: true

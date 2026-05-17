@@ -40,6 +40,7 @@ KCM.SimpleKCM {
             from: 25; to: 500; stepSize: 5
             value: 100
             textFromValue: (v) => v + " %"
+            NoWheel {}
         }
         QQC.ComboBox {
             id: themeCombo
@@ -53,6 +54,7 @@ KCM.SimpleKCM {
             valueRole: "value"
             currentIndex: model.findIndex(x => x.value === themeStore.value)
             onActivated: themeStore.value = model[currentIndex].value
+            NoWheel {}
         }
         QQC.Label {
             Layout.fillWidth: true
@@ -68,12 +70,14 @@ KCM.SimpleKCM {
             Kirigami.FormData.label: i18n("Preferred width:")
             from: 200; to: 4000; stepSize: 50; value: 800
             textFromValue: (v) => v + " px"
+            NoWheel {}
         }
         QQC.SpinBox {
             id: heightBox
             Kirigami.FormData.label: i18n("Preferred height:")
             from: 150; to: 4000; stepSize: 50; value: 500
             textFromValue: (v) => v + " px"
+            NoWheel {}
         }
         QQC.CheckBox {
             id: tabBarSwitch
@@ -131,6 +135,7 @@ KCM.SimpleKCM {
                 }
             }
             displayText: rows[currentIndex] ? rows[currentIndex].display : ""
+            NoWheel {}
         }
         QQC.SpinBox {
             id: longAxisSpin
@@ -152,6 +157,7 @@ KCM.SimpleKCM {
             QQC.ToolTip.visible: hovered
             QQC.ToolTip.delay: 600
             QQC.ToolTip.text: i18n("Long-axis size of the panel slot. Horizontal panel → slot width; vertical panel → slot height. The other axis is fixed by the Plasma panel's thickness. Type any value; the field accepts integers from 16 to 4000.")
+            NoWheel {}
         }
         QQC.CheckBox {
             id: showLabelSwitch

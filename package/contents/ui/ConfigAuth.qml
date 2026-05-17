@@ -204,6 +204,7 @@ KCM.SimpleKCM {
                                 listModel.setProperty(card.index, "authType", v);
                                 store.serialize();
                             }
+                            NoWheel {}
                         }
                     }
 

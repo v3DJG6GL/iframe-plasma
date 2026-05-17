@@ -206,6 +206,7 @@ KCM.SimpleKCM {
                                 QQC.ToolTip.visible: hovered && page.authProfiles.length === 0
                                 QQC.ToolTip.delay: 400
                                 QQC.ToolTip.text: i18n("Create auth profiles on the Authentication tab, then pick one here.")
+                                NoWheel {}
                             }
                         }
 
@@ -258,6 +259,7 @@ KCM.SimpleKCM {
                                   + "  • Full panel      — entire d-solo view.\n"
                                   + "  • Custom selector — any CSS selector you provide.\n\n"
                                   + "Note: .u-over and .u-under are uPlot's TRANSPARENT overlay layers — they render blank.")
+                                NoWheel {}
                             }
                         }
                         QQC.TextField {
@@ -316,6 +318,7 @@ KCM.SimpleKCM {
                                 QQC.ToolTip.visible: hovered
                                 QQC.ToolTip.delay: 600
                                 QQC.ToolTip.text: i18n("Override the time range for the panel-slot thumbnail. `Same as widget` keeps the URL's own from/to (popup and thumbnail show the same range). Picking a preset rewrites from=now-<range>&to=now ONLY for the thumbnail's WebEngineView — the popup is unaffected.")
+                                NoWheel {}
                             }
                         }
                     }
@@ -416,6 +419,7 @@ KCM.SimpleKCM {
                     textRole: "label"
                     valueRole: "value"
                     currentIndex: 7   // 24h (Last 24 hours)
+                    NoWheel {}
                 }
                 QQC.CheckBox {
                     id: addKiosk
@@ -438,6 +442,7 @@ KCM.SimpleKCM {
                         value: 30
                         enabled: addRefresh.checked
                         textFromValue: (v) => v + " s"
+                        NoWheel {}
                     }
                 }
                 // hideLogo=true removes Grafana 12.4+'s "Powered by Grafana"
