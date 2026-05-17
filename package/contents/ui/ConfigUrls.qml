@@ -294,32 +294,23 @@ KCM.SimpleKCM {
                                 id: thumbTimeRangeCombo
                                 Layout.fillWidth: true
                                 readonly property var presets: [
-                                    { value: "auto", display: i18n("Same as widget (use URL's range)") },
-                                    { value: "5m",   display: i18n("Last 5 minutes") },
-                                    { value: "15m",  display: i18n("Last 15 minutes") },
-                                    { value: "30m",  display: i18n("Last 30 minutes") },
-                                    { value: "1h",   display: i18n("Last 1 hour") },
-                                    { value: "6h",   display: i18n("Last 6 hours") },
-                                    { value: "12h",  display: i18n("Last 12 hours") },
-                                    { value: "24h",  display: i18n("Last 24 hours") },
-                                    { value: "7d",   display: i18n("Last 7 days") },
-                                    { value: "30d",  display: i18n("Last 30 days") },
-                                    { value: "90d",  display: i18n("Last 90 days") }
+                                    { val: "auto", label: i18n("Same as widget (use URL's range)") },
+                                    ...GrafanaTimeRanges.presets
                                 ]
                                 model: presets
-                                textRole: "display"
-                                valueRole: "value"
+                                textRole: "label"
+                                valueRole: "val"
                                 // Empty string in saved JSON = "auto" (back-compat).
                                 currentIndex: {
                                     const v = thumbTimeRange || "auto";
-                                    const idx = presets.findIndex(x => x.value === v);
+                                    const idx = presets.findIndex(x => x.val === v);
                                     return idx >= 0 ? idx : 0;
                                 }
                                 // Arrow form avoids signal-param `index`
                                 // shadowing the delegate's `index` property
                                 // (same trap as the thumbMode combo above).
                                 onActivated: _ => {
-                                    const v = presets[currentIndex].value;
+                                    const v = presets[currentIndex].val;
                                     listModel.setProperty(index, "thumbTimeRange", v);
                                     store.serialize();
                                 }
@@ -374,17 +365,8 @@ KCM.SimpleKCM {
 
         // Time-range presets — see https://grafana.com/docs/grafana/latest/dashboards/time-range-controls/
         readonly property var timeRangePresets: [
-            { label: i18n("(keep URL's range)"), value: "" },
-            { label: i18n("Last 5 minutes"),   value: "5m"  },
-            { label: i18n("Last 15 minutes"),  value: "15m" },
-            { label: i18n("Last 30 minutes"),  value: "30m" },
-            { label: i18n("Last 1 hour"),      value: "1h"  },
-            { label: i18n("Last 6 hours"),     value: "6h"  },
-            { label: i18n("Last 12 hours"),    value: "12h" },
-            { label: i18n("Last 24 hours"),    value: "24h" },
-            { label: i18n("Last 7 days"),      value: "7d"  },
-            { label: i18n("Last 30 days"),     value: "30d" },
-            { label: i18n("Last 90 days"),     value: "90d" }
+            { val: "", label: i18n("(keep URL's range)") },
+            ...GrafanaTimeRanges.presets
         ]
 
         // Don't use `anchors.fill: parent` here — that zeros out the layout's
@@ -425,7 +407,7 @@ KCM.SimpleKCM {
                     Layout.preferredWidth: Kirigami.Units.gridUnit * 14
                     model: grafanaHelper.timeRangePresets
                     textRole: "label"
-                    valueRole: "value"
+                    valueRole: "val"
                     currentIndex: 7   // 24h (Last 24 hours)
                     NoWheel {}
                 }
