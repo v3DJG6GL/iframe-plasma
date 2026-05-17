@@ -488,8 +488,12 @@ KCM.SimpleKCM {
             //    11.2.x regression (issue #96595). Anchor the match to a
             //    query delimiter so a host like "kiosk.example.com" or a
             //    param like "kioskMode=1" doesn't suppress the insertion.
+            //    Route insertion through splitFragment so we don't bleed
+            //    the flag past a `#anchor` (appendParam wraps key=value, so
+            //    we can't reuse it for a valueless flag).
             if (addKiosk.checked && !/[?&]kiosk(=|&|$)/.test(u)) {
-                u += (u.indexOf("?") === -1 ? "?" : "&") + "kiosk";
+                const [base, frag] = splitFragment(u);
+                u = base + (base.indexOf("?") === -1 ? "?" : "&") + "kiosk" + frag;
             }
 
             // 4) Theme — let the widget runtime substitute ${theme}.
