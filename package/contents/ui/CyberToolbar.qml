@@ -302,22 +302,19 @@ Rectangle {
             visible: tb.httpStatus > 0
             Layout.preferredHeight: Theme.chipHeight
             Layout.alignment: Qt.AlignVCenter
-            implicitWidth: statusRow.implicitWidth + Theme.chipPadding * 2
+            implicitWidth: statusLabel.implicitWidth + Theme.chipPadding * 2
             color: Theme.surface
             border.color: Theme.fgMute
             border.width: 1
             radius: 2
-            Row {
-                id: statusRow
+            QQC.Label {
+                id: statusLabel
                 anchors.centerIn: parent
-                spacing: 4
-                QQC.Label {
-                    text: "[" + tb.httpStatus + " " + (tb.httpStatus < 400 ? "OK" : "ERR")
-                          + (tb.latencyMs > 0 ? " · " + tb.latencyMs + "ms" : "") + "]"
-                    font.family: Theme.fontBody
-                    font.pixelSize: 9
-                    color: tb.httpStatus < 400 ? Theme.success : Theme.error
-                }
+                text: "[" + tb.httpStatus + " " + (tb.httpStatus < 400 ? "OK" : "ERR")
+                      + (tb.latencyMs > 0 ? " · " + tb.latencyMs + "ms" : "") + "]"
+                font.family: Theme.fontBody
+                font.pixelSize: 9
+                color: tb.httpStatus < 400 ? Theme.success : Theme.error
             }
         }
 
