@@ -22,7 +22,6 @@ QtObject {
     readonly property color warning:     "#e0af68"
     readonly property color error:       "#f7768e"
     readonly property color magenta:     "#bb9af7"
-    readonly property color cyan:        "#7dcfff"
 
     // Hack + IBM Plex Mono are both verified installed via fc-list on
     // Ubuntu 25.10. On systems without them, Qt's own font matching falls
@@ -31,14 +30,11 @@ QtObject {
     readonly property string fontBody:   "IBM Plex Mono"
 
     // Spacing scale
-    readonly property int s1: 4
     readonly property int s2: 8
     readonly property int s3: 12
     readonly property int s4: 16
-    readonly property int s5: 24
 
     // Component metrics
-    readonly property int radius:        4
     readonly property int tabHeight:     30
     readonly property int toolbarHeight: 26
     readonly property int chipHeight:    18
