@@ -241,9 +241,10 @@ Rectangle {
                     text: "⟳"   // distinct from the reload button's ↻
                     font.pixelSize: 10
                     color: tb.refreshInterval.length > 0 ? Theme.success : Theme.fgDim
-                    // Slow pulse when auto-refresh is on — quietly nerdy live indicator
+                    // Slow pulse when auto-refresh is on — quietly nerdy live indicator.
+                    // Also gated on host so the timer stops while the chip is hidden.
                     SequentialAnimation on opacity {
-                        running: tb.refreshInterval.length > 0
+                        running: tb.host.length > 0 && tb.refreshInterval.length > 0
                         loops: Animation.Infinite
                         NumberAnimation { from: 0.55; to: 1.0; duration: 1400; easing.type: Easing.InOutSine }
                         NumberAnimation { from: 1.0; to: 0.55; duration: 1400; easing.type: Easing.InOutSine }
