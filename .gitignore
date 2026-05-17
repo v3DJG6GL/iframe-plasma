@@ -1,16 +1,59 @@
+# --- build / cmake ---
 build/
 build-*/
-*.user
-*.user.*
-*.qmlc
-*.jsc
-.cache/
-.kdev4/
-*.kdev4
-.vscode/
-.idea/
 CMakeCache.txt
 CMakeFiles/
 cmake_install.cmake
 install_manifest.txt
 compile_commands.json
+CTestTestfile.cmake
+_deps/
+
+# --- QML / Qt caches ---
+*.qmlc
+*.jsc
+
+# --- IDE / editor project files ---
+*.user
+*.user.*
+.kdev4/
+*.kdev4
+.vscode/
+.idea/
+.cache/
+.clangd/
+.ccls-cache/
+
+# --- editor swap / backup files ---
+*~
+*.bak
+*.orig
+*.rej
+*.tmp
+*.swp
+*.swo
+.*.swp
+.*.swo
+\#*\#
+.\#*
+
+# --- ctags / cscope ---
+tags
+TAGS
+cscope.*
+
+# --- logs ---
+*.log
+
+# --- OS metadata ---
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+.directory
+
+# --- local scratch / private notes ---
+scratch/
+.scratch/
+NOTES.local.md
+TODO.local.md
