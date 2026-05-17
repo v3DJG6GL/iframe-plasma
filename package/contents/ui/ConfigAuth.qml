@@ -348,7 +348,6 @@ KCM.SimpleKCM {
                                 }
                                 deleteConfirm.referencing = referencing;
                                 deleteConfirm.profileId = card.id;
-                                deleteConfirm.profileIdx = card.index;
                                 deleteConfirm.open();
                             }
                         }
@@ -373,7 +372,6 @@ KCM.SimpleKCM {
         id: deleteConfirm
         property var referencing: []
         property string profileId: ""
-        property int profileIdx: -1
 
         title: i18n("Delete this profile?")
         subtitle: i18np(
@@ -404,7 +402,16 @@ KCM.SimpleKCM {
                 }
                 if (changed) page.cfg_urlsJson = JSON.stringify(tabs);
             } catch (e) { console.warn("ConfigAuth: failed to patch urlsJson on delete:", e.message); }
-            listModel.remove(deleteConfirm.profileIdx);
+            // Look up the current row index by id at accept-time — survives
+            // in-tab listModel mutations between dialog-open and accept
+            // (Pass-9's a1ebf94 fixed the cross-tab half via the
+            // authProfilesJson scrub; this closes the in-tab half).
+            for (let i = 0; i < listModel.count; i++) {
+                if (listModel.get(i).id === deleteConfirm.profileId) {
+                    listModel.remove(i);
+                    break;
+                }
+            }
             store.serialize();
         }
     }
