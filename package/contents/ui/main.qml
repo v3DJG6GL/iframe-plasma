@@ -156,7 +156,7 @@ PlasmoidItem {
         function onUrlsJsonChanged() {
             root.tabs = root.parseTabs(Plasmoid.configuration.urlsJson);
             if (root.currentTabIndex >= root.tabs.length) {
-                root.currentTabIndex = Math.max(0, root.tabs.length - 1);
+                root.setCurrentTab(Math.max(0, root.tabs.length - 1));
             }
             root.primeAuthProfiles();
         }
