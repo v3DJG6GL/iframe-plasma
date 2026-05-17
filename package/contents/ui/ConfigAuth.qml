@@ -250,9 +250,10 @@ KCM.SimpleKCM {
                                                     : "rawHeader";
                                     const map = {};
                                     map[fieldName] = text;
-                                    page.authSupport.setMap("profile:" + card.id, map);
-                                    card.hasStoredSecret = true;
-                                    savedHint.show();
+                                    if (page.authSupport.setMap("profile:" + card.id, map)) {
+                                        card.hasStoredSecret = true;
+                                        savedHint.show();
+                                    }
                                 }
                                 // Note: NOT clearing `text` — the masked dots
                                 // stay visible as confirmation that the user's
