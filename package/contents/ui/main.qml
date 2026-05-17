@@ -576,9 +576,7 @@ PlasmoidItem {
             console.info("iframe-plasma[compact] thumbMode=" + thumbMode
                 + " → selector=" + JSON.stringify(thumbSelector)
                 + "; reloading miniView");
-            if (typeof miniView !== 'undefined' && miniView) {
-                miniView.reload();
-            }
+            miniView.reload();
         }
 
         // Panel-slot sizing. The canonical Plasma 6 rule (mirroring
@@ -607,8 +605,8 @@ PlasmoidItem {
         Layout.minimumWidth:  Kirigami.Units.iconSizes.smallMedium
         Layout.minimumHeight: Kirigami.Units.iconSizes.smallMedium
 
-        Layout.preferredWidth:  horizontalPanel ? longAxisPx : (verticalPanel ? -1 : longAxisPx)
-        Layout.preferredHeight: verticalPanel   ? longAxisPx : (horizontalPanel ? -1 : longAxisPx)
+        Layout.preferredWidth:  verticalPanel   ? -1 : longAxisPx
+        Layout.preferredHeight: horizontalPanel ? -1 : longAxisPx
 
         Layout.maximumWidth:  horizontalPanel ? longAxisPx : Number.POSITIVE_INFINITY
         Layout.maximumHeight: verticalPanel   ? longAxisPx : Number.POSITIVE_INFINITY
@@ -895,11 +893,8 @@ PlasmoidItem {
             // When the slot itself resizes (user dragged panel size, changed
             // Preview-size config), re-fire window.resize so uPlot re-renders
             // at the new viewport. Debounced 200ms so dragging is smooth.
-            Connections {
-                target: miniView
-                function onWidthChanged()  { miniViewReflowTimer.restart() }
-                function onHeightChanged() { miniViewReflowTimer.restart() }
-            }
+            onWidthChanged:  miniViewReflowTimer.restart()
+            onHeightChanged: miniViewReflowTimer.restart()
             Timer {
                 id: miniViewReflowTimer
                 interval: 200
@@ -910,20 +905,6 @@ PlasmoidItem {
                 }
             }
 
-            function removeThumbCrop() {
-                runJavaScript(
-                    "(function(){"
-                    + "  if (window.__ifpThumbObserver) { window.__ifpThumbObserver.disconnect(); window.__ifpThumbObserver = null; }"
-                    + "  if (window.__ifpThumbWrapObserver) { window.__ifpThumbWrapObserver.disconnect(); window.__ifpThumbWrapObserver = null; }"
-                    + "  if (window.__ifpThumbResize) { try{window.__ifpThumbResize.disconnect();}catch(e){} window.__ifpThumbResize = null; }"
-                    + "  if (window.__ifpThumbInterval) { clearInterval(window.__ifpThumbInterval); window.__ifpThumbInterval = null; }"
-                    + "  const disp = document.getElementById('ifp-thumb-display'); if (disp) disp.remove();"
-                    + "  document.documentElement.removeAttribute('data-ifp-thumb');"
-                    + "  return 'removed';"
-                    + "})()",
-                    function(r) { console.info("iframe-plasma[thumb] removeThumbCrop = " + r); }
-                );
-            }
         }
 
         // --- Icon fallback --------------------------------------------------
