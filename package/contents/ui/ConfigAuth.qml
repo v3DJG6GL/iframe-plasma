@@ -52,7 +52,7 @@ KCM.SimpleKCM {
     function newUuid() {
         // QML doesn't expose crypto.getRandomValues; use Math.random as fallback.
         // Profile IDs are not security-critical (they identify, don't authenticate).
-        function hex(n) { return Math.floor(Math.random() * 16).toString(16); }
+        function hex() { return Math.floor(Math.random() * 16).toString(16); }
         let s = "";
         for (let i = 0; i < 32; i++) {
             if (i === 8 || i === 12 || i === 16 || i === 20) s += "-";
