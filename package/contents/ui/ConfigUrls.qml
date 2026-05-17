@@ -192,10 +192,6 @@ KCM.SimpleKCM {
                                 model: rows
                                 textRole: "display"
                                 valueRole: "id"
-                                currentIndex: {
-                                    const idx = rows.findIndex(x => x.id === authProfileId);
-                                    return idx >= 0 ? idx : 0;
-                                }
                                 onActivated: _ => {
                                     const v = rows[currentIndex].id;
                                     listModel.setProperty(index, "authProfileId", v);
@@ -205,6 +201,20 @@ KCM.SimpleKCM {
                                 QQC.ToolTip.delay: 400
                                 QQC.ToolTip.text: i18n("Create auth profiles on the Authentication tab, then pick one here.")
                                 NoWheel {}
+                            }
+                            // currentIndex via Binding so it survives the
+                            // ComboBox's internal write on user click —
+                            // otherwise the onAuthProfilesChanged scrub
+                            // (clearing authProfileId after a profile is
+                            // deleted on the Auth tab) wouldn't propagate
+                            // to the visible combo.
+                            Binding {
+                                target: profileCombo
+                                property: "currentIndex"
+                                value: {
+                                    const idx = profileCombo.rows.findIndex(x => x.id === authProfileId);
+                                    return idx >= 0 ? idx : 0;
+                                }
                             }
                         }
 
