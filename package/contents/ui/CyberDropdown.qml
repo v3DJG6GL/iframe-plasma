@@ -49,7 +49,7 @@ QQC.Popup {
                 Layout.minimumWidth: Math.max(180, rowLabel.implicitWidth + 28)
                 implicitHeight: rowLabel.implicitHeight + 10
                 color: ma.containsMouse ? Theme.surfaceHi
-                       : active ? Qt.rgba(0.478, 0.635, 0.969, 0.08)  // accent @ 8 %
+                       : active ? Qt.alpha(Theme.accent, 0.08)
                        : "transparent"
 
                 // 2 px accent strip on the left edge of the active row
