@@ -13,7 +13,11 @@ KCM.SimpleKCM {
 
     property alias cfg_authProfilesJson: store.json
     property alias cfg_useBasicAuthInjection: injectionSwitch.checked
-    // Read-only mirror so the delete dialog can list URLs that reference a profile.
+    // Mirror of cfg_urlsJson — read for the delete-confirm preview, and
+    // written back on profile delete to unlink orphan `authProfileId`
+    // references. The write covers the case where ConfigUrls hasn't been
+    // opened in this session, so its own `onAuthProfilesChanged` scrub
+    // never fires.
     property string cfg_urlsJson: "[]"
 
     Loader {
