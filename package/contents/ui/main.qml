@@ -246,11 +246,14 @@ PlasmoidItem {
             // had already run with tabs populated — a race the user can't see.
             root.syncInterceptor();
             root.migrateLegacyAuth();
-            root.primeAuthProfiles();
-            // Reload so the freshly-registered Authorization header is sent on
-            // the next request — otherwise the initial load already happened
-            // unauthenticated and went to Authelia.
-            root.reloadAll();
+            const anyAuth = root.tabs.some(t => (t.authProfileId && t.authProfileId.length > 0));
+            if (anyAuth) {
+                root.primeAuthProfiles();
+                // Reload so the freshly-registered Authorization header is sent
+                // on the next request — otherwise the initial load already
+                // happened unauthenticated and went to Authelia.
+                root.reloadAll();
+            }
         }
     }
 
