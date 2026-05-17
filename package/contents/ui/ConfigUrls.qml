@@ -478,13 +478,17 @@ KCM.SimpleKCM {
             }
 
             // 3) Kiosk — emit just `&kiosk` (no value); kiosk=1 has a Grafana
-            //    11.2.x regression (issue #96595).
-            if (addKiosk.checked && u.indexOf("kiosk") === -1) {
+            //    11.2.x regression (issue #96595). Anchor the match to a
+            //    query delimiter so a host like "kiosk.example.com" or a
+            //    param like "kioskMode=1" doesn't suppress the insertion.
+            if (addKiosk.checked && !/[?&]kiosk(=|&|$)/.test(u)) {
                 u += (u.indexOf("?") === -1 ? "?" : "&") + "kiosk";
             }
 
-            // 4) Theme — let the widget runtime substitute ${theme}
-            if (addTheme.checked && u.indexOf("theme=") === -1) {
+            // 4) Theme — let the widget runtime substitute ${theme}.
+            //    Same delimiter-anchor rationale: don't be fooled by an
+            //    unrelated param like "widgetTheme=dark".
+            if (addTheme.checked && !/[?&]theme=/.test(u)) {
                 u = appendParam(u, "theme", "${theme}");
             }
 
