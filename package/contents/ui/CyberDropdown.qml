@@ -28,7 +28,7 @@ QQC.Popup {
     padding: 1
     modal: false
     focus: true
-    closePolicy: QQC.Popup.CloseOnEscape | QQC.Popup.CloseOnPressOutside | QQC.Popup.CloseOnReleaseOutside
+    closePolicy: QQC.Popup.CloseOnEscape | QQC.Popup.CloseOnPressOutside
 
     background: Rectangle {
         color: Theme.bgAlt
