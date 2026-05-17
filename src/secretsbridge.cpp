@@ -7,6 +7,8 @@
 #include <KWallet>
 #include <QDebug>
 
+const QString SecretsBridge::kFolder = QStringLiteral("iframe-plasma");
+
 SecretsBridge::SecretsBridge(QObject *parent)
     : QObject(parent)
 {
@@ -33,6 +35,12 @@ bool SecretsBridge::walletOpen() const
 bool SecretsBridge::ensureOpen()
 {
     if (m_wallet && m_wallet->isOpen()) {
+        // Wallet may have been used by another caller on a different folder
+        // since our last call — always re-pin so the per-op guards downstream
+        // can be dropped.
+        if (m_wallet->currentFolder() != kFolder) {
+            m_wallet->setFolder(kFolder);
+        }
         return true;
     }
     if (!KWallet::Wallet::isEnabled()) {
@@ -46,10 +54,10 @@ bool SecretsBridge::ensureOpen()
         Q_EMIT error(tr("Failed to open the network wallet."));
         return false;
     }
-    if (!m_wallet->hasFolder(QString::fromLatin1(kFolder))) {
-        m_wallet->createFolder(QString::fromLatin1(kFolder));
+    if (!m_wallet->hasFolder(kFolder)) {
+        m_wallet->createFolder(kFolder);
     }
-    m_wallet->setFolder(QString::fromLatin1(kFolder));
+    m_wallet->setFolder(kFolder);
     Q_EMIT walletOpenChanged();
     return true;
 }
@@ -58,9 +66,6 @@ QString SecretsBridge::get(const QString &key)
 {
     if (!ensureOpen()) {
         return QString();
-    }
-    if (m_wallet->currentFolder() != QString::fromLatin1(kFolder)) {
-        m_wallet->setFolder(QString::fromLatin1(kFolder));
     }
     QString value;
     if (m_wallet->readPassword(key, value) == 0) {
@@ -74,9 +79,6 @@ bool SecretsBridge::set(const QString &key, const QString &value)
     if (!ensureOpen()) {
         return false;
     }
-    if (m_wallet->currentFolder() != QString::fromLatin1(kFolder)) {
-        m_wallet->setFolder(QString::fromLatin1(kFolder));
-    }
     return m_wallet->writePassword(key, value) == 0;
 }
 
@@ -84,9 +86,6 @@ bool SecretsBridge::remove(const QString &key)
 {
     if (!ensureOpen()) {
         return false;
-    }
-    if (m_wallet->currentFolder() != QString::fromLatin1(kFolder)) {
-        m_wallet->setFolder(QString::fromLatin1(kFolder));
     }
     return m_wallet->removeEntry(key) == 0;
 }
@@ -96,9 +95,6 @@ bool SecretsBridge::has(const QString &key)
     if (!ensureOpen()) {
         return false;
     }
-    if (m_wallet->currentFolder() != QString::fromLatin1(kFolder)) {
-        m_wallet->setFolder(QString::fromLatin1(kFolder));
-    }
     return m_wallet->hasEntry(key);
 }
 
@@ -106,9 +102,6 @@ QVariantMap SecretsBridge::getMap(const QString &key)
 {
     if (!ensureOpen()) {
         return {};
-    }
-    if (m_wallet->currentFolder() != QString::fromLatin1(kFolder)) {
-        m_wallet->setFolder(QString::fromLatin1(kFolder));
     }
     QMap<QString, QString> raw;
     if (m_wallet->readMap(key, raw) != 0) {
@@ -125,9 +118,6 @@ bool SecretsBridge::setMap(const QString &key, const QVariantMap &fields)
 {
     if (!ensureOpen()) {
         return false;
-    }
-    if (m_wallet->currentFolder() != QString::fromLatin1(kFolder)) {
-        m_wallet->setFolder(QString::fromLatin1(kFolder));
     }
     QMap<QString, QString> raw;
     for (auto it = fields.constBegin(); it != fields.constEnd(); ++it) {

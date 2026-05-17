@@ -48,5 +48,5 @@ private:
     bool ensureOpen();
 
     KWallet::Wallet *m_wallet = nullptr;
-    static constexpr const char *kFolder = "iframe-plasma";
+    static const QString kFolder;
 };
