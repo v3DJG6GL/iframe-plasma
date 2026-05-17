@@ -10,8 +10,10 @@ import org.kde.kirigami as Kirigami
 Rectangle {
     id: overlay
 
-    enum State { Hidden, Loading, AuthRequired, Error }
-    property int state: StatusOverlay.Hidden
+    enum Mode { Hidden, Loading, AuthRequired, Error }
+    // Avoid `property int state` — that name shadows Item.state (a
+    // built-in string state-machine property), and we want the int enum.
+    property int mode: StatusOverlay.Hidden
     property string message: ""
 
     signal reloadClicked()
@@ -19,14 +21,14 @@ Rectangle {
     signal loginClicked()
 
     color: Kirigami.Theme.backgroundColor
-    opacity: state === StatusOverlay.Hidden ? 0 : 0.92
+    opacity: mode === StatusOverlay.Hidden ? 0 : 0.92
     visible: opacity > 0
     Behavior on opacity { NumberAnimation { duration: 150 } }
 
-    function showLoading() { message = ""; state = StatusOverlay.Loading; }
-    function showAuthRequired() { state = StatusOverlay.AuthRequired; }
-    function showError(msg) { message = msg; state = StatusOverlay.Error; }
-    function hide() { state = StatusOverlay.Hidden; }
+    function showLoading() { message = ""; mode = StatusOverlay.Loading; }
+    function showAuthRequired() { mode = StatusOverlay.AuthRequired; }
+    function showError(msg) { message = msg; mode = StatusOverlay.Error; }
+    function hide() { mode = StatusOverlay.Hidden; }
 
     MouseArea {
         anchors.fill: parent
@@ -42,12 +44,12 @@ Rectangle {
         // Loading state
         QQC.BusyIndicator {
             Layout.alignment: Qt.AlignHCenter
-            visible: overlay.state === StatusOverlay.Loading
+            visible: overlay.mode === StatusOverlay.Loading
             running: visible
         }
         QQC.Label {
             Layout.alignment: Qt.AlignHCenter
-            visible: overlay.state === StatusOverlay.Loading
+            visible: overlay.mode === StatusOverlay.Loading
             text: i18n("Loading…")
             color: Kirigami.Theme.textColor
         }
@@ -58,14 +60,14 @@ Rectangle {
             Layout.preferredWidth: Kirigami.Units.iconSizes.huge
             Layout.preferredHeight: Kirigami.Units.iconSizes.huge
             source: "dialog-password"
-            visible: overlay.state === StatusOverlay.AuthRequired
+            visible: overlay.mode === StatusOverlay.AuthRequired
         }
         QQC.Label {
             Layout.alignment: Qt.AlignHCenter
             Layout.fillWidth: true
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.WordWrap
-            visible: overlay.state === StatusOverlay.AuthRequired
+            visible: overlay.mode === StatusOverlay.AuthRequired
             text: i18n("Authentication required")
             font.bold: true
             color: Kirigami.Theme.textColor
@@ -75,7 +77,7 @@ Rectangle {
             Layout.fillWidth: true
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.WordWrap
-            visible: overlay.state === StatusOverlay.AuthRequired
+            visible: overlay.mode === StatusOverlay.AuthRequired
             text: i18n("Your session has expired or you are not logged in. Open the widget and complete login; the session will be remembered.")
             color: Kirigami.Theme.disabledTextColor
         }
@@ -86,14 +88,14 @@ Rectangle {
             Layout.preferredWidth: Kirigami.Units.iconSizes.huge
             Layout.preferredHeight: Kirigami.Units.iconSizes.huge
             source: "dialog-error"
-            visible: overlay.state === StatusOverlay.Error
+            visible: overlay.mode === StatusOverlay.Error
         }
         QQC.Label {
             Layout.alignment: Qt.AlignHCenter
             Layout.fillWidth: true
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.WordWrap
-            visible: overlay.state === StatusOverlay.Error
+            visible: overlay.mode === StatusOverlay.Error
             text: i18n("Failed to load")
             font.bold: true
             color: Kirigami.Theme.textColor
@@ -103,7 +105,7 @@ Rectangle {
             Layout.fillWidth: true
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.WordWrap
-            visible: overlay.state === StatusOverlay.Error && overlay.message.length > 0
+            visible: overlay.mode === StatusOverlay.Error && overlay.message.length > 0
             text: overlay.message
             color: Kirigami.Theme.disabledTextColor
         }
@@ -111,12 +113,12 @@ Rectangle {
         RowLayout {
             Layout.alignment: Qt.AlignHCenter
             spacing: Kirigami.Units.smallSpacing
-            visible: overlay.state === StatusOverlay.Error || overlay.state === StatusOverlay.AuthRequired
+            visible: overlay.mode === StatusOverlay.Error || overlay.mode === StatusOverlay.AuthRequired
 
             QQC.Button {
                 text: i18n("Log in here")
                 icon.name: "go-next"
-                visible: overlay.state === StatusOverlay.AuthRequired
+                visible: overlay.mode === StatusOverlay.AuthRequired
                 highlighted: true
                 onClicked: {
                     // Hide so the user can interact with the embedded Authelia
