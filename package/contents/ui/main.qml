@@ -579,7 +579,7 @@ PlasmoidItem {
             console.info("iframe-plasma[compact] thumbMode=" + thumbMode
                 + " → selector=" + JSON.stringify(thumbSelector)
                 + "; reloading miniView");
-            miniView.reload();
+            if (miniLoader.item) miniLoader.item.reload();
         }
 
         // Panel-slot sizing. The canonical Plasma 6 rule (mirroring
@@ -631,18 +631,32 @@ PlasmoidItem {
         clip: true
 
         // --- Live preview ---------------------------------------------------
-        WebEngineView {
-            id: miniView
+        // Gate the WebEngineView behind a Loader so we don't pay Chromium
+        // init cost (subprocess, GPU context, profile attach) when the user
+        // has disabled the live preview or has no tabs configured.  The
+        // fallback icon (below) takes over when `previewLive === false`.
+        Loader {
+            id: miniLoader
             width:  compact.internalWidth
             height: compact.internalHeight
             anchors.top:  parent.top
             anchors.left: parent.left
-            visible: compact.previewLive
-            profile: sharedProfile
-            url: compact.previewTab ? root.resolveThumbUrl(compact.previewTab) : "about:blank"
             z: 0   // below the hover-shield MouseArea so hover doesn't reach Chromium
+            active:  compact.previewLive
+            visible: compact.previewLive
+            sourceComponent: miniViewComp
+        }
 
-            settings.javascriptEnabled: true
+        Component {
+            id: miniViewComp
+
+            WebEngineView {
+                id: miniView
+                anchors.fill: parent
+                profile: sharedProfile
+                url: compact.previewTab ? root.resolveThumbUrl(compact.previewTab) : "about:blank"
+
+                settings.javascriptEnabled: true
             settings.showScrollBars: false
             settings.localStorageEnabled: true
             backgroundColor: "transparent"
@@ -915,6 +929,7 @@ PlasmoidItem {
                 }
             }
 
+            }
         }
 
         // --- Icon fallback --------------------------------------------------
