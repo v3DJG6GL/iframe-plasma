@@ -22,16 +22,6 @@ SecretsBridge::~SecretsBridge()
     }
 }
 
-bool SecretsBridge::walletAvailable() const
-{
-    return KWallet::Wallet::isEnabled();
-}
-
-bool SecretsBridge::walletOpen() const
-{
-    return m_wallet && m_wallet->isOpen();
-}
-
 bool SecretsBridge::ensureOpen()
 {
     if (m_wallet && m_wallet->isOpen()) {
@@ -58,7 +48,6 @@ bool SecretsBridge::ensureOpen()
         m_wallet->createFolder(kFolder);
     }
     m_wallet->setFolder(kFolder);
-    Q_EMIT walletOpenChanged();
     return true;
 }
 

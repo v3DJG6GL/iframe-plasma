@@ -16,15 +16,10 @@ class SecretsBridge : public QObject
     Q_OBJECT
     QML_ELEMENT
     QML_SINGLETON
-    Q_PROPERTY(bool walletAvailable READ walletAvailable NOTIFY walletAvailableChanged)
-    Q_PROPERTY(bool walletOpen READ walletOpen NOTIFY walletOpenChanged)
 
 public:
     explicit SecretsBridge(QObject *parent = nullptr);
     ~SecretsBridge() override;
-
-    bool walletAvailable() const;
-    bool walletOpen() const;
 
     // Single-string entries — kept for legacy migration (basic:<host> entries).
     Q_INVOKABLE QString get(const QString &key);
@@ -40,8 +35,6 @@ public:
     Q_INVOKABLE bool removeKey(const QString &key);   // alias for remove() — clearer intent
 
 Q_SIGNALS:
-    void walletAvailableChanged();
-    void walletOpenChanged();
     void error(const QString &message);
 
 private:
