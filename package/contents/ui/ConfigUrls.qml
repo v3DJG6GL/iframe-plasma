@@ -53,7 +53,6 @@ KCM.SimpleKCM {
             return Array.isArray(arr) ? arr : [];
         } catch (e) { return []; }
     }
-    onCfg_authProfilesJsonChanged: authProfiles = parseAuthProfiles(cfg_authProfilesJson)
 
     ListModel { id: listModel }
 
@@ -522,7 +521,7 @@ KCM.SimpleKCM {
             return u;
         }
 
-        function deriveLabel(url, panelId) {
+        function deriveLabel(panelId) {
             if (pastedLabel.text.trim().length > 0) return pastedLabel.text.trim();
             if (panelId) return i18n("Panel %1", panelId);
             return "";
@@ -532,7 +531,7 @@ KCM.SimpleKCM {
             const out = transformUrl(pastedUrl.text);
             if (!out) return;
             const vpMatch = pastedUrl.text.match(/[?&]viewPanel=panel-(\d+)/);
-            const lbl = deriveLabel(out, vpMatch ? vpMatch[1] : null);
+            const lbl = deriveLabel(vpMatch ? vpMatch[1] : null);
             listModel.append({ label: lbl, url: out, authProfileId: "", thumbMode: "chartOnly", thumbSelector: "", thumbTimeRange: "" });
             store.serialize();
             pastedUrl.text = ""; pastedLabel.text = "";
