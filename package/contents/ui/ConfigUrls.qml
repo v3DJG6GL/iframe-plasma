@@ -14,15 +14,11 @@ KCM.SimpleKCM {
 
     property alias cfg_urlsJson: store.json
     property alias cfg_currentTabIndex: store.currentIndex
-    property alias cfg_autoCycleEnabled: store.autoCycleEnabled
-    property alias cfg_autoCycleIntervalSec: store.autoCycleIntervalSec
 
     QtObject {
         id: store
         property string json: "[]"
         property int currentIndex: 0
-        property bool autoCycleEnabled: false
-        property int autoCycleIntervalSec: 30
 
         function serialize() {
             const arr = [];
@@ -111,19 +107,6 @@ KCM.SimpleKCM {
                 onClicked: grafanaHelper.open()
             }
             Item { Layout.fillWidth: true }
-            QQC.CheckBox {
-                id: autoCycleBox
-                text: i18n("Auto-cycle tabs every")
-                checked: store.autoCycleEnabled
-                onToggled: store.autoCycleEnabled = checked
-            }
-            QQC.SpinBox {
-                from: 5; to: 3600
-                value: store.autoCycleIntervalSec
-                enabled: autoCycleBox.checked
-                onValueModified: store.autoCycleIntervalSec = value
-                textFromValue: (v) => v + " s"
-            }
         }
     }
 

@@ -433,11 +433,16 @@ PlasmoidItem {
         return s;
     }
 
-    // Auto-cycle through tabs when enabled
+    // Auto-cycle through tabs ONLY while the popup is closed — the panel-slot
+    // thumbnail (in "auto" preview mode) rotates through tabs in the background,
+    // but the moment the user opens the widget the cycle pauses so they can
+    // browse without the active tab being yanked out from under them.
     Timer {
         id: cycleTimer
         interval: Math.max(5, Plasmoid.configuration.autoCycleIntervalSec) * 1000
-        running: Plasmoid.configuration.autoCycleEnabled && root.tabs.length > 1 && root.expanded
+        running: Plasmoid.configuration.autoCycleEnabled
+                 && root.tabs.length > 1
+                 && !root.expanded
         repeat: true
         onTriggered: {
             root.currentTabIndex = (root.currentTabIndex + 1) % root.tabs.length;

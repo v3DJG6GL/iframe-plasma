@@ -19,6 +19,8 @@ KCM.SimpleKCM {
     property alias cfg_compactPreviewTabIndex: compactStore.tabIndex
     property alias cfg_compactPreviewLongAxisPx: longAxisSpin.value
     property alias cfg_compactPreviewShowLabel: showLabelSwitch.checked
+    property alias cfg_autoCycleEnabled: cycleBox.checked
+    property alias cfg_autoCycleIntervalSec: cycleSpin.value
 
     QtObject { id: themeStore;    property string value: "auto" }
     QtObject { id: modeStore;     property string value: "auto" }  // "auto" | "fixed"
@@ -167,6 +169,32 @@ KCM.SimpleKCM {
             QQC.ToolTip.visible: hovered
             QQC.ToolTip.delay: 600
             QQC.ToolTip.text: i18n("When enabled, a small semi-transparent bar in the top-left of the thumbnail shows the URL's label (only if the label field is non-empty on the URLs tab).")
+        }
+        RowLayout {
+            Kirigami.FormData.label: i18n("Rotate preview:")
+            enabled: compactSwitch.checked
+            QQC.CheckBox {
+                id: cycleBox
+                text: i18n("Cycle through tabs every")
+                checked: false
+            }
+            QQC.SpinBox {
+                id: cycleSpin
+                from: 5; to: 3600
+                value: 30
+                enabled: cycleBox.checked
+                textFromValue: (v) => v + " s"
+                NoWheel {}
+            }
+        }
+        QQC.Label {
+            Layout.fillWidth: true
+            Layout.maximumWidth: Kirigami.Units.gridUnit * 22
+            text: i18n("Rotation only runs while the widget popup is closed — opening the popup pauses the cycle on whichever tab is currently shown. Requires at least two tabs.")
+            wrapMode: Text.WordWrap
+            color: Kirigami.Theme.disabledTextColor
+            font.pixelSize: Kirigami.Theme.defaultFont.pixelSize - 1
+            visible: cycleBox.checked
         }
         QQC.Label {
             Layout.fillWidth: true
