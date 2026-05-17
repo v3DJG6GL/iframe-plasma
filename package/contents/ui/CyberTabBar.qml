@@ -118,19 +118,31 @@ Rectangle {
                     color: Theme.accent
                     radius: 1
                 }
-                MultiEffect {
-                    source: accentBar
+                // Gate the glow MultiEffect behind a Loader so inactive
+                // tabs don't each allocate a GPU FBO + shader pass.  The
+                // effect itself was already `visible: tabDel.active` but
+                // visible-false items still own their render resources.
+                Loader {
                     anchors.fill: accentBar
-                    visible: tabDel.active
-                    blurEnabled: true
-                    blur: 1.0
-                    blurMax: 16
-                    brightness: 0.15
-                    SequentialAnimation on opacity {
-                        loops: Animation.Infinite
-                        running: tabDel.active
-                        NumberAnimation { from: 0.55; to: 0.95; duration: 1200; easing.type: Easing.InOutSine }
-                        NumberAnimation { from: 0.95; to: 0.55; duration: 1200; easing.type: Easing.InOutSine }
+                    active: tabDel.active
+                    sourceComponent: glowComponent
+                }
+
+                Component {
+                    id: glowComponent
+                    MultiEffect {
+                        source: accentBar
+                        anchors.fill: accentBar
+                        blurEnabled: true
+                        blur: 1.0
+                        blurMax: 16
+                        brightness: 0.15
+                        SequentialAnimation on opacity {
+                            loops: Animation.Infinite
+                            running: true
+                            NumberAnimation { from: 0.55; to: 0.95; duration: 1200; easing.type: Easing.InOutSine }
+                            NumberAnimation { from: 0.95; to: 0.55; duration: 1200; easing.type: Easing.InOutSine }
+                        }
                     }
                 }
 
