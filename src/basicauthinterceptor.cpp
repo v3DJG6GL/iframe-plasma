@@ -55,6 +55,15 @@ void BasicAuthInterceptor::applyProfile(const QString &profileId,
         return;
     }
 
+    // Defense against header injection: a bearer/raw secret containing CR/LF
+    // (or NUL) would smuggle additional HTTP headers into every outbound
+    // request. Base64 (basic) cannot produce these bytes; bearer/raw take
+    // the secret verbatim, so this check is the gate.
+    if (header.contains('\r') || header.contains('\n') || header.contains('\0')) {
+        qCWarning(lcIframeAuth) << "applyProfile: refusing header with CR/LF/NUL; id=" << profileId;
+        return;
+    }
+
     {
         QWriteLocker locker(&m_headersLock);
         for (const QString &h : hosts) {
