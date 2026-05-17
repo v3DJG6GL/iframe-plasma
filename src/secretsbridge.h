@@ -23,8 +23,6 @@ public:
 
     // Single-string entries — kept for legacy migration (basic:<host> entries).
     Q_INVOKABLE QString get(const QString &key);
-    Q_INVOKABLE bool set(const QString &key, const QString &value);
-    Q_INVOKABLE bool remove(const QString &key);
     Q_INVOKABLE bool has(const QString &key);
 
     // Multi-field map entries — used by named auth profiles, where a single
@@ -32,7 +30,7 @@ public:
     // Empty map returned on miss/error.
     Q_INVOKABLE QVariantMap getMap(const QString &key);
     Q_INVOKABLE bool setMap(const QString &key, const QVariantMap &fields);
-    Q_INVOKABLE bool removeKey(const QString &key);   // alias for remove() — clearer intent
+    Q_INVOKABLE bool removeKey(const QString &key);
 
 Q_SIGNALS:
     void error(const QString &message);

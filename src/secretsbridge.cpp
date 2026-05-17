@@ -63,22 +63,6 @@ QString SecretsBridge::get(const QString &key)
     return QString();
 }
 
-bool SecretsBridge::set(const QString &key, const QString &value)
-{
-    if (!ensureOpen()) {
-        return false;
-    }
-    return m_wallet->writePassword(key, value) == 0;
-}
-
-bool SecretsBridge::remove(const QString &key)
-{
-    if (!ensureOpen()) {
-        return false;
-    }
-    return m_wallet->removeEntry(key) == 0;
-}
-
 bool SecretsBridge::has(const QString &key)
 {
     if (!ensureOpen()) {
@@ -117,5 +101,8 @@ bool SecretsBridge::setMap(const QString &key, const QVariantMap &fields)
 
 bool SecretsBridge::removeKey(const QString &key)
 {
-    return remove(key);
+    if (!ensureOpen()) {
+        return false;
+    }
+    return m_wallet->removeEntry(key) == 0;
 }
