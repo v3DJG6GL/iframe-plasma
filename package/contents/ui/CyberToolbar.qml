@@ -216,7 +216,10 @@ Rectangle {
             QQC.Label {
                 id: statusLabel
                 anchors.centerIn: parent
-                text: "[" + tb.httpStatus + " " + (tb.httpStatus < 400 ? "OK" : "ERR")
+                text: "[" + tb.httpStatus + " "
+                      + (tb.httpStatus < 400
+                            ? i18nc("HTTP status 2xx/3xx indicator in toolbar status chip", "OK")
+                            : i18nc("HTTP status 4xx/5xx indicator in toolbar status chip", "ERR"))
                       + (tb.latencyMs > 0 ? " · " + tb.latencyMs + "ms" : "") + "]"
                 font.family: Theme.fontBody
                 font.pixelSize: 9
