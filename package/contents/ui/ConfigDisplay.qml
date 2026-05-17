@@ -71,14 +71,24 @@ KCM.SimpleKCM {
             id: widthBox
             Kirigami.FormData.label: i18n("Preferred width:")
             from: 200; to: 4000; stepSize: 50; value: 800
+            editable: true
             textFromValue: (v) => v + " px"
+            valueFromText: (text) => {
+                const n = parseInt(String(text).replace(/[^0-9-]/g, ''), 10);
+                return isNaN(n) ? value : Math.max(from, Math.min(to, n));
+            }
             NoWheel {}
         }
         QQC.SpinBox {
             id: heightBox
             Kirigami.FormData.label: i18n("Preferred height:")
             from: 150; to: 4000; stepSize: 50; value: 500
+            editable: true
             textFromValue: (v) => v + " px"
+            valueFromText: (text) => {
+                const n = parseInt(String(text).replace(/[^0-9-]/g, ''), 10);
+                return isNaN(n) ? value : Math.max(from, Math.min(to, n));
+            }
             NoWheel {}
         }
         QQC.CheckBox {
