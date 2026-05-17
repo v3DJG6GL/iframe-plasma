@@ -147,9 +147,6 @@ Rectangle {
                             bar.tabSelected(tabDel.index);
                         }
                     }
-                    QQC.ToolTip.visible: containsMouse && tabDel.modelData.url
-                    QQC.ToolTip.delay: 700
-                    QQC.ToolTip.text: (tabDel.modelData.url || "") + "\n" + i18n("Middle-click to reload")
                 }
             }
         }
