@@ -556,16 +556,13 @@ PlasmoidItem {
         readonly property string thumbSelector: {
             const m = thumbMode;
             const custom = (previewTab && previewTab.thumbSelector) || "";
-            let sel;
             switch (m) {
-            case "chartOnly":     sel = ".u-wrap > canvas"; break;
-            case "chartWithAxes": sel = ".u-wrap"; break;
-            case "fullPanel":     sel = ""; break;
-            case "custom":        sel = custom; break;
-            default:              sel = "";
+            case "chartOnly":     return ".u-wrap > canvas";
+            case "chartWithAxes": return ".u-wrap";
+            case "fullPanel":     return "";
+            case "custom":        return custom;
+            default:              return "";
             }
-            console.info("iframe-plasma[compact] thumbMode=" + m + " → selector=" + JSON.stringify(sel));
-            return sel;
         }
 
         // Force a full reload when the mode changes, so applyThumbCrop is
@@ -573,7 +570,9 @@ PlasmoidItem {
         // and won't re-fire LoadSucceededStatus). Also covers the case where
         // the previous selector's MutationObserver was already torn down.
         onThumbSelectorChanged: {
-            console.info("iframe-plasma[compact] thumbSelector signal fired; reloading miniView");
+            console.info("iframe-plasma[compact] thumbMode=" + thumbMode
+                + " → selector=" + JSON.stringify(thumbSelector)
+                + "; reloading miniView");
             if (typeof miniView !== 'undefined' && miniView) {
                 miniView.reload();
             }
@@ -727,10 +726,6 @@ PlasmoidItem {
                 + "      '#ifp-thumb-display{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;z-index:2147483647!important;background:#181b1f!important;display:block!important;margin:0!important;padding:0!important;border:none!important;transform:none!important;}'"
                 + "    ].join('');"
                 + "    (document.head||document.documentElement).appendChild(s);"
-                + "  }"
-                + "  function clearMarks() {"
-                + "    document.querySelectorAll('.ifp-thumb-ancestor').forEach(n=>n.classList.remove('ifp-thumb-ancestor'));"
-                + "    document.querySelectorAll('.ifp-thumb-target').forEach(n=>n.classList.remove('ifp-thumb-target'));"
                 + "  }"
                 + "  function nudgeReflow(target) {"
                 // uPlot only re-rasterizes its canvas pixel buffer when its
