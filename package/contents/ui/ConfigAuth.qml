@@ -93,7 +93,7 @@ KCM.SimpleKCM {
             const out = [];
             for (const t of tabs) {
                 if (t && t.authProfileId === profileId) {
-                    out.push(t.label || t.url || "(unlabeled)");
+                    out.push(t.label || t.url || i18nc("Fallback label for a URL with no name and no address", "(unlabeled)"));
                 }
             }
             return out;
