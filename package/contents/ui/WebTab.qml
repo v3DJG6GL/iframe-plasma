@@ -209,6 +209,11 @@ Item {
         settings.javascriptEnabled: true
         settings.localStorageEnabled: true
         settings.pluginsEnabled: false
+        // Defense-in-depth: pin the hardened defaults explicitly so future
+        // Qt-WebEngine default-flips can't silently re-enable these.
+        settings.localContentCanAccessFileUrls: false
+        settings.localContentCanAccessRemoteUrls: false
+        settings.allowRunningInsecureContent: false
 
         // Suppress Grafana's auto-refresh URL push.
         //
@@ -291,9 +296,19 @@ Item {
             tab.basicAuthRequested(request);
         }
 
-        // Open user-clicked links externally; iframe sub-resources still load normally
+        // Open user-clicked links externally; iframe sub-resources still load normally.
+        // Restrict to web/mail/tel schemes — anything else (e.g. file:, smb:,
+        // vnc:, ssh:, custom xdg handlers) could let a compromised page invoke
+        // arbitrary system URI handlers click-less from inside the embedded view.
         onNewWindowRequested: function(request) {
-            Qt.openUrlExternally(request.requestedUrl);
+            const scheme = String(request.requestedUrl).split(":", 1)[0].toLowerCase();
+            const safe = scheme === "http" || scheme === "https"
+                      || scheme === "mailto" || scheme === "tel";
+            if (safe) {
+                Qt.openUrlExternally(request.requestedUrl);
+            } else {
+                console.warn("iframe-plasma[nav] blocked external open; scheme=" + scheme);
+            }
             request.action = WebEngineNewWindowRequest.IgnoreRequest;
         }
     }

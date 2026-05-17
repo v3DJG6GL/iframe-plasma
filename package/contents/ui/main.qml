@@ -663,6 +663,14 @@ PlasmoidItem {
                 settings.javascriptEnabled: true
             settings.showScrollBars: false
             settings.localStorageEnabled: true
+            // Defense-in-depth: thumbnail is passive (enabled:false) — no
+            // interaction needed, so clamp every capability that could be
+            // abused by a hostile page sneaking through a configured URL.
+            settings.localContentCanAccessFileUrls: false
+            settings.localContentCanAccessRemoteUrls: false
+            settings.javascriptCanOpenWindows: false
+            settings.javascriptCanAccessClipboard: false
+            settings.allowRunningInsecureContent: false
             backgroundColor: "transparent"
             zoomFactor: 1.0
             enabled: false   // pass clicks through to the MouseArea above
