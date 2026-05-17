@@ -140,61 +140,14 @@ Rectangle {
         }
 
         // --- Time-range chip dropdown ---------------------------------------
-        // Styled to match the host/HTTP-status chips & the reload split-button:
-        // Theme.surface bg, Theme.fgMute → Theme.accent border on hover,
-        // monospace body font, "▾" caret. Clicking opens a Menu of presets.
-        Rectangle {
+        CyberChipDropdown {
             id: timeChip
             visible: tb.host.length > 0
-            Layout.preferredHeight: Theme.chipHeight + 2
-            Layout.alignment: Qt.AlignVCenter
-            implicitWidth: timeChipRow.implicitWidth + Theme.chipPadding * 2
-            color: timeChipMa.containsMouse || timeMenu.opened ? Theme.surfaceHi : Theme.surface
-            border.color: timeChipMa.containsMouse || timeMenu.opened ? Theme.accent : Theme.fgMute
-            border.width: 1
-            radius: 2
-            Behavior on color       { ColorAnimation { duration: 100 } }
-            Behavior on border.color { ColorAnimation { duration: 100 } }
-
-            Row {
-                id: timeChipRow
-                anchors.centerIn: parent
-                spacing: 4
-                QQC.Label {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "⏱"
-                    font.pixelSize: 9
-                    color: Theme.fgDim
-                }
-                QQC.Label {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: tb.timeRange.length > 0 ? tb.timeRange : "—"
-                    font.family: Theme.fontBody
-                    font.pixelSize: 9
-                    color: tb.timeRange.length > 0 ? Theme.fg : Theme.fgDim
-                }
-                QQC.Label {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "▾"
-                    font.family: Theme.fontHeader
-                    font.pixelSize: 8
-                    color: Theme.fgDim
-                }
-            }
-
-            MouseArea {
-                id: timeChipMa
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: timeMenu.opened ? timeMenu.close() : timeMenu.open()
-            }
-
-            QQC.ToolTip {
-                visible: timeChipMa.containsMouse && !timeMenu.opened
-                delay: 600
-                text: i18n("Time range — overrides URL's from/to (session only)")
-            }
+            icon: "⏱"
+            value: tb.timeRange
+            emptyText: "—"
+            tooltipText: i18n("Time range — overrides URL's from/to (session only)")
+            menu: timeMenu
         }
 
         CyberDropdown {
@@ -219,66 +172,18 @@ Rectangle {
         }
 
         // --- Refresh-interval chip dropdown ---------------------------------
-        Rectangle {
+        CyberChipDropdown {
             id: refreshChip
             visible: tb.host.length > 0
-            Layout.preferredHeight: Theme.chipHeight + 2
-            Layout.alignment: Qt.AlignVCenter
-            implicitWidth: refreshChipRow.implicitWidth + Theme.chipPadding * 2
-            color: refreshChipMa.containsMouse || refreshMenu.opened ? Theme.surfaceHi : Theme.surface
-            border.color: refreshChipMa.containsMouse || refreshMenu.opened ? Theme.accent : Theme.fgMute
-            border.width: 1
-            radius: 2
-            Behavior on color       { ColorAnimation { duration: 100 } }
-            Behavior on border.color { ColorAnimation { duration: 100 } }
-
-            Row {
-                id: refreshChipRow
-                anchors.centerIn: parent
-                spacing: 4
-                QQC.Label {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "⟳"   // distinct from the reload button's ↻
-                    font.pixelSize: 10
-                    color: tb.refreshInterval.length > 0 ? Theme.success : Theme.fgDim
-                    // Slow pulse when auto-refresh is on — quietly nerdy live indicator.
-                    // Also gated on host so the timer stops while the chip is hidden.
-                    SequentialAnimation on opacity {
-                        running: tb.host.length > 0 && tb.refreshInterval.length > 0
-                        loops: Animation.Infinite
-                        NumberAnimation { from: 0.55; to: 1.0; duration: 1400; easing.type: Easing.InOutSine }
-                        NumberAnimation { from: 1.0; to: 0.55; duration: 1400; easing.type: Easing.InOutSine }
-                    }
-                }
-                QQC.Label {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: tb.refreshInterval.length > 0 ? tb.refreshInterval : i18nc("refresh off", "off")
-                    font.family: Theme.fontBody
-                    font.pixelSize: 9
-                    color: tb.refreshInterval.length > 0 ? Theme.fg : Theme.fgDim
-                }
-                QQC.Label {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "▾"
-                    font.family: Theme.fontHeader
-                    font.pixelSize: 8
-                    color: Theme.fgDim
-                }
-            }
-
-            MouseArea {
-                id: refreshChipMa
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: refreshMenu.opened ? refreshMenu.close() : refreshMenu.open()
-            }
-
-            QQC.ToolTip {
-                visible: refreshChipMa.containsMouse && !refreshMenu.opened
-                delay: 600
-                text: i18n("Auto-refresh interval (session only)")
-            }
+            icon: "⟳"   // distinct from the reload button's ↻
+            iconPixelSize: 10
+            iconColor: tb.refreshInterval.length > 0 ? Theme.success : Theme.fgDim
+            value: tb.refreshInterval
+            emptyText: i18nc("refresh off", "off")
+            tooltipText: i18n("Auto-refresh interval (session only)")
+            menu: refreshMenu
+            // Pulse the icon while auto-refresh is on (and chip is shown).
+            pulseEnabled: tb.host.length > 0 && tb.refreshInterval.length > 0
         }
 
         CyberDropdown {
