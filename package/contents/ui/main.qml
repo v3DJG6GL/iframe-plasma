@@ -671,15 +671,6 @@ PlasmoidItem {
                 }
             }
 
-            // Re-apply when the user edits the selector via config.
-            Connections {
-                target: compact
-                function onThumbSelectorChanged() {
-                    if (compact.thumbSelector.length > 0) miniView.applyThumbCrop(compact.thumbSelector);
-                    else miniView.removeThumbCrop();
-                }
-            }
-
             // Inject CSS that hides everything except the path to `selector`,
             // and sizes the matched element to fill the slot. After applying
             // we fire window.resize so uPlot / ResizeObserver-aware libraries
@@ -925,12 +916,6 @@ PlasmoidItem {
                     + "  if (window.__ifpThumbInterval) { clearInterval(window.__ifpThumbInterval); window.__ifpThumbInterval = null; }"
                     + "  const disp = document.getElementById('ifp-thumb-display'); if (disp) disp.remove();"
                     + "  document.documentElement.removeAttribute('data-ifp-thumb');"
-                    + "  document.querySelectorAll('.ifp-thumb-ancestor,.ifp-thumb-target').forEach(n=>{"
-                    + "    n.classList.remove('ifp-thumb-ancestor');"
-                    + "    n.classList.remove('ifp-thumb-target');"
-                    // Reset inline transform/transformOrigin we set in cropAxes
-                    + "    if (n.tagName === 'CANVAS') { n.style.transform = ''; n.style.transformOrigin = ''; }"
-                    + "  });"
                     + "  return 'removed';"
                     + "})()",
                     function(r) { console.info("iframe-plasma[thumb] removeThumbCrop = " + r); }
