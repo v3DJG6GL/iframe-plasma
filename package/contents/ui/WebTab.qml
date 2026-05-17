@@ -302,7 +302,7 @@ Item {
         id: statusOverlay
         anchors.fill: parent
         onReloadClicked: webview.reload()
-        onOpenExternalClicked: Qt.openUrlExternally(tab.url)
+        onOpenExternalClicked: openExternal()
         onLoginClicked: tab.loginInProgress = true
     }
 
