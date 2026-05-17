@@ -85,11 +85,14 @@ void BasicAuthInterceptor::interceptRequest(QWebEngineUrlRequestInfo &info)
     }
     if (!header.isEmpty()) {
         info.setHttpHeader(QByteArrayLiteral("Authorization"), header);
-        qCInfo(lcIframeAuth).noquote() << "interceptor: injected Authorization for"
+        // qCDebug, not qCInfo: request URLs can carry tokens in the query
+        // string (e.g. Grafana share links with auth params), so keep them
+        // off the default journal stream.
+        qCDebug(lcIframeAuth).noquote() << "interceptor: injected Authorization for"
             << info.requestUrl().toString().left(120);
     } else if (hadAny) {
         // Only log near-misses if we have any creds at all
-        qCInfo(lcIframeAuth).noquote() << "interceptor: NO MATCH host=" << host
+        qCDebug(lcIframeAuth).noquote() << "interceptor: NO MATCH host=" << host
             << "url=" << info.requestUrl().toString().left(120);
     }
 }
