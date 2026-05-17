@@ -53,6 +53,22 @@ KCM.SimpleKCM {
             return Array.isArray(arr) ? arr : [];
         } catch (e) { return []; }
     }
+    // When the Authentication tab deletes a profile, cfg_urlsJson is
+    // patched there to unlink references. Our listModel was populated
+    // once in Component.onCompleted, so it still carries the now-orphaned
+    // authProfileId — the next serialize() (any user edit on this tab)
+    // would write the stale value back and clobber the unlink. Scrub
+    // here whenever the auth profile set changes.
+    onAuthProfilesChanged: {
+        const validIds = new Set();
+        for (const p of authProfiles) if (p.id) validIds.add(p.id);
+        for (let i = 0; i < listModel.count; i++) {
+            const apid = listModel.get(i).authProfileId;
+            if (apid && !validIds.has(apid)) {
+                listModel.setProperty(i, "authProfileId", "");
+            }
+        }
+    }
 
     ListModel { id: listModel }
 
