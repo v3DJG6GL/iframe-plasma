@@ -532,20 +532,29 @@ KCM.SimpleKCM {
             return u;
         }
 
+        // Split off the `#fragment` so the query-string ops below don't
+        // bleed params into the hash (appendParam) or eat the anchor
+        // (stripParam's [^&]* would consume a trailing #anchor).
+        function splitFragment(u) {
+            const i = u.indexOf("#");
+            return i === -1 ? [u, ""] : [u.substring(0, i), u.substring(i)];
+        }
         // Append `key=value`, picking the right separator. Doesn't dedupe.
         function appendParam(u, key, value) {
-            const sep = u.indexOf("?") === -1 ? "?" : "&";
-            return u + sep + key + "=" + value;
+            const [base, frag] = splitFragment(u);
+            const sep = base.indexOf("?") === -1 ? "?" : "&";
+            return base + sep + key + "=" + value + frag;
         }
         // Remove all occurrences of &key=… or ?key=… from the query string.
         function stripParam(u, key) {
+            let [base, frag] = splitFragment(u);
             // ?key=val&…       → ?…
-            u = u.replace(new RegExp("[?]" + key + "=[^&]*(?:&|$)"), function(m) {
+            base = base.replace(new RegExp("[?]" + key + "=[^&]*(?:&|$)"), function(m) {
                 return m.endsWith("&") ? "?" : "";
             });
             // &key=val
-            u = u.replace(new RegExp("[&]" + key + "=[^&]*", "g"), "");
-            return u;
+            base = base.replace(new RegExp("[&]" + key + "=[^&]*", "g"), "");
+            return base + frag;
         }
 
         function deriveLabel(panelId) {
