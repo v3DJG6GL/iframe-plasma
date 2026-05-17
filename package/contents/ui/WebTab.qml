@@ -25,6 +25,9 @@ Item {
     // reflect it. Values: "idle" | "loading" | "ok" | "err" | "auth".
     property string loadStatus: "idle"
 
+    // "" → no override (chip follows URL); "off"; or an interval like "30s".
+    property string userRefreshChoice: ""
+
     // Last-load metrics, captured from window.performance after each success.
     // httpStatus stays 0 until the JS callback returns; cross-origin nav can
     // wipe it back to 0 (responseStatus only available for same-origin docs).
@@ -49,60 +52,139 @@ Item {
     // params on reload. The configured tab URL (in urlsJson) is NOT changed,
     // so reopening the popup or restarting plasmashell restores the original.
 
-    // Recognize Grafana relative ranges of the form `from=now-Xu&to=now`.
-    // Returns the unit suffix (`24h`, `7d`, …) or `"custom"` if non-standard,
-    // or empty string if no time params at all.
+    // Returns the unit suffix of `from=now-Xu&to=now` (e.g. "24h"), or
+    // "custom" for non-standard from/to, or "" if no time params at all.
     readonly property string currentTimeRange: {
         const u = String(webview.url);
-        try {
-            const url = new URL(u);
-            const from = url.searchParams.get('from') || '';
-            const to   = url.searchParams.get('to')   || '';
-            if (!from && !to) return '';
-            const m = from.match(/^now-(\d+[smhdwMy])$/);
-            if (m && to === 'now') return m[1];
-            return 'custom';
-        } catch (e) { return ''; }
+        const from = _readQuery(u, 'from');
+        const to   = _readQuery(u, 'to');
+        if (!from && !to) return '';
+        const m = from.match(/^now-(\d+[smhdwMy])$/);
+        if (m && to === 'now') return m[1];
+        return 'custom';
     }
 
-    // Current `refresh=...` value or "" if absent.
+    // userRefreshChoice wins over the URL: Grafana's TimeSrv re-injects
+    // `refresh=<dashboard-default>` via history.replaceState ~1 s after
+    // each load, so reading the URL alone would let the chip flip back
+    // to the wrong value moments after the user picks Off.
     readonly property string currentRefreshInterval: {
-        const u = String(webview.url);
-        try {
-            const url = new URL(u);
-            return url.searchParams.get('refresh') || '';
-        } catch (e) { return ''; }
+        if (tab.userRefreshChoice === "off")  return "";
+        if (tab.userRefreshChoice.length > 0) return tab.userRefreshChoice;
+        return _readQuery(String(webview.url), 'refresh');
     }
 
-    // Apply a time range. `range` is either a preset string like "24h" or a
-    // `{from, to}` object for fully-custom Grafana grammar.
+    // Assigning the same string to `webview.url` is a no-op; reload
+    // instead so the dropdown selection always takes visible effect.
+    function _navigate(newStr) {
+        if (String(webview.url) === newStr) {
+            webview.reload();
+        } else {
+            webview.url = newStr;
+        }
+    }
+
+    // Manual query-string edit. QML's V4 JavaScript engine has a buggy
+    // URLSearchParams: `delete()` / `set()` modifications silently fail
+    // to propagate back to `url.toString()`. `updates` maps key → value
+    // (null/undefined removes; string sets). Preserves unrelated params,
+    // the hash fragment, and flag-style params (`&kiosk` with no value).
+    function _editQuery(urlStr, updates) {
+        try {
+            const hashIdx = urlStr.indexOf('#');
+            const hash = hashIdx >= 0 ? urlStr.slice(hashIdx) : '';
+            const beforeHash = hashIdx >= 0 ? urlStr.slice(0, hashIdx) : urlStr;
+            const qIdx = beforeHash.indexOf('?');
+            const path = qIdx >= 0 ? beforeHash.slice(0, qIdx) : beforeHash;
+            const query = qIdx >= 0 ? beforeHash.slice(qIdx + 1) : '';
+            const pairs = query.length > 0 ? query.split('&') : [];
+            const handled = {};
+            const out = [];
+            for (const p of pairs) {
+                const eq = p.indexOf('=');
+                const k = eq === -1 ? p : p.slice(0, eq);
+                if (k in updates) {
+                    if (!handled[k]) {
+                        handled[k] = true;
+                        const v = updates[k];
+                        if (v !== null && v !== undefined) {
+                            out.push(k + '=' + encodeURIComponent(v));
+                        }
+                    }
+                } else {
+                    out.push(p);
+                }
+            }
+            for (const k of Object.keys(updates)) {
+                if (!handled[k] && updates[k] !== null && updates[k] !== undefined) {
+                    out.push(k + '=' + encodeURIComponent(updates[k]));
+                }
+            }
+            return path + (out.length ? '?' + out.join('&') : '') + hash;
+        } catch (e) {
+            console.warn("iframe-plasma: _editQuery error:", e.message);
+            return urlStr;
+        }
+    }
+
+    function _readQuery(urlStr, name) {
+        try {
+            const hashIdx = urlStr.indexOf('#');
+            const beforeHash = hashIdx >= 0 ? urlStr.slice(0, hashIdx) : urlStr;
+            const qIdx = beforeHash.indexOf('?');
+            if (qIdx < 0) return "";
+            const pairs = beforeHash.slice(qIdx + 1).split('&');
+            for (const p of pairs) {
+                const eq = p.indexOf('=');
+                const k = eq === -1 ? p : p.slice(0, eq);
+                if (k === name) {
+                    return eq === -1 ? "" : decodeURIComponent(p.slice(eq + 1));
+                }
+            }
+            return "";
+        } catch (e) { return ""; }
+    }
+
+    // `range` is a preset like "24h", a `{from, to}` object, or "" to
+    // revert from/to to whatever the configured `tab.url` had.
     function setTimeRange(range) {
         try {
-            const url = new URL(String(webview.url));
+            let updates;
             if (typeof range === 'string' && range.length > 0) {
-                url.searchParams.set('from', 'now-' + range);
-                url.searchParams.set('to', 'now');
+                updates = { from: 'now-' + range, to: 'now' };
             } else if (range && typeof range === 'object') {
-                url.searchParams.set('from', range.from || 'now-1h');
-                url.searchParams.set('to', range.to || 'now');
+                updates = { from: range.from || 'now-1h', to: range.to || 'now' };
             } else {
-                return;   // null/empty → leave as-is
+                const origFrom = _readQuery(String(tab.url), 'from');
+                const origTo   = _readQuery(String(tab.url), 'to');
+                updates = {
+                    from: origFrom ? origFrom : null,
+                    to:   origTo   ? origTo   : null
+                };
             }
-            webview.url = url.toString();
+            _navigate(_editQuery(String(webview.url), updates));
         } catch (e) { console.warn("iframe-plasma: setTimeRange error:", e.message); }
     }
 
-    // Set or clear `refresh=`. Empty/null/"off" removes the param entirely
-    // (Grafana issue #41329: empty refresh= triggers a stuck-loading bug).
+    // `interval` is "" / "off" (disable), or a Grafana interval like "30s".
+    // Disabling can't be done by URL alone — see the in-page user-script
+    // in `Component.onCompleted` on the WebEngineView for the workaround.
     function setRefreshInterval(interval) {
         try {
-            const url = new URL(String(webview.url));
-            if (typeof interval === 'string' && interval.length > 0 && interval !== 'off') {
-                url.searchParams.set('refresh', interval);
-            } else {
-                url.searchParams.delete('refresh');
-            }
-            webview.url = url.toString();
+            const useInterval = typeof interval === 'string'
+                                && interval.length > 0
+                                && interval !== 'off';
+            tab.userRefreshChoice = useInterval ? interval : "off";
+
+            // runJavaScript defaults to an isolated world in Qt 6 — must
+            // target MainWorld so the page's history-patching code sees
+            // the flag.
+            webview.runJavaScript("window.__iframePlasmaRefreshOff = "
+                + (useInterval ? "false" : "true") + ";",
+                WebEngineScript.MainWorld);
+
+            _navigate(_editQuery(String(webview.url),
+                { refresh: useInterval ? interval : '' }));
         } catch (e) { console.warn("iframe-plasma: setRefreshInterval error:", e.message); }
     }
 
@@ -122,6 +204,47 @@ Item {
         settings.javascriptEnabled: true
         settings.localStorageEnabled: true
         settings.pluginsEnabled: false
+
+        // Suppress Grafana's auto-refresh URL push.
+        //
+        // Grafana's TimeSrv re-injects `refresh=<dashboard-default>` via
+        // `history.replaceState` ~1 s after each dashboard load. There is
+        // no URL-only sentinel for "off" (grafana/grafana#4725, #9016,
+        // #41329, #101412 — all declined over 8 years). Workaround: patch
+        // `history.{push,replace}State` at DocumentCreation so any URL
+        // Grafana writes has `refresh=` stripped, gated on the page-side
+        // flag `__iframePlasmaRefreshOff` set by setRefreshInterval().
+        //
+        // WebEngineScript is a value type in Qt 6 and can't be inlined in
+        // QML — must build it imperatively via the WebEngine.script() factory.
+        Component.onCompleted: {
+            const s = WebEngine.script();
+            s.name = "iframe-plasma-refresh-control";
+            s.injectionPoint = WebEngineScript.DocumentCreation;
+            s.worldId = WebEngineScript.MainWorld;
+            s.runOnSubFrames = false;
+            s.sourceCode =
+                "(function(){\n" +
+                "  if (window.__iframePlasmaRefreshPatched) return;\n" +
+                "  window.__iframePlasmaRefreshPatched = true;\n" +
+                "  if (typeof window.__iframePlasmaRefreshOff === 'undefined')\n" +
+                "    window.__iframePlasmaRefreshOff = false;\n" +
+                "  const origRS = history.replaceState.bind(history);\n" +
+                "  const origPS = history.pushState.bind(history);\n" +
+                "  const strip = function(u){\n" +
+                "    if (typeof u !== 'string' || !u.length) return u;\n" +
+                "    if (!window.__iframePlasmaRefreshOff) return u;\n" +
+                "    return u\n" +
+                "      .replace(/([?&])refresh=[^&#]*/g, function(_, sep){ return sep === '?' ? '?' : ''; })\n" +
+                "      .replace(/&&+/g, '&')\n" +
+                "      .replace(/\\?&/, '?')\n" +
+                "      .replace(/[?&]$/, '');\n" +
+                "  };\n" +
+                "  history.replaceState = function(s, t, u){ return origRS(s, t, strip(u)); };\n" +
+                "  history.pushState    = function(s, t, u){ return origPS(s, t, strip(u)); };\n" +
+                "})();";
+            webview.userScripts.insert(s);
+        }
 
         onLoadingChanged: function(info) {
             if (info.status === WebEngineView.LoadStartedStatus) {
