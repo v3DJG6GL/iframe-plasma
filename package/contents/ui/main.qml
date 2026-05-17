@@ -280,7 +280,7 @@ PlasmoidItem {
         // Re-apply each in-use profile.
         for (const id in profilesInUse) {
             const { profile, hosts } = profilesInUse[id];
-            const secrets = root.authSupport.getMap("profile:" + id) || {};
+            const secrets = root.authSupport.getMap(root.authSupport.profileKey(id)) || {};
             const secret = secrets.password || secrets.bearerToken || secrets.rawHeader || "";
             if (secret.length === 0) {
                 console.info("iframe-plasma[auth] profile " + id + " has no stored secret — skipping");
@@ -323,7 +323,7 @@ PlasmoidItem {
                 console.info("iframe-plasma[auth] profile has no username -> letting Qt prompt");
                 return;
             }
-            const secrets = root.authSupport ? root.authSupport.getMap("profile:" + profile.id) : {};
+            const secrets = root.authSupport ? root.authSupport.getMap(root.authSupport.profileKey(profile.id)) : {};
             const pw = (secrets && secrets.password) || "";
             if (pw.length > 0) {
                 request.accepted = true;
@@ -405,7 +405,7 @@ PlasmoidItem {
                     const map = {};
                     if (t.rawAuthHeader) map.rawHeader = secret;
                     else map.password = secret;
-                    root.authSupport.setMap("profile:" + p.id, map);
+                    root.authSupport.setMap(root.authSupport.profileKey(p.id), map);
                 }
                 profiles.push(p);
                 byKey[sig] = p;

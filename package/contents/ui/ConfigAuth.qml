@@ -192,7 +192,7 @@ KCM.SimpleKCM {
                 // Secret value loaded lazily from KWallet (or set inline before save).
                 // We never display the secret — only "(stored)" / "(not set)" hint.
                 property bool hasStoredSecret: page.authSupport
-                    ? page.authSupport.has("profile:" + card.id)
+                    ? page.authSupport.has(page.authSupport.profileKey(card.id))
                     : false
 
                 contentItem: ColumnLayout {
@@ -269,7 +269,7 @@ KCM.SimpleKCM {
                                 if (!page.authSupport) return;
                                 const map = {};
                                 map[page.authSpec(card.authType).fieldName] = text;
-                                if (page.authSupport.setMap("profile:" + card.id, map)) {
+                                if (page.authSupport.setMap(page.authSupport.profileKey(card.id), map)) {
                                     card.hasStoredSecret = true;
                                     savedHint.show();
                                     // Leave `text` as masked dots: positive
@@ -345,7 +345,7 @@ KCM.SimpleKCM {
                                 const referencing = page.profileUsageHosts(card.id);
                                 if (referencing.length === 0) {
                                     // No URLs to warn about — just delete.
-                                    if (page.authSupport) page.authSupport.removeKey("profile:" + card.id);
+                                    if (page.authSupport) page.authSupport.removeKey(page.authSupport.profileKey(card.id));
                                     listModel.remove(card.index);
                                     store.serialize();
                                     return;
@@ -393,7 +393,7 @@ KCM.SimpleKCM {
         }
 
         onAccepted: {
-            if (page.authSupport) page.authSupport.removeKey("profile:" + deleteConfirm.profileId);
+            if (page.authSupport) page.authSupport.removeKey(page.authSupport.profileKey(deleteConfirm.profileId));
             // Patch urlsJson to unlink the orphaned references
             try {
                 const tabs = JSON.parse(page.cfg_urlsJson || "[]");

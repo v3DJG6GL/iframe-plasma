@@ -23,10 +23,12 @@ QtObject {
     function has(key) { return IframePlasma.SecretsBridge.has(key) }
 
     // Multi-field map entries for named auth profiles. Wallet key is
-    // `profile:<uuid>`; value is a map with one of:
+    // `profile:<uuid>` (single source of truth in `profileKey()`); value
+    // is a map with one of:
     //   { password: "..." }       (authType=basic)
     //   { bearerToken: "..." }    (authType=bearer)
     //   { rawHeader: "..." }      (authType=raw)
+    function profileKey(id)      { return "profile:" + id }
     function getMap(key)         { return IframePlasma.SecretsBridge.getMap(key) }
     function setMap(key, fields) { return IframePlasma.SecretsBridge.setMap(key, fields) }
     function removeKey(key)      { return IframePlasma.SecretsBridge.removeKey(key) }
