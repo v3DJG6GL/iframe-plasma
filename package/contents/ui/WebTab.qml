@@ -190,8 +190,13 @@ Item {
 
     function onAutheliaHost(currentUrl) {
         if (!tab.autheliaHost || tab.autheliaHost.length === 0) return false;
-        return currentUrl.indexOf("://" + tab.autheliaHost) !== -1
-            || currentUrl.indexOf("." + tab.autheliaHost) !== -1;
+        try {
+            const host = new URL(currentUrl).host;
+            return host === tab.autheliaHost
+                || host.endsWith("." + tab.autheliaHost);
+        } catch (e) {
+            return false;
+        }
     }
 
     WebEngineView {
