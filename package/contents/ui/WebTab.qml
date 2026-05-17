@@ -184,7 +184,7 @@ Item {
                 WebEngineScript.MainWorld);
 
             _navigate(_editQuery(String(webview.url),
-                { refresh: useInterval ? interval : '' }));
+                { refresh: useInterval ? interval : null }));
         } catch (e) { console.warn("iframe-plasma: setRefreshInterval error:", e.message); }
     }
 
