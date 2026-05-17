@@ -128,6 +128,17 @@ KCM.SimpleKCM {
         }
     }
 
+    readonly property var authTypePresets: [
+        { value: "basic",  display: i18n("HTTP Basic (username + password)") },
+        { value: "bearer", display: i18n("Bearer token (e.g. JWT)") },
+        { value: "raw",    display: i18n("Raw Authorization header") }
+    ]
+
+    function setField(idx, key, value) {
+        listModel.setProperty(idx, key, value);
+        store.serialize();
+    }
+
     function createNewProfile() {
         const id = newUuid();
         listModel.append({
@@ -177,7 +188,7 @@ KCM.SimpleKCM {
                             Layout.fillWidth: true
                             placeholderText: i18n("e.g. Grafana Production")
                             text: card.name
-                            onEditingFinished: { listModel.setProperty(card.index, "name", text); store.serialize() }
+                            onEditingFinished: page.setField(card.index, "name", text)
                         }
                     }
 
@@ -187,23 +198,14 @@ KCM.SimpleKCM {
                         QQC.ComboBox {
                             id: typeCombo
                             Layout.fillWidth: true
-                            readonly property var presets: [
-                                { value: "basic",  display: i18n("HTTP Basic (username + password)") },
-                                { value: "bearer", display: i18n("Bearer token (e.g. JWT)") },
-                                { value: "raw",    display: i18n("Raw Authorization header") }
-                            ]
-                            model: presets
+                            model: page.authTypePresets
                             textRole: "display"
                             valueRole: "value"
                             currentIndex: {
-                                const idx = presets.findIndex(x => x.value === card.authType);
+                                const idx = page.authTypePresets.findIndex(x => x.value === card.authType);
                                 return idx >= 0 ? idx : 0;
                             }
-                            onActivated: _ => {
-                                const v = presets[currentIndex].value;
-                                listModel.setProperty(card.index, "authType", v);
-                                store.serialize();
-                            }
+                            onActivated: _ => page.setField(card.index, "authType", page.authTypePresets[currentIndex].value)
                             NoWheel {}
                         }
                     }
@@ -217,7 +219,7 @@ KCM.SimpleKCM {
                             Layout.fillWidth: true
                             placeholderText: i18n("username")
                             text: card.username
-                            onEditingFinished: { listModel.setProperty(card.index, "username", text); store.serialize() }
+                            onEditingFinished: page.setField(card.index, "username", text)
                         }
                     }
 
@@ -305,7 +307,7 @@ KCM.SimpleKCM {
                             Layout.fillWidth: true
                             placeholderText: i18n("e.g. auth.example.com (optional)")
                             text: card.autheliaHost
-                            onEditingFinished: { listModel.setProperty(card.index, "autheliaHost", text); store.serialize() }
+                            onEditingFinished: page.setField(card.index, "autheliaHost", text)
                             QQC.ToolTip.visible: hovered && text.length === 0
                             QQC.ToolTip.delay: 600
                             QQC.ToolTip.text: i18n("When the widget detects a redirect to this host, an \"Authentication required\" overlay appears. Leave empty to disable for this profile.")
