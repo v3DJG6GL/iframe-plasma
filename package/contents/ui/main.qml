@@ -1001,18 +1001,21 @@ PlasmoidItem {
             }
         }
 
-        // Click anywhere on the slot to toggle the full popup.
+        // Left-click anywhere on the slot toggles the full popup.
+        // Right-click is INTENTIONALLY NOT accepted here so it propagates
+        // to the PlasmoidItem and Plasma's containment shows the standard
+        // widget context menu (Configure widget, Remove, etc.).
         //
-        // Placed ABOVE the WebEngineView (z: 1) and with hoverEnabled: true so
+        // Placed ABOVE the WebEngineView (z: 1) with hoverEnabled: true so
         // it consumes pointer enter/move/leave events before they reach
-        // Chromium. Without this, Grafana would see mouse-position events even
-        // though the WebEngineView is `enabled: false`, draw its crosshair /
-        // tooltip on every hover, and the chart would flicker continuously.
+        // Chromium — without this, Grafana would see mouse-position events
+        // even though the WebEngineView is `enabled: false`, draw its
+        // crosshair/tooltip on every hover, and the chart would flicker.
         MouseArea {
             anchors.fill: parent
             z: 1
             hoverEnabled: true
-            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            acceptedButtons: Qt.LeftButton
             cursorShape: Qt.PointingHandCursor
             onClicked: root.expanded = !root.expanded
         }
