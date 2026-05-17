@@ -136,10 +136,16 @@ KCM.SimpleKCM {
     }
 
     readonly property var authTypePresets: [
-        { value: "basic",  display: i18n("HTTP Basic (username + password)") },
-        { value: "bearer", display: i18n("Bearer token (e.g. JWT)") },
-        { value: "raw",    display: i18n("Raw Authorization header") }
+        { value: "basic",  display: i18n("HTTP Basic (username + password)"),
+          secretLabel: i18n("Password:"),     fieldName: "password",    hasUsername: true  },
+        { value: "bearer", display: i18n("Bearer token (e.g. JWT)"),
+          secretLabel: i18n("Token:"),        fieldName: "bearerToken", hasUsername: false },
+        { value: "raw",    display: i18n("Raw Authorization header"),
+          secretLabel: i18n("Header value:"), fieldName: "rawHeader",   hasUsername: false }
     ]
+    function authSpec(authType) {
+        return authTypePresets.find(p => p.value === authType) || authTypePresets[0];
+    }
 
     function setField(idx, key, value) {
         listModel.setProperty(idx, key, value);
@@ -220,7 +226,7 @@ KCM.SimpleKCM {
                     // Username — only for Basic
                     RowLayout {
                         Layout.fillWidth: true
-                        visible: card.authType === "basic"
+                        visible: page.authSpec(card.authType).hasUsername
                         QQC.Label { text: i18n("Username:"); Layout.preferredWidth: Kirigami.Units.gridUnit * 8 }
                         QQC.TextField {
                             Layout.fillWidth: true
@@ -240,9 +246,7 @@ KCM.SimpleKCM {
                     RowLayout {
                         Layout.fillWidth: true
                         QQC.Label {
-                            text: card.authType === "basic"  ? i18n("Password:")
-                                : card.authType === "bearer" ? i18n("Token:")
-                                : i18n("Header value:")
+                            text: page.authSpec(card.authType).secretLabel
                             Layout.preferredWidth: Kirigami.Units.gridUnit * 8
                         }
                         QQC.TextField {
@@ -259,11 +263,8 @@ KCM.SimpleKCM {
                             onEditingFinished: {
                                 if (text.length === 0) return;
                                 if (!page.authSupport) return;
-                                const fieldName = card.authType === "basic"  ? "password"
-                                                : card.authType === "bearer" ? "bearerToken"
-                                                : "rawHeader";
                                 const map = {};
-                                map[fieldName] = text;
+                                map[page.authSpec(card.authType).fieldName] = text;
                                 if (page.authSupport.setMap("profile:" + card.id, map)) {
                                     card.hasStoredSecret = true;
                                     savedHint.show();
