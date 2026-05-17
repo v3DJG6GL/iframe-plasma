@@ -312,12 +312,9 @@ PlasmoidItem {
                 return;
             }
 
-            const reqUrl = String(request.url);
-            const reqHostMatch = reqUrl.match(/^[a-z]+:\/\/([^/:]+)/i);
+            const reqHost = new URL(String(request.url)).host;
             const tabHost = new URL(tabConfig.url).host;
-            const reqHost = reqHostMatch ? reqHostMatch[1] : "";
-
-            if (!reqHostMatch || reqHost.toLowerCase() !== tabHost.toLowerCase()) {
+            if (reqHost.toLowerCase() !== tabHost.toLowerCase()) {
                 console.info("iframe-plasma[auth] host mismatch -> letting Qt prompt");
                 return;
             }
