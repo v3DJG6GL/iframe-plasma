@@ -258,20 +258,24 @@ KCM.SimpleKCM {
                                                                   : i18n("(not set)")
                             onEditingFinished: {
                                 if (text.length === 0) return;
-                                if (page.authSupport) {
-                                    const fieldName = card.authType === "basic"  ? "password"
-                                                    : card.authType === "bearer" ? "bearerToken"
-                                                    : "rawHeader";
-                                    const map = {};
-                                    map[fieldName] = text;
-                                    if (page.authSupport.setMap("profile:" + card.id, map)) {
-                                        card.hasStoredSecret = true;
-                                        savedHint.show();
-                                    }
+                                if (!page.authSupport) return;
+                                const fieldName = card.authType === "basic"  ? "password"
+                                                : card.authType === "bearer" ? "bearerToken"
+                                                : "rawHeader";
+                                const map = {};
+                                map[fieldName] = text;
+                                if (page.authSupport.setMap("profile:" + card.id, map)) {
+                                    card.hasStoredSecret = true;
+                                    savedHint.show();
+                                    // Leave `text` as masked dots: positive
+                                    // capture confirmation on success.
+                                } else {
+                                    // Wallet write failed (locked / unlock
+                                    // denied). Clear so the user isn't
+                                    // misled into thinking the secret was
+                                    // saved.
+                                    text = "";
                                 }
-                                // Note: NOT clearing `text` — the masked dots
-                                // stay visible as confirmation that the user's
-                                // input was captured.
                             }
                         }
                         QQC.ToolButton {
