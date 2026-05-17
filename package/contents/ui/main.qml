@@ -348,6 +348,12 @@ PlasmoidItem {
     // profiles via `authProfileId`. Idempotent: skips tabs that already have
     // a non-empty authProfileId.
     function migrateLegacyAuth() {
+        // Plugin must be live: writing secrets to KWallet and stripping legacy
+        // fields without persisting them would silently drop credentials that
+        // existed only in the old `basic:<host>` keys. The onLoaded handler
+        // re-invokes this once authSupport is ready.
+        if (!root.authSupport) return;
+
         let tabsRaw;
         try {
             tabsRaw = JSON.parse(Plasmoid.configuration.urlsJson || "[]");
@@ -393,9 +399,9 @@ PlasmoidItem {
                     autheliaHost: Plasmoid.configuration.autheliaHost || ""
                 };
                 // Move the secret into KWallet under the new key.
-                const oldKWalletPw = root.authSupport ? (root.authSupport.get("basic:" + host) || "") : "";
+                const oldKWalletPw = root.authSupport.get("basic:" + host) || "";
                 const secret = t.rawAuthHeader || oldKWalletPw || t.basicAuthPasswordPlaintext || "";
-                if (secret.length > 0 && root.authSupport) {
+                if (secret.length > 0) {
                     const map = {};
                     if (t.rawAuthHeader) map.rawHeader = secret;
                     else map.password = secret;
