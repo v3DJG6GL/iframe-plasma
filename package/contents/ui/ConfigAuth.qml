@@ -66,15 +66,22 @@ KCM.SimpleKCM {
     Component.onCompleted: {
         try {
             const arr = JSON.parse(store.json || "[]");
+            let synthesized = false;
             for (const entry of arr) {
+                let id = entry.id;
+                if (!id) { id = newUuid(); synthesized = true; }
                 listModel.append({
-                    id: entry.id || newUuid(),
+                    id: id,
                     name: entry.name || "",
                     authType: entry.authType || "basic",
                     username: entry.username || "",
                     autheliaHost: entry.autheliaHost || ""
                 });
             }
+            // Persist synthesized UUIDs immediately — otherwise the next load
+            // generates fresh UUIDs, orphaning any wallet entry written this
+            // session under the prior synthesized id.
+            if (synthesized) store.serialize();
         } catch (e) { console.warn("ConfigAuth: parse error", e.message); }
     }
 
