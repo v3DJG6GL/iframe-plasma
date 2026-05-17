@@ -689,10 +689,12 @@ PlasmoidItem {
             //
             // Polls every 100ms for up to 30s until the selector matches,
             // since Grafana renders panels progressively after the load event.
-            function applyThumbCrop(selector) {
-                console.info("iframe-plasma[thumb] applyThumbCrop ENTRY selector=" + JSON.stringify(selector)
-                    + " loading=" + miniView.loading + " url=" + miniView.url);
-                const code = "(function(sel){"
+            //
+            // The IIFE body is selector-agnostic, so it's built once at
+            // component init; only the trailing `("<sel>")` call-args string
+            // is appended per invocation.
+            readonly property string _applyThumbCropJsBody:
+                  "(function(sel){"
                 // OVERLAY-ONLY ARCHITECTURE
                 //
                 // Don't touch the source canvas's CSS at all. Don't mark
@@ -886,7 +888,12 @@ PlasmoidItem {
                 + "  if (window.__ifpThumbInterval) clearInterval(window.__ifpThumbInterval);"
                 + "  window.__ifpThumbInterval = setInterval(schedule, 3000);"
                 + "  return first === 'matched' ? 'matched-and-observing' : 'observing';"
-                + "})(" + JSON.stringify(selector) + ")";
+                + "})"
+
+            function applyThumbCrop(selector) {
+                console.info("iframe-plasma[thumb] applyThumbCrop ENTRY selector=" + JSON.stringify(selector)
+                    + " loading=" + miniView.loading + " url=" + miniView.url);
+                const code = _applyThumbCropJsBody + "(" + JSON.stringify(selector) + ")";
                 runJavaScript(code, function(r) {
                     console.info("iframe-plasma[thumb] applyThumbCrop("
                         + JSON.stringify(selector) + ") = " + r);
