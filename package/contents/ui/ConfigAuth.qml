@@ -248,6 +248,11 @@ KCM.SimpleKCM {
                         QQC.TextField {
                             id: secretField
                             Layout.fillWidth: true
+                            // Disable input when KWallet integration is missing — the
+                            // onEditingFinished handler silently drops the text in
+                            // that case, but the masked dots would otherwise stay
+                            // visible and falsely signal "captured".
+                            enabled: page.kwalletAvailable
                             echoMode: showSecret.checked ? TextInput.Normal : TextInput.Password
                             placeholderText: card.hasStoredSecret ? i18n("(stored — type to replace)")
                                                                   : i18n("(not set)")
