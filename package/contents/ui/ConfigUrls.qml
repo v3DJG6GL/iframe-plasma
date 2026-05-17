@@ -375,16 +375,16 @@ KCM.SimpleKCM {
         // Time-range presets — see https://grafana.com/docs/grafana/latest/dashboards/time-range-controls/
         readonly property var timeRangePresets: [
             { label: i18n("(keep URL's range)"), value: "" },
-            { label: "Last 5 minutes",   value: "5m"  },
-            { label: "Last 15 minutes",  value: "15m" },
-            { label: "Last 30 minutes",  value: "30m" },
-            { label: "Last 1 hour",      value: "1h"  },
-            { label: "Last 6 hours",     value: "6h"  },
-            { label: "Last 12 hours",    value: "12h" },
-            { label: "Last 24 hours",    value: "24h" },
-            { label: "Last 7 days",      value: "7d"  },
-            { label: "Last 30 days",     value: "30d" },
-            { label: "Last 90 days",     value: "90d" }
+            { label: i18n("Last 5 minutes"),   value: "5m"  },
+            { label: i18n("Last 15 minutes"),  value: "15m" },
+            { label: i18n("Last 30 minutes"),  value: "30m" },
+            { label: i18n("Last 1 hour"),      value: "1h"  },
+            { label: i18n("Last 6 hours"),     value: "6h"  },
+            { label: i18n("Last 12 hours"),    value: "12h" },
+            { label: i18n("Last 24 hours"),    value: "24h" },
+            { label: i18n("Last 7 days"),      value: "7d"  },
+            { label: i18n("Last 30 days"),     value: "30d" },
+            { label: i18n("Last 90 days"),     value: "90d" }
         ]
 
         // Don't use `anchors.fill: parent` here — that zeros out the layout's
