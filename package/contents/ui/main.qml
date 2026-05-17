@@ -450,10 +450,7 @@ PlasmoidItem {
                  && root.tabs.length > 1
                  && !root.expanded
         repeat: true
-        onTriggered: {
-            root.currentTabIndex = (root.currentTabIndex + 1) % root.tabs.length;
-            Plasmoid.configuration.currentTabIndex = root.currentTabIndex;
-        }
+        onTriggered: root.setCurrentTab((root.currentTabIndex + 1) % root.tabs.length)
     }
 
     // Cookie clearing per-host needs `profile.cookieStore` which QML doesn't
@@ -465,6 +462,16 @@ PlasmoidItem {
         sharedProfile.clearHttpCache();
         console.info("iframe-plasma: cleared HTTP cache");
         root.activeTab?.reload();
+    }
+
+    // The current tab index lives in two places: a runtime `root` property
+    // (used everywhere as the binding source) and a kcfg-persisted value
+    // (so the next session restores the same active tab).  Always update
+    // both together — bare `root.currentTabIndex = N` would not survive
+    // a restart, and bare kcfg write would skip the binding chain.
+    function setCurrentTab(idx) {
+        root.currentTabIndex = idx;
+        Plasmoid.configuration.currentTabIndex = idx;
     }
 
     // Active WebTab reference. Set from inside fullRepresentation's
@@ -492,30 +499,27 @@ PlasmoidItem {
     Shortcut {
         sequences: ["Ctrl+Tab", StandardKey.NextChild]
         enabled: root.expanded && root.tabs.length > 1
-        onActivated: {
-            root.currentTabIndex = (root.currentTabIndex + 1) % root.tabs.length;
-            Plasmoid.configuration.currentTabIndex = root.currentTabIndex;
-        }
+        onActivated: root.setCurrentTab((root.currentTabIndex + 1) % root.tabs.length)
     }
     Shortcut {
         sequences: ["Ctrl+Shift+Tab", StandardKey.PreviousChild]
         enabled: root.expanded && root.tabs.length > 1
-        onActivated: {
-            root.currentTabIndex = (root.currentTabIndex - 1 + root.tabs.length) % root.tabs.length;
-            Plasmoid.configuration.currentTabIndex = root.currentTabIndex;
-        }
+        onActivated: root.setCurrentTab(
+            (root.currentTabIndex - 1 + root.tabs.length) % root.tabs.length)
     }
     // Ctrl+1..9 → jump to tab N (Konsole/Dolphin convention).
-    // Repeater can't host a non-Item delegate — list shortcuts explicitly.
-    Shortcut { sequence: "Ctrl+1"; enabled: root.expanded && root.tabs.length > 0; onActivated: { root.currentTabIndex = 0; Plasmoid.configuration.currentTabIndex = 0 } }
-    Shortcut { sequence: "Ctrl+2"; enabled: root.expanded && root.tabs.length > 1; onActivated: { root.currentTabIndex = 1; Plasmoid.configuration.currentTabIndex = 1 } }
-    Shortcut { sequence: "Ctrl+3"; enabled: root.expanded && root.tabs.length > 2; onActivated: { root.currentTabIndex = 2; Plasmoid.configuration.currentTabIndex = 2 } }
-    Shortcut { sequence: "Ctrl+4"; enabled: root.expanded && root.tabs.length > 3; onActivated: { root.currentTabIndex = 3; Plasmoid.configuration.currentTabIndex = 3 } }
-    Shortcut { sequence: "Ctrl+5"; enabled: root.expanded && root.tabs.length > 4; onActivated: { root.currentTabIndex = 4; Plasmoid.configuration.currentTabIndex = 4 } }
-    Shortcut { sequence: "Ctrl+6"; enabled: root.expanded && root.tabs.length > 5; onActivated: { root.currentTabIndex = 5; Plasmoid.configuration.currentTabIndex = 5 } }
-    Shortcut { sequence: "Ctrl+7"; enabled: root.expanded && root.tabs.length > 6; onActivated: { root.currentTabIndex = 6; Plasmoid.configuration.currentTabIndex = 6 } }
-    Shortcut { sequence: "Ctrl+8"; enabled: root.expanded && root.tabs.length > 7; onActivated: { root.currentTabIndex = 7; Plasmoid.configuration.currentTabIndex = 7 } }
-    Shortcut { sequence: "Ctrl+9"; enabled: root.expanded && root.tabs.length > 8; onActivated: { root.currentTabIndex = 8; Plasmoid.configuration.currentTabIndex = 8 } }
+    // Instantiator hosts non-Item delegates fine — one Shortcut per index,
+    // each gated on its own slot being populated.
+    Instantiator {
+        model: 9
+        active: root.expanded
+        delegate: Shortcut {
+            required property int index
+            sequence: "Ctrl+" + (index + 1)
+            enabled: root.tabs.length > index
+            onActivated: root.setCurrentTab(index)
+        }
+    }
 
     // Compact representation — when the widget is on a Plasma panel.
     // Renders a live mini-WebEngineView showing one configured tab's URL at
@@ -1043,10 +1047,7 @@ PlasmoidItem {
             tabs: root.tabs
             currentIndex: root.currentTabIndex
             statuses: root.tabStatuses
-            onTabSelected: idx => {
-                root.currentTabIndex = idx;
-                Plasmoid.configuration.currentTabIndex = idx;
-            }
+            onTabSelected: idx => root.setCurrentTab(idx)
             onReloadRequested: idx => {
                 const view = webStack.itemAt(idx);
                 if (view) view.reload();
