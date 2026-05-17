@@ -497,8 +497,9 @@ KCM.SimpleKCM {
                 u = appendParam(u, "refresh", refreshInterval.value + "s");
             }
 
-            // 6) hideLogo — strip the "Powered by Grafana" overlay on 12.4+
-            if (addHideLogo.checked && u.indexOf("hideLogo=") === -1) {
+            // 6) hideLogo — strip the "Powered by Grafana" overlay on 12.4+.
+            //    Same delimiter-anchor rationale as kiosk/theme above.
+            if (addHideLogo.checked && !/[?&]hideLogo=/.test(u)) {
                 u = appendParam(u, "hideLogo", "true");
             }
 
