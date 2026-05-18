@@ -272,8 +272,12 @@ KCM.SimpleKCM {
                                 if (page.authSupport.setMap(page.authSupport.profileKey(card.id), map)) {
                                     card.hasStoredSecret = true;
                                     savedHint.show();
-                                    // Leave `text` as masked dots: positive
-                                    // capture confirmation on success.
+                                    // Clear the buffer so the showSecret toggle
+                                    // can't reveal a just-saved password to a
+                                    // bystander; the "(stored — type to replace)"
+                                    // placeholder + Saved pill signal capture.
+                                    showSecret.checked = false;
+                                    text = "";
                                 } else {
                                     // Wallet write failed (locked / unlock
                                     // denied). Clear so the user isn't
