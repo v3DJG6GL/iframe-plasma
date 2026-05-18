@@ -478,6 +478,18 @@ KCM.SimpleKCM {
                     text: i18n("Hide \"Powered by Grafana\" badge")
                     checked: true
                 }
+                // Panel-menu hide is client-side: Grafana has no URL flag
+                // for the per-panel 3-dot menu (issue #12019 open since
+                // 2018; team-recommended workaround is CSS). We append our
+                // internal sentinel `_ifp_hidePanelMenu=1` which Grafana
+                // ignores (unknown query param) and a WebEngineScript in
+                // WebTab.qml detects it and injects the hiding CSS.
+                QQC.CheckBox {
+                    id: addHidePanelMenu
+                    Kirigami.FormData.label: i18n("Panel menu:")
+                    text: i18n("Hide per-panel 3-dot menu (Explore / View / Inspect)")
+                    checked: true
+                }
             }
 
             Kirigami.InlineMessage {
@@ -559,6 +571,14 @@ KCM.SimpleKCM {
             //    Same delimiter-anchor rationale as kiosk/theme above.
             if (addHideLogo.checked && !/[?&]hideLogo=/.test(u)) {
                 u = appendParam(u, "hideLogo", "true");
+            }
+
+            // 7) hidePanelMenu — internal sentinel (Grafana ignores unknown
+            //    params). WebTab.qml's `iframe-plasma-hide-panel-menu` user
+            //    script reads window.location.search and injects CSS to
+            //    suppress the per-panel kebab when set.
+            if (addHidePanelMenu.checked && !/[?&]_ifp_hidePanelMenu=/.test(u)) {
+                u = appendParam(u, "_ifp_hidePanelMenu", "1");
             }
 
             return u;

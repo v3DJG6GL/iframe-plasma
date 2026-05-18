@@ -899,6 +899,16 @@ PlasmoidItem {
                 + "      'html[data-ifp-thumb=\"1\"],html[data-ifp-thumb=\"1\"] body{margin:0!important;padding:0!important;overflow:hidden!important;background:#181b1f!important;}',"
                 + "      'html[data-ifp-thumb=\"1\"] [data-testid=\"data-testid header-container\"]{display:none!important;}',"
                 + "      'html[data-ifp-thumb=\"1\"] img[alt=\"Grafana\"],html[data-ifp-thumb=\"1\"] div:has(>img[alt=\"Grafana\"]),html[data-ifp-thumb=\"1\"] div:has(>span+img[alt=\"Grafana\"]),html[data-ifp-thumb=\"1\"] div[class*=\"logoContainer\"]{display:none!important;}',"
+                // Hide Grafana's per-panel 3-dot menu in thumb mode. Belt-
+                // and-suspenders: the overlay canvas (#ifp-thumb-display
+                // below) covers the whole viewport at max z-index anyway,
+                // so the menu would already be invisible to the user. But
+                // keeping the rule here matches the same parity move we
+                // made for hideLogo above, and it survives any future
+                // change to the overlay (e.g., a hypothetical full-page
+                // thumb mode that doesn't paint over the page). Same
+                // selectors as the live-view WebEngineScript in WebTab.qml.
+                + "      'html[data-ifp-thumb=\"1\"] [data-testid^=\"data-testid Panel menu \"],html[data-ifp-thumb=\"1\"] [data-testid=\"panel-menu-button\"],html[data-ifp-thumb=\"1\"] button[aria-label^=\"Menu for panel \"],html[data-ifp-thumb=\"1\"] [data-testid^=\"data-testid Panel menu item \"]{display:none!important;}',"
                 + "      '#ifp-thumb-display{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;z-index:2147483647!important;background:#181b1f!important;display:block!important;margin:0!important;padding:0!important;border:none!important;transform:none!important;}'"
                 + "    ].join('');"
                 + "    (document.head||document.documentElement).appendChild(s);"

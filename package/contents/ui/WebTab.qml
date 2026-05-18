@@ -290,6 +290,64 @@ Item {
                 "  history.pushState    = function(s, t, u){ return origPS(s, t, strip(u)); };\n" +
                 "})();";
             webview.userScripts.insert(s);
+
+            // Hide Grafana's per-panel 3-dot menu button (kebab) when the
+            // URL carries our internal sentinel `_ifp_hidePanelMenu=1`.
+            //
+            // Grafana has no URL flag for this: kiosk mode only hides
+            // dashboard chrome, /d-solo keeps the panel header (which is
+            // what we want — we keep the title visible), and the feature
+            // is asked-for in #12019 (open since 2018) with the Grafana
+            // team explicitly recommending CSS as the only workaround.
+            //
+            // Selectors verified stable from Grafana 9.5 through main:
+            //   [data-testid^="data-testid Panel menu "]    titled panels
+            //     (testid value is `Panel menu <title>` — prefix match
+            //     with trailing space to avoid matching "Panel menu item")
+            //   [data-testid="panel-menu-button"]            untitled fallback
+            //   button[aria-label^="Menu for panel "]        i18n safety net
+            //   [data-testid^="data-testid Panel menu item "]
+            //     the dropdown itself, portal-rendered to document.body
+            //     (so a panel-scoped rule would miss it if the menu was
+            //     already open when the style landed).
+            //
+            // Sources: PanelMenu.tsx + e2e-selectors/components.ts on
+            // grafana/grafana at tags v12.0.0, v12.4.0, main.
+            const hp = WebEngine.script();
+            hp.name = "iframe-plasma-hide-panel-menu";
+            hp.injectionPoint = WebEngineScript.DocumentCreation;
+            hp.worldId = WebEngineScript.MainWorld;
+            hp.runOnSubFrames = false;
+            hp.sourceCode =
+                "(function(){\n" +
+                "  if (window.__ifpPanelMenuStyled) return;\n" +
+                // Gate on the sentinel — same URL is reused for tabs that
+                // want the menu visible, and we don't want CSS bleed.
+                "  try { if ((window.location.search||'').indexOf('_ifp_hidePanelMenu=1') === -1) return; }\n" +
+                "  catch(e) { return; }\n" +
+                "  window.__ifpPanelMenuStyled = true;\n" +
+                "  var css = '" +
+                "[data-testid^=\"data-testid Panel menu \"]," +
+                "[data-testid=\"panel-menu-button\"]," +
+                "button[aria-label^=\"Menu for panel \"]," +
+                "[data-testid^=\"data-testid Panel menu item \"]" +
+                "{display:none!important;}';\n" +
+                "  function inject(){\n" +
+                "    if (document.getElementById('ifp-panel-menu-style')) return;\n" +
+                "    var el = document.createElement('style');\n" +
+                "    el.id = 'ifp-panel-menu-style';\n" +
+                "    el.textContent = css;\n" +
+                "    (document.head || document.documentElement).appendChild(el);\n" +
+                "  }\n" +
+                // At DocumentCreation the head may not exist yet; defer
+                // to DOMContentLoaded if the document is still parsing.
+                "  if (document.readyState === 'loading') {\n" +
+                "    document.addEventListener('DOMContentLoaded', inject, { once: true });\n" +
+                "  } else {\n" +
+                "    inject();\n" +
+                "  }\n" +
+                "})();";
+            webview.userScripts.insert(hp);
         }
 
         onLoadingChanged: function(info) {
