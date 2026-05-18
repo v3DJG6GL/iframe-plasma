@@ -45,7 +45,18 @@ Item {
 
     function reload() { webview.reload() }
     function hardReload() { webview.triggerWebAction(WebEngineView.ReloadAndBypassCache) }
-    function openExternal() { Qt.openUrlExternally(webview.url) }
+    // Same scheme allowlist as onNewWindowRequested — if a redirect chain ever
+    // lands the view on a non-http(s) URL (data:, file:, custom xdg handlers),
+    // refuse to hand it off to the system URI dispatcher.
+    function openExternal() {
+        const u = String(webview.url);
+        const scheme = u.split(":", 1)[0].toLowerCase();
+        if (scheme === "http" || scheme === "https") {
+            Qt.openUrlExternally(webview.url);
+        } else {
+            console.warn("iframe-plasma[nav] refusing openExternal; scheme=" + scheme);
+        }
+    }
 
     // --- Live time-range / refresh manipulation (toolbar overrides) ---------
     // Both functions mutate webview.url in place — Grafana picks up the new
@@ -218,6 +229,9 @@ Item {
         settings.localContentCanAccessFileUrls: false
         settings.localContentCanAccessRemoteUrls: false
         settings.allowRunningInsecureContent: false
+        settings.javascriptCanOpenWindows: false
+        settings.javascriptCanAccessClipboard: false
+        settings.javascriptCanPaste: false
 
         // Suppress Grafana's auto-refresh URL push.
         //
