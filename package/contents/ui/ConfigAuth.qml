@@ -52,6 +52,26 @@ KCM.SimpleKCM {
 
     ListModel { id: listModel }
 
+    // Strip C0/DEL/C1 controls + ALM/ZWSP/ZWNJ/ZWJ/LRM/RLM/PDF/LRE/RLE/LRO/RLO/
+    // LRI/RLI/FSI/PDI/LS/PS/BOM from the Authelia-host string before persisting.
+    // WebTab.onAutheliaHost compares as a literal `host === autheliaHost ||
+    // host.endsWith("." + autheliaHost)` against `new URL(currentUrl).host` —
+    // a leading/trailing space or stray zero-width / bidi-control byte makes
+    // the comparison silently fail, the "Authentication required" overlay
+    // never appears, and the operator types credentials into the real
+    // upstream login page instead of the controlled Authelia flow. Same
+    // RegExp idiom as the toolbar host chip (b92526b): U+2028 (LS) and
+    // U+2029 (PS) are ECMAScript LineTerminators that can't appear inside
+    // a /.../ literal, so build from a String and feed to RegExp().
+    readonly property var _autheliaHostStripRe: new RegExp(
+        "[\\u0000-\\u001F\\u007F-\\u009F"
+      + "\\u061C\\u200B-\\u200F"
+      + "\\u202A-\\u202E\\u2066-\\u2069"
+      + "\\u2028\\u2029\\uFEFF]", "g")
+    function sanitizeAutheliaHost(h) {
+        return String(h || "").trim().replace(_autheliaHostStripRe, "");
+    }
+
     // Simple UUID v4 generator (RFC 4122 compliant for our purposes).
     function newUuid() {
         // QML doesn't expose crypto.getRandomValues; use Math.random as fallback.
@@ -376,7 +396,9 @@ KCM.SimpleKCM {
                             Layout.fillWidth: true
                             placeholderText: i18n("e.g. auth.example.com (optional)")
                             text: card.autheliaHost
-                            onEditingFinished: page.setField(card.index, "autheliaHost", text)
+                            // Sanitise on persist — see page.sanitizeAutheliaHost.
+                            onEditingFinished: page.setField(card.index, "autheliaHost",
+                                page.sanitizeAutheliaHost(text))
                             QQC.ToolTip.visible: hovered && text.length === 0
                             QQC.ToolTip.delay: 600
                             QQC.ToolTip.text: i18n("When the widget detects a redirect to this host, an \"Authentication required\" overlay appears. Leave empty to disable for this profile.")
