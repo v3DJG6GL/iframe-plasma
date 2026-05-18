@@ -422,6 +422,56 @@ Item {
             console.warn("iframe-plasma[webauth] cancelled state=" + request.state);
             request.cancel();
         }
+        // Suppress page-controlled tooltips. Default Qt behaviour renders the
+        // tooltip outside the WebEngineView's clipped geometry (it's a top-
+        // level platform widget), so a compromised dashboard can paint
+        // attacker-controlled text — fake UI prompts, spoofed paths — over
+        // arbitrary screen regions next to the kiosk. `accepted = true`
+        // tells Qt the QML side took ownership and prevents the default
+        // tooltip from appearing.
+        onTooltipRequested: function(request) {
+            request.accepted = true;
+        }
+        // Reject `<input type=color>` (and any JS-driven .click() on one).
+        // The default action opens the platform's native colour picker as a
+        // modal top-level window — same modal-over-kiosk hazard as a
+        // surprise auth dialog, with no UX path to surface it to the
+        // operator. The widget never legitimately needs a colour picker.
+        onColorDialogRequested: function(request) {
+            console.warn("iframe-plasma[color] rejected color dialog");
+            request.dialogReject();
+        }
+        // Reject getDisplayMedia / screen-capture requests outright. The
+        // generic permissionRequested/featurePermissionRequested denials
+        // already cover most permission flavours, but desktopMediaRequested
+        // is a separate signal (Qt 6.8+) that, if unhandled, can present
+        // the screen-picker chooser even before the permission dialog
+        // fires. A hostile page calling navigator.mediaDevices.getDisplay-
+        // Media() over the SSO origin must not get any UI surface here.
+        onDesktopMediaRequested: function(request) {
+            console.warn("iframe-plasma[dispmedia] cancelled screen-capture request");
+            request.cancel();
+        }
+        // Reject File System Access API (showOpenFilePicker / showSave-
+        // FilePicker / showDirectoryPicker). FileDialogRequested handles
+        // the legacy <input type=file>, but fileSystemAccessRequested is
+        // a separate request type that wraps Chromium's modern FS-Access
+        // API — same exfiltration / write surface, separate hook. The
+        // widget never legitimately writes to disk.
+        onFileSystemAccessRequested: function(request) {
+            console.warn("iframe-plasma[fs-access] rejected origin=" + request.origin
+                + " handleType=" + request.handleType);
+            request.reject();
+        }
+        // Reject legacy storage-quota upgrades (window.webkitStorageInfo /
+        // navigator.webkitPersistentStorage). Deprecated in modern Chromium
+        // but the signal still fires from old pages. Default is to ignore,
+        // but explicit reject pins it against future Qt default-flips.
+        onQuotaRequested: function(request) {
+            console.warn("iframe-plasma[quota] rejected origin=" + request.origin
+                + " requestedSize=" + request.requestedSize);
+            request.reject();
+        }
 
         // Open user-clicked links externally; iframe sub-resources still load normally.
         // Restrict to web/mail/tel schemes — anything else (e.g. file:, smb:,
