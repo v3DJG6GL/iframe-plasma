@@ -149,6 +149,18 @@ PlasmoidItem {
                 range = ""; // keep URL's own from/to
             }
         }
+        // Validate `range` before splicing into the query string. The popup
+        // path (WebTab.currentTimeRange) regex-validates to /^now-(\d+[smhdwMy])$/
+        // before exposing the suffix; thumbTimeRange came from raw config and
+        // was concatenated unvalidated, so a typo'd or import-poisoned value
+        // like "1h&kiosk=true&authToken=leak" would inject extra params into
+        // the configured Grafana URL on every thumbnail load. Refuse anything
+        // that doesn't match Grafana's interval shape; fall back to the URL's
+        // own from/to (range = "").
+        if (range.length > 0 && !/^\d+[smhdwMy]$/.test(range)) {
+            console.warn("iframe-plasma[thumb] rejected invalid thumbTimeRange=" + range);
+            range = "";
+        }
         if (range.length > 0) {
             // Strip existing from/to (handles ?from= , &from= , ?to= , &to=).
             url = url.replace(/[?&]from=[^&]*/g, function(m) { return m.charAt(0) === '?' ? '?' : ''; });
@@ -757,6 +769,20 @@ PlasmoidItem {
                 console.warn("iframe-plasma[mini-webauth] cancelled state=" + request.state);
                 request.cancel();
             }
+            // Reject every page-driven HTTP-auth dialog on the thumb. Without
+            // this, a 401 from a configured or redirect-chain URL pops Qt's
+            // system Basic-auth dialog over the panel slot — the thumb is
+            // passive (enabled:false) but the modal credential prompt is a
+            // separate top-level widget that still appears, prompting an
+            // unattended user with no widget interaction. WebTab.qml routes
+            // 401s through the controlled overlay flow; the thumb has no UX
+            // path for that, so deny outright.
+            onAuthenticationDialogRequested: function(request) {
+                console.warn("iframe-plasma[mini-auth] rejected dialog type=" + request.type
+                    + " url=" + request.url);
+                request.dialogReject();
+                request.accepted = true;
+            }
             // Log-only on the thumb (no auto-reload): the thumb is a passive
             // render of an unattended URL. A crash-loop here would keep
             // hammering Chromium with no UI feedback to the user. Surface the
@@ -785,9 +811,18 @@ PlasmoidItem {
             // Forward console.info / console.warn from in-page JS (our shim's
             // observer callback, apply() returns, etc.) to QML console so it
             // shows up in journalctl. Filter to only [ifp-thumb] tagged lines.
+            //
+            // `message` originates from JS running in an attacker-controlled
+            // page (compromised Grafana panel, hostile redirect target). Strip
+            // C0 / DEL bytes — a crafted `console.log("[ifp-thumb] \x1b[2J…")`
+            // injects ANSI escapes that terminal-bound journalctl viewers
+            // interpret (clear-screen, fake prompt, log-spoofed lines). Cap at
+            // 512 chars so a single megabyte log line can't blow up the
+            // journal buffer.
             onJavaScriptConsoleMessage: function(level, message, lineNumber, sourceID) {
                 if (message && message.indexOf('[ifp-thumb]') !== -1) {
-                    console.info("iframe-plasma" + message);
+                    const safe = String(message).replace(/[\x00-\x1f\x7f]/g, '?').slice(0, 512);
+                    console.info("iframe-plasma" + safe);
                 }
             }
 
