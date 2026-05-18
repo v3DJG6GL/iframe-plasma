@@ -311,7 +311,16 @@ KCM.SimpleKCM {
                                 Layout.fillWidth: true
                                 readonly property var presets: [
                                     { val: "auto", label: i18n("Same as widget (use URL's range)") },
-                                    ...GrafanaTimeRanges.presets
+                                    { val: "5m",   label: i18n("Last 5 minutes")  },
+                                    { val: "15m",  label: i18n("Last 15 minutes") },
+                                    { val: "30m",  label: i18n("Last 30 minutes") },
+                                    { val: "1h",   label: i18n("Last 1 hour")     },
+                                    { val: "6h",   label: i18n("Last 6 hours")    },
+                                    { val: "12h",  label: i18n("Last 12 hours")   },
+                                    { val: "24h",  label: i18n("Last 24 hours")   },
+                                    { val: "7d",   label: i18n("Last 7 days")     },
+                                    { val: "30d",  label: i18n("Last 30 days")    },
+                                    { val: "90d",  label: i18n("Last 90 days")    }
                                 ]
                                 model: presets
                                 textRole: "label"
@@ -381,8 +390,17 @@ KCM.SimpleKCM {
 
         // Time-range presets — see https://grafana.com/docs/grafana/latest/dashboards/time-range-controls/
         readonly property var timeRangePresets: [
-            { val: "", label: i18n("(keep URL's range)") },
-            ...GrafanaTimeRanges.presets
+            { val: "",    label: i18n("(keep URL's range)") },
+            { val: "5m",  label: i18n("Last 5 minutes")  },
+            { val: "15m", label: i18n("Last 15 minutes") },
+            { val: "30m", label: i18n("Last 30 minutes") },
+            { val: "1h",  label: i18n("Last 1 hour")     },
+            { val: "6h",  label: i18n("Last 6 hours")    },
+            { val: "12h", label: i18n("Last 12 hours")   },
+            { val: "24h", label: i18n("Last 24 hours")   },
+            { val: "7d",  label: i18n("Last 7 days")     },
+            { val: "30d", label: i18n("Last 30 days")    },
+            { val: "90d", label: i18n("Last 90 days")    }
         ]
 
         // Don't use `anchors.fill: parent` here — that zeros out the layout's

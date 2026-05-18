@@ -184,9 +184,24 @@ Rectangle {
             x: 0
             y: timeChip.height + 2
             currentValue: tb.timeRange
+            // Inline preset list (was a shared GrafanaTimeRanges singleton,
+            // but `i18n()` is not resolved inside a QtObject singleton when
+            // the KCM engine loads ConfigUrls — the singleton's QML scope
+            // doesn't inherit KLocalizedContext there, so its `presets`
+            // property evaluated to a ReferenceError and the dropdown
+            // rendered empty in the config dialog).
             model: [
-                { val: "", label: i18nc("time range: keep URL's existing from/to", "(URL default)") },
-                ...GrafanaTimeRanges.presets
+                { val: "",    label: i18nc("time range: keep URL's existing from/to", "(URL default)") },
+                { val: "5m",  label: i18n("Last 5 minutes")  },
+                { val: "15m", label: i18n("Last 15 minutes") },
+                { val: "30m", label: i18n("Last 30 minutes") },
+                { val: "1h",  label: i18n("Last 1 hour")     },
+                { val: "6h",  label: i18n("Last 6 hours")    },
+                { val: "12h", label: i18n("Last 12 hours")   },
+                { val: "24h", label: i18n("Last 24 hours")   },
+                { val: "7d",  label: i18n("Last 7 days")     },
+                { val: "30d", label: i18n("Last 30 days")    },
+                { val: "90d", label: i18n("Last 90 days")    }
             ]
             onValueSelected: (v) => tb.selectTimeRange(v)
         }
