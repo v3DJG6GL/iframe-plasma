@@ -685,6 +685,8 @@ PlasmoidItem {
             settings.javascriptCanOpenWindows: false
             settings.javascriptCanAccessClipboard: false
             settings.allowRunningInsecureContent: false
+            settings.pdfViewerEnabled: false
+            settings.webRTCPublicInterfacesOnly: true
             backgroundColor: "transparent"
             zoomFactor: 1.0
             enabled: false   // pass clicks through to the MouseArea above

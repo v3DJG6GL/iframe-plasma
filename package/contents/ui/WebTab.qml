@@ -232,6 +232,14 @@ Item {
         settings.javascriptCanOpenWindows: false
         settings.javascriptCanAccessClipboard: false
         settings.javascriptCanPaste: false
+        // pdfium is a recurring Chromium CVE target (e.g. CVE-2023-4863,
+        // CVE-2024-4671); the widget never legitimately needs the in-page
+        // PDF viewer, so disable that attack surface entirely.
+        settings.pdfViewerEnabled: false
+        // WebRTC isn't used here; without this pin Qt's default STUN
+        // gathering enumerates every LAN interface and leaks the kiosk's
+        // internal-network topology to any JS that opens an RTCPeerConnection.
+        settings.webRTCPublicInterfacesOnly: true
 
         // Suppress Grafana's auto-refresh URL push.
         //
