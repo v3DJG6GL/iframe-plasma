@@ -502,10 +502,31 @@ PlasmoidItem {
     // shared plugin to do this properly. For now the toolbar action falls back
     // to clearing the HTTP cache (which alone does not invalidate the Authelia
     // session cookie — by design, so a refresh after auth changes still works).
+    //
+    // clearHttpCache() is async — it schedules a wipe on Chromium's IO thread
+    // and returns immediately.  Firing reload() on the next line races the
+    // wipe: the new fetch's in-flight requests can collide with the cache
+    // teardown and die mid-handshake ("Failed to fetch" toasts + endless
+    // spinner inside the dashboard JS).  Wait for clearHttpCacheCompleted
+    // (Qt 6.7+) before reloading so the cache state is settled when the
+    // new requests go out.
     function clearCacheAndReload() {
-        sharedProfile.clearHttpCache();
-        console.info("iframe-plasma: cleared HTTP cache");
-        root.activeTab?.reload();
+        const tab = root.activeTab;
+        if (!tab) return;
+        const profile = tab.profile;
+        if (!profile) { tab.reload(); return; }
+        let fired = false;
+        function onCompleted() {
+            if (fired) return;
+            fired = true;
+            try { profile.clearHttpCacheCompleted.disconnect(onCompleted); } catch (e) { /* profile gone */ }
+            console.info("iframe-plasma: HTTP cache cleared, reloading");
+            try { tab.reload(); } catch (e) {
+                console.warn("iframe-plasma: reload after cache-clear failed:", e.message);
+            }
+        }
+        profile.clearHttpCacheCompleted.connect(onCompleted);
+        profile.clearHttpCache();
     }
 
     // The current tab index lives in two places: a runtime `root` property
