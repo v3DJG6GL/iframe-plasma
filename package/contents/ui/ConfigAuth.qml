@@ -289,7 +289,11 @@ KCM.SimpleKCM {
                                     // denied). Surface a red "Wallet write
                                     // failed" pill so the user isn't misled by
                                     // the cleared field into thinking the
-                                    // secret was saved.
+                                    // secret was saved. Reset showSecret so
+                                    // the next retype isn't cleartext to a
+                                    // bystander — symmetry with the success
+                                    // branch's eye-toggle reset.
+                                    showSecret.checked = false;
                                     text = "";
                                     failedHint.show();
                                 }
