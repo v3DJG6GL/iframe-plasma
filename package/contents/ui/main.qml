@@ -192,6 +192,17 @@ PlasmoidItem {
             if (Plasmoid.configuration.useBasicAuthInjection) root.primeAuthProfiles();
             root.reloadAll();
         }
+        // userAgentOverride used to live as a binding on WebEngineProfile,
+        // but the 6.9 WebEngineProfilePrototype migration moved it off the
+        // declarative surface (Prototype doesn't expose httpUserAgent).
+        // Propagate the sanitised value to every live profile so a config-
+        // dialog change still takes effect without a plasmashell restart.
+        function onUserAgentOverrideChanged() {
+            const ua = root._sanitisedUserAgent();
+            for (const key in root._profiles) {
+                root._profiles[key].httpUserAgent = ua;
+            }
+        }
     }
 
     Component.onCompleted: {
@@ -242,65 +253,79 @@ PlasmoidItem {
     // Ephemeral profile gets no interceptor at all.
     property var _interceptors: ({})
 
-    // Component template — `authProfileId` is set via createObject() options
-    // before bindings evaluate, so storageName / offTheRecord / paths see the
-    // right value at first construction (WebEngineProfile's persistent fields
-    // are not safely re-settable post-init).
+    // Component template — Qt 6.9+ deprecated direct `WebEngineProfile`
+    // instantiation from QML; the replacement is `WebEngineProfilePrototype`,
+    // a configurator that exposes only the write-once construction fields
+    // (storageName / persistent storage / cookies / cache).  Runtime fields
+    // (offTheRecord / spellCheck / UA / downloadRequested) are NOT on the
+    // Prototype — they're applied to `prototype.instance()` in the factory
+    // below.
+    //
+    // The write-once fields are populated via createObject() options (not
+    // via declarative bindings), because a binding that depends on
+    // `profileAuthId` re-evaluates once when its initial default is applied
+    // and once when createObject's options set the real id — that second
+    // write trips the Prototype's "should not be set again" warning even
+    // though both writes happen before componentComplete.
     Component {
         id: profileComponent
-        WebEngineProfile {
+        WebEngineProfilePrototype {
             property string profileAuthId: ""
-            readonly property bool ephemeral: profileAuthId.length === 0
-            storageName: ephemeral
-                ? ""
-                : Plasmoid.metaData.pluginId + "-" + (Plasmoid.id || 0) + "-" + profileAuthId
-            offTheRecord: ephemeral
-            persistentCookiesPolicy: ephemeral
-                ? WebEngineProfile.NoPersistentCookies
-                : WebEngineProfile.ForcePersistentCookies
-            persistentStoragePath: ephemeral
-                ? ""
-                : root.profileStorageRoot + "/" + profileAuthId
-            // Defense-in-depth: spellCheckEnabled defaults to false today, but
-            // pinning matches the pdfViewerEnabled / webRTCPublicInterfacesOnly
-            // pattern and prevents any future Qt default-flip from sending
-            // words typed into Grafana template-variable / search inputs
-            // (often hostnames or internal identifiers) to the platform
-            // dictionary service.
-            spellCheckEnabled: false
-            // Strip CR/LF/NUL — parity with the auth-interceptor header guard
-            // (3cedd16). User config is trusted today, but a future config-
-            // import path could deliver a control-byte-bearing UA.
-            httpUserAgent: Plasmoid.configuration.userAgentOverride.length > 0
-                ? Plasmoid.configuration.userAgentOverride.replace(/[\r\n\0]/g, "")
-                : ""
-            // Refuse downloads outright: the widget is a passive dashboard
-            // viewer, never expected to write to disk.
-            onDownloadRequested: function(item) {
-                console.warn("iframe-plasma[dl] blocked download url=" + item.url
-                    + " mime=" + item.mimeType);
-                item.cancel();
-            }
         }
     }
 
-    // Lazy factory. Returns (and caches) the WebEngineProfile for the given
-    // authProfileId. "" → ephemeral. Creates a per-profile interceptor and
-    // attaches it iff useBasicAuthInjection is enabled.
+    // Lazy factory.  Creates a `WebEngineProfilePrototype`, materialises its
+    // underlying `QQuickWebEngineProfile` via `.instance()`, applies the
+    // post-construction settings, optionally attaches a per-profile
+    // interceptor, and returns the profile (NOT the prototype — that stays
+    // parented to root for lifetime management).  Cached by authProfileId so
+    // tabs sharing the same id share one profile.
     function profileForAuthId(authProfileId) {
         const key = authProfileId || "";
         if (root._profiles[key]) return root._profiles[key];
-        const profile = profileComponent.createObject(root, { profileAuthId: key });
-        if (!profile) {
-            console.warn("iframe-plasma[profile] createObject failed for id=" + key);
+        const isEphemeral = (key.length === 0);
+        // Empty storageName + empty persistentStoragePath drives the
+        // underlying QQuickWebEngineProfile into off-the-record mode for the
+        // ephemeral path (no cookies/cache touch disk).  offTheRecord = true
+        // is also pinned on instance() below as defense-in-depth.
+        const prototype = profileComponent.createObject(root, {
+            profileAuthId: key,
+            storageName: isEphemeral
+                ? ""
+                : Plasmoid.metaData.pluginId + "-" + (Plasmoid.id || 0) + "-" + key,
+            persistentCookiesPolicy: isEphemeral
+                ? WebEngineProfile.NoPersistentCookies
+                : WebEngineProfile.ForcePersistentCookies,
+            persistentStoragePath: isEphemeral
+                ? ""
+                : root.profileStorageRoot + "/" + key
+        });
+        if (!prototype) {
+            console.warn("iframe-plasma[profile] prototype createObject failed for id=" + key);
             return null;
         }
-        // Plain mutation — _profiles/_interceptors are private bookkeeping JS
-        // objects, not reactive QML properties.  Re-assigning the property
-        // would re-fire every `profileForAuthId(...)` binding and trip QML's
-        // binding-loop detector even though the cache hit stabilises it.
+        const profile = prototype.instance();
+        if (!profile) {
+            // Per Qt docs, instance() returns null on persistentStoragePath
+            // collision — should never happen with our per-authProfileId
+            // path layout but log defensively.
+            console.warn("iframe-plasma[profile] prototype.instance() returned null for id=" + key);
+            prototype.destroy();
+            return null;
+        }
+        // Runtime fields, applied post-construction.  offTheRecord on the
+        // ephemeral profile is belt-and-braces: storageName/path are already
+        // empty so the underlying profile is in-memory anyway.
+        if (isEphemeral) profile.offTheRecord = true;
+        // Defense-in-depth: pin spellCheck so a future Qt default-flip can't
+        // start posting Grafana template-variable typings to the platform
+        // dictionary service.
+        profile.spellCheckEnabled = false;
+        profile.httpUserAgent = root._sanitisedUserAgent();
+        // Refuse downloads outright: the widget is a passive dashboard viewer.
+        profile.downloadRequested.connect(root._blockDownload);
         root._profiles[key] = profile;
-        if (key.length === 0) {
+        if (isEphemeral) {
             console.info("iframe-plasma[profile] created ephemeral profile");
             return profile;
         }
@@ -316,6 +341,23 @@ PlasmoidItem {
             console.info("iframe-plasma[profile] created named profile id=" + key + " (injection disabled, no interceptor)");
         }
         return profile;
+    }
+
+    // Shared download blocker — same callback identity per profile so a
+    // future disconnect() can match (signal.disconnect() needs the same
+    // function reference, not just one with the same body).
+    function _blockDownload(item) {
+        console.warn("iframe-plasma[dl] blocked download url=" + item.url
+            + " mime=" + item.mimeType);
+        item.cancel();
+    }
+
+    // Strip CR/LF/NUL — parity with the auth-interceptor header guard
+    // (3cedd16).  Centralised so the createObject + UA-config-changed paths
+    // both sanitise identically.
+    function _sanitisedUserAgent() {
+        const ua = Plasmoid.configuration.userAgentOverride;
+        return ua.length > 0 ? ua.replace(/[\r\n\0]/g, "") : "";
     }
 
     // Attach/detach the interceptor whenever the toggle or plugin availability changes.
