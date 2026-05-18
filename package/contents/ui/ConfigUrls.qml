@@ -462,6 +462,18 @@ KCM.SimpleKCM {
             let u = (input || "").trim();
             if (!u) return "";
 
+            // Reject CR/LF/NUL up-front. Operator-trust applies to the KCM
+            // surface, but a pasted URL containing a stray \r\n\0 (or a stray
+            // `#` mid-querystring) corrupts splitFragment() — `indexOf("#")`
+            // returns the first match, so a payload `?a=1\n#kiosk` lands the
+            // `kiosk` flag inside the fragment, where Grafana ignores it and
+            // operator chrome stays visible. Same threat-class as the
+            // auth-interceptor C0-byte reject and the userAgent CR/LF strip.
+            if (/[\r\n\0]/.test(u)) {
+                console.warn("iframe-plasma[config-urls] rejected pasted URL with CR/LF/NUL");
+                return "";
+            }
+
             // 1) /d/ → /d-solo/ (only when we have a viewPanel to convert)
             const viewPanelMatch = u.match(/[?&]viewPanel=panel-(\d+)(?:-clone\d+)?/);
             if (convertDSolo.checked && viewPanelMatch && u.indexOf("/d/") !== -1) {
