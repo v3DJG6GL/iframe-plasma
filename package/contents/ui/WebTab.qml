@@ -371,6 +371,33 @@ Item {
             console.warn("iframe-plasma[file] rejected dialog mode=" + request.mode);
             request.dialogReject();
         }
+        // Suppress the default Chromium context menu. Kiosk has no need for
+        // Inspect / View source / Save link / Save image, and a bystander
+        // right-click otherwise exposes inline secrets and reaches a
+        // file-save dialog that bypasses onDownloadRequested under some
+        // Qt 6.x builds.
+        onContextMenuRequested: function(request) {
+            console.info("iframe-plasma[ctx] suppressed menu pos=" + request.position
+                + " mediaType=" + request.mediaType);
+            request.accepted = true;
+        }
+        // Reject client-certificate auto-selection. With the shared SSO
+        // profile any imported ~/.pki cert becomes a candidate; Qt's
+        // default for a single-match CertificateRequest is silent select,
+        // which would leak the kiosk identity to any origin that flips on
+        // optional client-auth.
+        onSelectClientCertificate: function(selection) {
+            console.warn("iframe-plasma[cert] rejected client-cert request host="
+                + selection.host + " count=" + selection.certificates.length);
+            selection.selectNone();
+        }
+        // Cancel WebAuthn ceremonies — the system FIDO/passkey prompt
+        // escapes the kiosk chrome and the widget never legitimately needs
+        // WebAuthn (basic-auth via interceptor only).
+        onWebAuthUxRequested: function(request) {
+            console.warn("iframe-plasma[webauth] cancelled state=" + request.state);
+            request.cancel();
+        }
 
         // Open user-clicked links externally; iframe sub-resources still load normally.
         // Restrict to web/mail/tel schemes — anything else (e.g. file:, smb:,

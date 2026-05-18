@@ -223,6 +223,13 @@ PlasmoidItem {
         offTheRecord: Plasmoid.configuration.privateBrowsing
         persistentCookiesPolicy: WebEngineProfile.ForcePersistentCookies
         persistentStoragePath: root.profileStorageRoot
+        // Defense-in-depth: spellCheckEnabled defaults to false today, but
+        // pinning matches the pdfViewerEnabled / webRTCPublicInterfacesOnly
+        // pattern and prevents any future Qt default-flip from sending words
+        // typed into Grafana template-variable / search inputs (often
+        // hostnames or internal identifiers) to the platform dictionary
+        // service and persisting them in ~/.config/QtWebEngine/Dictionaries.
+        spellCheckEnabled: false
         // Strip CR/LF/NUL — parity with the auth-interceptor header guard
         // (3cedd16). User config is trusted today, but a future config-import
         // path could deliver a control-byte-bearing UA; Chromium normally
@@ -731,6 +738,24 @@ PlasmoidItem {
             onFileDialogRequested: function(request) {
                 console.warn("iframe-plasma[mini-file] rejected dialog mode=" + request.mode);
                 request.dialogReject();
+            }
+            // Mirror WebTab pins: suppress default context menu, reject
+            // client-cert auto-select, cancel WebAuthn ceremonies. `enabled:false`
+            // suppresses input but not Chromium-side capability defaults, so
+            // a configured URL hitting any of these during the thumb's render
+            // window must still be denied.
+            onContextMenuRequested: function(request) {
+                console.info("iframe-plasma[mini-ctx] suppressed menu pos=" + request.position);
+                request.accepted = true;
+            }
+            onSelectClientCertificate: function(selection) {
+                console.warn("iframe-plasma[mini-cert] rejected client-cert request host="
+                    + selection.host + " count=" + selection.certificates.length);
+                selection.selectNone();
+            }
+            onWebAuthUxRequested: function(request) {
+                console.warn("iframe-plasma[mini-webauth] cancelled state=" + request.state);
+                request.cancel();
             }
             // Log-only on the thumb (no auto-reload): the thumb is a passive
             // render of an unattended URL. A crash-loop here would keep
