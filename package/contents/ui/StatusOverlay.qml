@@ -27,7 +27,16 @@ Rectangle {
 
     function showLoading() { message = ""; mode = StatusOverlay.Loading; }
     function showAuthRequired() { mode = StatusOverlay.AuthRequired; }
-    function showError(msg) { message = msg; mode = StatusOverlay.Error; }
+    // Cap the error message length: a hostile origin can craft an errorString
+    // (e.g. a >100 KB host suffix or a wall of NBSPs that Text.WordWrap can't
+    // break) that grows the centered ColumnLayout vertically until the Reload
+    // / Open-in-browser buttons are pushed off-screen and the tab is trapped.
+    // 240 chars is enough room for every real Chromium error string.
+    function showError(msg) {
+        const s = String(msg || "");
+        message = s.length > 240 ? s.slice(0, 237) + "…" : s;
+        mode = StatusOverlay.Error;
+    }
     function hide() { mode = StatusOverlay.Hidden; }
 
     MouseArea {
