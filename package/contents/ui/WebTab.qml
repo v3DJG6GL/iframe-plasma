@@ -36,7 +36,17 @@ Item {
     readonly property string currentHost: {
         try { return new URL(String(webview.url)).host } catch (e) { return "" }
     }
-    readonly property bool tlsOk: String(webview.url).startsWith("https://")
+    // Cleared at every LoadStartedStatus, set true by onCertificateError.
+    // Without this, tlsOk was a pure scheme-prefix check — a self-signed /
+    // expired / hostname-mismatched server painted green during the load
+    // window and stayed green if the toolbar wasn't re-evaluated after the
+    // error fired. The lock chip is the operator's primary TLS-trust signal,
+    // so derive it from (loadSucceeded || authelia-overlay) && https && no
+    // recorded cert error for this navigation.
+    property bool lastCertError: false
+    readonly property bool tlsOk: (tab.loadStatus === "ok" || tab.loadStatus === "auth")
+                                  && String(webview.url).startsWith("https://")
+                                  && !tab.lastCertError
 
     readonly property alias webView: webview
 
@@ -286,6 +296,7 @@ Item {
             if (info.status === WebEngineView.LoadStartedStatus) {
                 console.info("iframe-plasma[load] STARTED url=" + info.url);
                 tab.loadStatus = "loading";
+                tab.lastCertError = false;
                 if (!tab.loginInProgress) statusOverlay.showLoading();
             } else if (info.status === WebEngineView.LoadSucceededStatus) {
                 const finalUrl = String(webview.url);
@@ -334,6 +345,19 @@ Item {
             console.info("iframe-plasma[auth] dialog requested type=" + request.type
                 + " url=" + request.url + " realm=" + request.realm);
             tab.basicAuthRequested(request);
+        }
+
+        // Default action for an unhandled certificateError in Qt 6 is reject;
+        // record the event so tlsOk falls to ⚠ instead of staying green from
+        // the stale onLoadStartedStatus url prefix. Explicitly reject for
+        // clarity (the C0 widening + scheme allowlist already block dataloss
+        // paths, so we never want to ignoreCertificateError).
+        onCertificateError: function(error) {
+            console.warn("iframe-plasma[cert] error type=" + error.type
+                + " url=" + error.url + " overridable=" + error.overridable
+                + " desc=" + error.description);
+            tab.lastCertError = true;
+            error.rejectCertificate();
         }
 
         // Defense-in-depth: deny every page-driven permission upgrade. The
