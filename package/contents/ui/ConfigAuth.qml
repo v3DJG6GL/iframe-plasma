@@ -7,6 +7,7 @@ import QtQuick.Controls as QQC
 import QtQuick.Layouts
 import org.kde.kcmutils as KCM
 import org.kde.kirigami as Kirigami
+import "sanitize.js" as Sanitize
 
 KCM.SimpleKCM {
     id: page
@@ -59,17 +60,10 @@ KCM.SimpleKCM {
     // a leading/trailing space or stray zero-width / bidi-control byte makes
     // the comparison silently fail, the "Authentication required" overlay
     // never appears, and the operator types credentials into the real
-    // upstream login page instead of the controlled Authelia flow. Same
-    // RegExp idiom as the toolbar host chip (b92526b): U+2028 (LS) and
-    // U+2029 (PS) are ECMAScript LineTerminators that can't appear inside
-    // a /.../ literal, so build from a String and feed to RegExp().
-    readonly property var _autheliaHostStripRe: new RegExp(
-        "[\\u0000-\\u001F\\u007F-\\u009F"
-      + "\\u061C\\u200B-\\u200F"
-      + "\\u202A-\\u202E\\u2066-\\u2069"
-      + "\\u2028\\u2029\\uFEFF]", "g")
+    // upstream login page instead of the controlled Authelia flow. Shared
+    // strip in sanitize.js covers bidi/format/C0+C1 control code points.
     function sanitizeAutheliaHost(h) {
-        return String(h || "").trim().replace(_autheliaHostStripRe, "");
+        return Sanitize.strip(String(h || "").trim());
     }
 
     // Simple UUID v4 generator (RFC 4122 compliant for our purposes).

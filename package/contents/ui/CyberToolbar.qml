@@ -16,6 +16,7 @@ import QtQuick.Layouts
 import QtQuick.Controls as QQC
 import QtQuick.Effects
 import org.kde.kirigami as Kirigami
+import "sanitize.js" as Sanitize
 
 Rectangle {
     id: tb
@@ -30,27 +31,9 @@ Rectangle {
     // URL parsing, and Qt's text engine then applies the Unicode bidi
     // algorithm to the QQC.Label below, rendering e.g. the bytes
     // "login<U+202E>gnafarg.com" as "login.grafana.com" on screen and
-    // spoofing the operator's primary TLS-trust signal. Strip directional
-    // + invisible formatting code points (and C0/C1/DEL controls that
-    // could move the cursor or break the chip layout) before display.
-    // Real Internet hostnames never need any of these.
-    //   200B..200D ZWSP/ZWNJ/ZWJ          200E..200F LRM/RLM     061C ALM
-    //   202A..202E PDF/LRE/RLE/LRO/RLO    2066..2069 LRI/RLI/FSI/PDI
-    //   2028..2029 LS/PS                  FEFF BOM/ZWNBSP
-    //   0000..001F C0  +  007F DEL  +  0080..009F C1
-    // RegExp built from a string literal: U+2028 (LS) and U+2029 (PS)
-    // are LineTerminators in ECMAScript so they cannot appear inside a
-    // /.../ regex literal -- they have to be \u-escaped in a String
-    // and fed to RegExp().
-    readonly property var _hostStripRe: new RegExp(
-        "[\\u0000-\\u001F\\u007F-\\u009F"   // C0, DEL, C1
-      + "\\u061C\\u200B-\\u200F"              // ALM, ZWSP/ZWNJ/ZWJ, LRM/RLM
-      + "\\u202A-\\u202E\\u2066-\\u2069"    // PDF/LRE/RLE/LRO/RLO, LRI/RLI/FSI/PDI
-      + "\\u2028\\u2029\\uFEFF]", "g")        // LS, PS, BOM/ZWNBSP
-    function sanitizeHost(h) {
-        return String(h || "").replace(tb._hostStripRe, "");
-    }
-    readonly property string hostSafe: sanitizeHost(host)
+    // spoofing the operator's primary TLS-trust signal. Shared strip in
+    // sanitize.js covers bidi/format/C0+C1 control code points.
+    readonly property string hostSafe: Sanitize.strip(host)
     property int    httpStatus: 0       // 0 -> unknown / not yet captured
     property int    latencyMs: 0
     property bool   loading: false
