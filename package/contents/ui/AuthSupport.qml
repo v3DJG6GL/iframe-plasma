@@ -12,7 +12,6 @@ import io.github.v3DJG6GL.iframe 1.0 as IframePlasma
 
 QtObject {
     id: support
-    readonly property bool available: true
 
     // Factory: mint a new BasicAuthInterceptor parented to this QtObject so
     // its lifetime tracks the auth-support context.  Returns null if the C++
