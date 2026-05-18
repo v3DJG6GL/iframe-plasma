@@ -295,11 +295,11 @@ PlasmoidItem {
             console.warn("iframe-plasma[profile] createObject failed for id=" + key);
             return null;
         }
-        // Map mutation alone doesn't notify bindings, so swap-assign through a
-        // temporary to keep _profiles' reference stable for QML's identity check.
-        const next = root._profiles;
-        next[key] = profile;
-        root._profiles = next;
+        // Plain mutation — _profiles/_interceptors are private bookkeeping JS
+        // objects, not reactive QML properties.  Re-assigning the property
+        // would re-fire every `profileForAuthId(...)` binding and trip QML's
+        // binding-loop detector even though the cache hit stabilises it.
+        root._profiles[key] = profile;
         if (key.length === 0) {
             console.info("iframe-plasma[profile] created ephemeral profile");
             return profile;
@@ -307,9 +307,7 @@ PlasmoidItem {
         if (root.authSupport && Plasmoid.configuration.useBasicAuthInjection) {
             const interceptor = root.authSupport.createInterceptor();
             if (interceptor && interceptor.attachTo(profile)) {
-                const ni = root._interceptors;
-                ni[key] = interceptor;
-                root._interceptors = ni;
+                root._interceptors[key] = interceptor;
                 console.info("iframe-plasma[profile] created+attached interceptor for id=" + key);
             } else {
                 console.warn("iframe-plasma[profile] failed to create/attach interceptor for id=" + key);
@@ -341,9 +339,7 @@ PlasmoidItem {
                 if (!interceptor) {
                     interceptor = root.authSupport.createInterceptor();
                     if (!interceptor) continue;
-                    const ni = root._interceptors;
-                    ni[key] = interceptor;
-                    root._interceptors = ni;
+                    root._interceptors[key] = interceptor;
                 }
                 const ok = interceptor.attachTo(profile);
                 console.info("iframe-plasma[sync] attachTo id=" + key + " -> " + ok);
