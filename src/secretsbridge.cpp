@@ -53,7 +53,7 @@ bool SecretsBridge::ensureOpen()
 
 QString SecretsBridge::get(const QString &key)
 {
-    if (!ensureOpen()) {
+    if (key.isEmpty() || !ensureOpen()) {
         return QString();
     }
     QString value;
@@ -65,7 +65,7 @@ QString SecretsBridge::get(const QString &key)
 
 bool SecretsBridge::has(const QString &key)
 {
-    if (!ensureOpen()) {
+    if (key.isEmpty() || !ensureOpen()) {
         return false;
     }
     return m_wallet->hasEntry(key);
@@ -73,7 +73,7 @@ bool SecretsBridge::has(const QString &key)
 
 QVariantMap SecretsBridge::getMap(const QString &key)
 {
-    if (!ensureOpen()) {
+    if (key.isEmpty() || !ensureOpen()) {
         return {};
     }
     QMap<QString, QString> raw;
@@ -89,7 +89,7 @@ QVariantMap SecretsBridge::getMap(const QString &key)
 
 bool SecretsBridge::setMap(const QString &key, const QVariantMap &fields)
 {
-    if (!ensureOpen()) {
+    if (key.isEmpty() || !ensureOpen()) {
         return false;
     }
     QMap<QString, QString> raw;
@@ -101,7 +101,7 @@ bool SecretsBridge::setMap(const QString &key, const QVariantMap &fields)
 
 bool SecretsBridge::removeKey(const QString &key)
 {
-    if (!ensureOpen()) {
+    if (key.isEmpty() || !ensureOpen()) {
         return false;
     }
     return m_wallet->removeEntry(key) == 0;
