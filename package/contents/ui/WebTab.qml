@@ -3,9 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 import QtQuick
-import QtQuick.Layouts
 import QtWebEngine
-import org.kde.kirigami as Kirigami
 
 Item {
     id: tab
