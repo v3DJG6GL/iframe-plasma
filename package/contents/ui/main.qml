@@ -223,8 +223,13 @@ PlasmoidItem {
         offTheRecord: Plasmoid.configuration.privateBrowsing
         persistentCookiesPolicy: WebEngineProfile.ForcePersistentCookies
         persistentStoragePath: root.profileStorageRoot
+        // Strip CR/LF/NUL — parity with the auth-interceptor header guard
+        // (3cedd16). User config is trusted today, but a future config-import
+        // path could deliver a control-byte-bearing UA; Chromium normally
+        // rejects these but defense-in-depth costs nothing.
         httpUserAgent: Plasmoid.configuration.userAgentOverride.length > 0
-            ? Plasmoid.configuration.userAgentOverride : ""
+            ? Plasmoid.configuration.userAgentOverride.replace(/[\r\n\0]/g, "")
+            : ""
     }
 
     // Attach/detach the interceptor whenever the toggle or plugin availability changes.
