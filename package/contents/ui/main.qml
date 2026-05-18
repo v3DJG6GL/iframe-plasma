@@ -677,6 +677,8 @@ PlasmoidItem {
                 settings.javascriptEnabled: true
             settings.showScrollBars: false
             settings.localStorageEnabled: true
+            settings.pluginsEnabled: false
+            settings.javascriptCanPaste: false
             // Defense-in-depth: thumbnail is passive (enabled:false) — no
             // interaction needed, so clamp every capability that could be
             // abused by a hostile page sneaking through a configured URL.
