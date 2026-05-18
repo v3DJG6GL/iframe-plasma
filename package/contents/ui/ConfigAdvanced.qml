@@ -9,25 +9,10 @@ import org.kde.kcmutils as KCM
 import org.kde.kirigami as Kirigami
 
 KCM.SimpleKCM {
-    property alias cfg_privateBrowsing: privateSwitch.checked
     property alias cfg_userAgentOverride: uaField.text
     property alias cfg_remoteDebuggingPort: debugPortBox.value
 
     Kirigami.FormLayout {
-        QQC.CheckBox {
-            id: privateSwitch
-            Kirigami.FormData.label: i18n("Private browsing:")
-            text: i18n("Discard cookies and storage on widget close")
-        }
-        QQC.Label {
-            Layout.fillWidth: true
-            wrapMode: Text.WordWrap
-            color: Kirigami.Theme.disabledTextColor
-            text: i18n("Warning: breaks Authelia session persistence. Use only for one-shot pages.")
-        }
-
-        Item { Kirigami.FormData.isSection: true }
-
         QQC.TextField {
             id: uaField
             Kirigami.FormData.label: i18n("User-Agent override:")

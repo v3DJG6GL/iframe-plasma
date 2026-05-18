@@ -15,7 +15,24 @@ QtObject {
     id: support
     readonly property bool available: true
 
+    // One-per-process interceptor reserved for legacy callers (clearCredentials,
+    // applyProfile, attachInterceptor) and code paths that still want a single
+    // interceptor. The per-profile design in main.qml uses createInterceptor()
+    // to mint a fresh instance per WebEngineProfile so each profile owns an
+    // independent host→Authorization map (no cross-profile header leakage).
     property var interceptor: IframePlasma.BasicAuthInterceptor {}
+
+    // Factory: mint a new BasicAuthInterceptor parented to this QtObject so
+    // its lifetime tracks the auth-support context.  Returns null if the C++
+    // plugin isn't loaded.
+    function createInterceptor() {
+        const comp = Qt.createComponent("io.github.v3DJG6GL.iframe", "BasicAuthInterceptor");
+        if (comp.status !== Component.Ready) {
+            console.warn("iframe-plasma[auth] createInterceptor failed:", comp.errorString());
+            return null;
+        }
+        return comp.createObject(support);
+    }
 
     // Read legacy pre-0.4.0 single-string entries (`basic:<host>`) during the
     // one-shot migration in main.qml. Newer profiles use map entries below.

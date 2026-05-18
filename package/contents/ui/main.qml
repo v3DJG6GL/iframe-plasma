@@ -84,10 +84,11 @@ PlasmoidItem {
         return i18np("1 tab", "%1 tabs (%2 active)", tabs.length, currentTabIndex + 1);
     }
 
-    // Tab URLs are loaded as the primary navigation in a WebEngineView sharing
-    // sharedProfile with all other tabs. Restrict to http(s) so a pasted
-    // `data:`, `file:`, `javascript:`, `blob:` etc. cannot execute in the
-    // shared cookie/storage origin or read local files.
+    // Tab URLs are loaded as the primary navigation in a WebEngineView whose
+    // profile is per-authProfileId (auth=None tabs use the ephemeral profile).
+    // Restrict to http(s) so a pasted `data:`, `file:`, `javascript:`, `blob:`
+    // etc. cannot execute in any profile's cookie/storage origin or read
+    // local files.
     function _isSafeTabUrl(s) {
         if (typeof s !== "string") return false;
         return /^https?:\/\//i.test(s);
@@ -206,8 +207,11 @@ PlasmoidItem {
         });
     }
 
-    // Shared WebEngineProfile — persists cookies/cache across all tabs and survives
-    // plasmashell restarts. Same-origin tabs coalesce into one renderer process.
+    // Per-auth-profile WebEngineProfile — each named authProfileId gets its
+    // own profile (its own cookies/cache/storage), so a tab with auth=None
+    // never inherits another tab's session cookie or Authorization header.
+    // Tabs sharing the same authProfileId share one profile (preserves SSO).
+    // Tabs with authProfileId="" use the in-memory ephemeral profile.
     // Lazily-loaded C++ plugin: KWallet bridge + BasicAuth interceptor.
     // If the build/install hasn't happened yet, this stays null and basic-auth
     // degrades gracefully (Qt's default dialog still prompts the user).
@@ -229,37 +233,91 @@ PlasmoidItem {
         return base + "/iframe-plasma/" + (Plasmoid.id || 0);
     }
 
-    WebEngineProfile {
-        id: sharedProfile
-        storageName: Plasmoid.metaData.pluginId + "-" + (Plasmoid.id || 0)
-        offTheRecord: Plasmoid.configuration.privateBrowsing
-        persistentCookiesPolicy: WebEngineProfile.ForcePersistentCookies
-        persistentStoragePath: root.profileStorageRoot
-        // Defense-in-depth: spellCheckEnabled defaults to false today, but
-        // pinning matches the pdfViewerEnabled / webRTCPublicInterfacesOnly
-        // pattern and prevents any future Qt default-flip from sending words
-        // typed into Grafana template-variable / search inputs (often
-        // hostnames or internal identifiers) to the platform dictionary
-        // service and persisting them in ~/.config/QtWebEngine/Dictionaries.
-        spellCheckEnabled: false
-        // Strip CR/LF/NUL — parity with the auth-interceptor header guard
-        // (3cedd16). User config is trusted today, but a future config-import
-        // path could deliver a control-byte-bearing UA; Chromium normally
-        // rejects these but defense-in-depth costs nothing.
-        httpUserAgent: Plasmoid.configuration.userAgentOverride.length > 0
-            ? Plasmoid.configuration.userAgentOverride.replace(/[\r\n\0]/g, "")
-            : ""
+    // authProfileId -> WebEngineProfile (cached, lifetime = root).
+    // Key "" is the ephemeral off-the-record profile used by all auth=None tabs.
+    property var _profiles: ({})
+    // authProfileId -> BasicAuthInterceptor (per-profile m_headers so the
+    // Authorization header registered for profile "admin" never injects on
+    // requests routed through profile "viewer" or the ephemeral profile).
+    // Ephemeral profile gets no interceptor at all.
+    property var _interceptors: ({})
 
-        // Refuse downloads outright: the widget is a passive dashboard viewer,
-        // never expected to write to disk. Catching at the profile level covers
-        // both webview and miniView in one place. Qt's current default is to
-        // ignore unaccepted requests, but pinning the policy explicit makes it
-        // survive future API-default drift.
-        onDownloadRequested: function(item) {
-            console.warn("iframe-plasma[dl] blocked download url=" + item.url
-                + " mime=" + item.mimeType);
-            item.cancel();
+    // Component template — `authProfileId` is set via createObject() options
+    // before bindings evaluate, so storageName / offTheRecord / paths see the
+    // right value at first construction (WebEngineProfile's persistent fields
+    // are not safely re-settable post-init).
+    Component {
+        id: profileComponent
+        WebEngineProfile {
+            property string profileAuthId: ""
+            readonly property bool ephemeral: profileAuthId.length === 0
+            storageName: ephemeral
+                ? ""
+                : Plasmoid.metaData.pluginId + "-" + (Plasmoid.id || 0) + "-" + profileAuthId
+            offTheRecord: ephemeral
+            persistentCookiesPolicy: ephemeral
+                ? WebEngineProfile.NoPersistentCookies
+                : WebEngineProfile.ForcePersistentCookies
+            persistentStoragePath: ephemeral
+                ? ""
+                : root.profileStorageRoot + "/" + profileAuthId
+            // Defense-in-depth: spellCheckEnabled defaults to false today, but
+            // pinning matches the pdfViewerEnabled / webRTCPublicInterfacesOnly
+            // pattern and prevents any future Qt default-flip from sending
+            // words typed into Grafana template-variable / search inputs
+            // (often hostnames or internal identifiers) to the platform
+            // dictionary service.
+            spellCheckEnabled: false
+            // Strip CR/LF/NUL — parity with the auth-interceptor header guard
+            // (3cedd16). User config is trusted today, but a future config-
+            // import path could deliver a control-byte-bearing UA.
+            httpUserAgent: Plasmoid.configuration.userAgentOverride.length > 0
+                ? Plasmoid.configuration.userAgentOverride.replace(/[\r\n\0]/g, "")
+                : ""
+            // Refuse downloads outright: the widget is a passive dashboard
+            // viewer, never expected to write to disk.
+            onDownloadRequested: function(item) {
+                console.warn("iframe-plasma[dl] blocked download url=" + item.url
+                    + " mime=" + item.mimeType);
+                item.cancel();
+            }
         }
+    }
+
+    // Lazy factory. Returns (and caches) the WebEngineProfile for the given
+    // authProfileId. "" → ephemeral. Creates a per-profile interceptor and
+    // attaches it iff useBasicAuthInjection is enabled.
+    function profileForAuthId(authProfileId) {
+        const key = authProfileId || "";
+        if (root._profiles[key]) return root._profiles[key];
+        const profile = profileComponent.createObject(root, { profileAuthId: key });
+        if (!profile) {
+            console.warn("iframe-plasma[profile] createObject failed for id=" + key);
+            return null;
+        }
+        // Map mutation alone doesn't notify bindings, so swap-assign through a
+        // temporary to keep _profiles' reference stable for QML's identity check.
+        const next = root._profiles;
+        next[key] = profile;
+        root._profiles = next;
+        if (key.length === 0) {
+            console.info("iframe-plasma[profile] created ephemeral profile");
+            return profile;
+        }
+        if (root.authSupport && Plasmoid.configuration.useBasicAuthInjection) {
+            const interceptor = root.authSupport.createInterceptor();
+            if (interceptor && interceptor.attachTo(profile)) {
+                const ni = root._interceptors;
+                ni[key] = interceptor;
+                root._interceptors = ni;
+                console.info("iframe-plasma[profile] created+attached interceptor for id=" + key);
+            } else {
+                console.warn("iframe-plasma[profile] failed to create/attach interceptor for id=" + key);
+            }
+        } else {
+            console.info("iframe-plasma[profile] created named profile id=" + key + " (injection disabled, no interceptor)");
+        }
+        return profile;
     }
 
     // Attach/detach the interceptor whenever the toggle or plugin availability changes.
@@ -273,12 +331,26 @@ PlasmoidItem {
         console.info("iframe-plasma[sync] authSupport=" + (root.authSupport ? "available" : "null")
             + " useBasicAuthInjection=" + enabled);
         if (!root.authSupport) return;
-        if (enabled) {
-            const ok = root.authSupport.attachInterceptor(sharedProfile);
-            console.info("iframe-plasma[sync] attachInterceptor returned " + ok);
-        } else {
-            const ok = root.authSupport.detachInterceptor(sharedProfile);
-            console.info("iframe-plasma[sync] detachInterceptor returned " + ok);
+        // Walk every named profile (the ephemeral profile is intentionally
+        // skipped — auth=None tabs never get an Authorization header).
+        for (const key in root._profiles) {
+            if (key.length === 0) continue;
+            const profile = root._profiles[key];
+            let interceptor = root._interceptors[key];
+            if (enabled) {
+                if (!interceptor) {
+                    interceptor = root.authSupport.createInterceptor();
+                    if (!interceptor) continue;
+                    const ni = root._interceptors;
+                    ni[key] = interceptor;
+                    root._interceptors = ni;
+                }
+                const ok = interceptor.attachTo(profile);
+                console.info("iframe-plasma[sync] attachTo id=" + key + " -> " + ok);
+            } else if (interceptor) {
+                const ok = interceptor.detachFrom(profile);
+                console.info("iframe-plasma[sync] detachFrom id=" + key + " -> " + ok);
+            }
         }
     }
     Connections {
@@ -319,9 +391,16 @@ PlasmoidItem {
             if (!profilesInUse[p.id]) profilesInUse[p.id] = { profile: p, hosts: [] };
             if (!profilesInUse[p.id].hosts.includes(host)) profilesInUse[p.id].hosts.push(host);
         }
-        // Clear ALL registrations (covers profiles whose URLs got reassigned away).
-        root.authSupport.clearCredentials();
-        // Re-apply each in-use profile.
+        // Reset every per-profile interceptor (covers profiles whose URLs got
+        // reassigned away — old host→header entries shouldn't outlive the
+        // reassignment).
+        for (const key in root._interceptors) {
+            root._interceptors[key].clearAll();
+        }
+        // Re-apply each in-use profile via its own interceptor.  Ensures the
+        // profile (and its interceptor) exist even if no WebTab has bound to
+        // it yet — primeAuthProfiles can fire before fullRepresentation has
+        // constructed its Repeater.
         for (const id in profilesInUse) {
             const { profile, hosts } = profilesInUse[id];
             const secrets = root.authSupport.getMap(root.authSupport.profileKey(id)) || {};
@@ -330,7 +409,13 @@ PlasmoidItem {
                 console.info("iframe-plasma[auth] profile " + id + " has no stored secret — skipping");
                 continue;
             }
-            root.authSupport.applyProfile(id, profile.authType || "basic",
+            root.profileForAuthId(id);   // ensure profile + interceptor exist
+            const interceptor = root._interceptors[id];
+            if (!interceptor) {
+                console.info("iframe-plasma[auth] no interceptor for profile id=" + id + " (injection disabled?)");
+                continue;
+            }
+            interceptor.applyProfile(id, profile.authType || "basic",
                 profile.username || "", secret, hosts);
         }
     }
@@ -597,7 +682,9 @@ PlasmoidItem {
     // slot size with no header / legend / footer eating the space. This
     // applies ONLY to the panel-slot view; the popup always shows the full URL.
     //
-    // Shares sharedProfile with the popup so cookies/auth are reused.
+    // Uses the same per-authProfileId profile as the full WebTab, so cookies
+    // and auth are reused for the active/preview tab and Authed dashboards
+    // render correctly in the thumbnail.
     // When compactPreviewEnabled is off (or no tabs are configured) falls back
     // to the widget icon.
     compactRepresentation: Item {
@@ -722,7 +809,7 @@ PlasmoidItem {
             WebEngineView {
                 id: miniView
                 anchors.fill: parent
-                profile: sharedProfile
+                profile: root.profileForAuthId(compact.previewTab ? compact.previewTab.authProfileId : "")
                 url: compact.previewTab ? root.resolveThumbUrl(compact.previewTab) : "about:blank"
 
                 settings.javascriptEnabled: true
@@ -1289,7 +1376,7 @@ PlasmoidItem {
                     required property int index
 
                     tabConfig: modelData
-                    profile: sharedProfile
+                    profile: root.profileForAuthId(modelData.authProfileId)
                     // Authelia host is now per-profile (0.4.0+). Falls back to
                     // the deprecated global setting for unmigrated configs.
                     autheliaHost: {
