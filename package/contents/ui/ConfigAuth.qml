@@ -262,6 +262,12 @@ KCM.SimpleKCM {
                             // visible and falsely signal "captured".
                             enabled: page.kwalletAvailable
                             echoMode: showSecret.checked ? TextInput.Normal : TextInput.Password
+                            // ImhSensitiveData asks IMEs/virtual-keyboards to skip
+                            // predictive-text caching and not surface this input as
+                            // a suggestion in subsequent fields. Pair with
+                            // NoPredictiveText / NoAutoUppercase so even a non-
+                            // compliant IME doesn't leak word boundaries.
+                            inputMethodHints: Qt.ImhSensitiveData | Qt.ImhNoPredictiveText | Qt.ImhNoAutoUppercase
                             placeholderText: card.hasStoredSecret ? i18n("(stored — type to replace)")
                                                                   : i18n("(not set)")
                             onEditingFinished: {
@@ -280,10 +286,12 @@ KCM.SimpleKCM {
                                     text = "";
                                 } else {
                                     // Wallet write failed (locked / unlock
-                                    // denied). Clear so the user isn't
-                                    // misled into thinking the secret was
-                                    // saved.
+                                    // denied). Surface a red "Wallet write
+                                    // failed" pill so the user isn't misled by
+                                    // the cleared field into thinking the
+                                    // secret was saved.
                                     text = "";
+                                    failedHint.show();
                                 }
                             }
                         }
@@ -320,6 +328,38 @@ KCM.SimpleKCM {
                             QQC.Label {
                                 text: i18n("Saved")
                                 color: Kirigami.Theme.positiveTextColor
+                                font.italic: true
+                            }
+                        }
+                        // Mirror of savedHint with a red "Wallet write failed"
+                        // message — surfaces a setMap() == false outcome that
+                        // would otherwise be silent (field clears identically
+                        // on success and failure).
+                        RowLayout {
+                            id: failedHint
+                            opacity: 0
+                            spacing: 2
+                            visible: opacity > 0
+                            Behavior on opacity { NumberAnimation { duration: 250 } }
+                            function show() {
+                                failedFadeTimer.stop();
+                                opacity = 1;
+                                failedFadeTimer.start();
+                            }
+                            Timer {
+                                id: failedFadeTimer
+                                interval: 4000
+                                onTriggered: failedHint.opacity = 0
+                            }
+                            Kirigami.Icon {
+                                source: "dialog-error"
+                                color: Kirigami.Theme.negativeTextColor
+                                implicitWidth:  Kirigami.Units.iconSizes.small
+                                implicitHeight: Kirigami.Units.iconSizes.small
+                            }
+                            QQC.Label {
+                                text: i18n("Wallet write failed")
+                                color: Kirigami.Theme.negativeTextColor
                                 font.italic: true
                             }
                         }
