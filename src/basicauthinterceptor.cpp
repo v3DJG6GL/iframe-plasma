@@ -35,6 +35,20 @@ void BasicAuthInterceptor::applyProfile(const QString &profileId,
                              << "secretLen=" << secret.size();
         return;
     }
+    // For basic auth the username is concatenated with `:` before base64; a `:`
+    // inside `username` would silently re-partition the decoded credential
+    // (e.g. user="u", pass="a:b" → server sees user="u", pass="a:b"). Also
+    // refuse C0 controls/DEL in username — base64 hides them from the
+    // post-encode control-byte check below.
+    if (authType == QLatin1String("basic")) {
+        for (QChar ch : username) {
+            const ushort u = ch.unicode();
+            if (ch == QLatin1Char(':') || (u < 0x20 && u != 0x09) || u == 0x7F) {
+                qCWarning(lcIframeAuth) << "applyProfile: refusing basic username with `:` or control char; id=" << profileId;
+                return;
+            }
+        }
+    }
     // Build the Authorization header value once.
     QByteArray header;
     if (authType == QLatin1String("basic")) {
@@ -89,6 +103,13 @@ void BasicAuthInterceptor::interceptRequest(QWebEngineUrlRequestInfo &info)
     // Runs on Chromium's IO thread. Keep allocation cheap and release the
     // read lock before touching `info` / logging so UI-thread mutations
     // don't stall.
+    // Gate on http(s): operator-registered hosts are intended for HTTP
+    // traffic; never inject the Authorization header onto ws://, wss://,
+    // ftp://, or any future custom scheme that happens to share host().
+    const QString scheme = info.requestUrl().scheme();
+    if (scheme != QLatin1String("https") && scheme != QLatin1String("http")) {
+        return;
+    }
     const QString host = info.requestUrl().host().toLower();
     QByteArray header;
     bool hadAny = false;
