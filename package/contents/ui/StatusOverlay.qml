@@ -23,6 +23,14 @@ Rectangle {
     color: Kirigami.Theme.backgroundColor
     opacity: mode === StatusOverlay.Hidden ? 0 : 0.92
     visible: opacity > 0
+    // Pin above the sibling WebEngineView. StatusOverlay is currently declared
+    // AFTER the WebEngineView in WebTab.qml so declaration-order alone keeps it
+    // on top — but the overlay is the operator's auth-required + error trust
+    // signal, and a future refactor that reorders the siblings (or inserts a
+    // new fullscreen overlay between them) must not be able to silently sink
+    // it behind attacker-painted content. Make z-order a load-bearing,
+    // explicit invariant of this file.
+    z: 1
     Behavior on opacity { NumberAnimation { duration: 150 } }
 
     // Strip Unicode bidi/format/control code points from attacker-influenced
