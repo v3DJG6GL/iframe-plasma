@@ -59,9 +59,17 @@ void BasicAuthInterceptor::applyProfile(const QString &profileId,
     // (or NUL) would smuggle additional HTTP headers into every outbound
     // request. Base64 (basic) cannot produce these bytes; bearer/raw take
     // the secret verbatim, so this check is the gate.
-    if (header.contains('\r') || header.contains('\n') || header.contains('\0')) {
-        qCWarning(lcIframeAuth) << "applyProfile: refusing header with CR/LF/NUL; id=" << profileId;
-        return;
+    //
+    // RFC 7230 §3.2.6 restricts field-value to VCHAR / SP / HTAB / obs-text;
+    // other C0 controls and DEL are not transmissible. Chromium normally
+    // rejects them, but reject here too so a non-conformant downstream
+    // proxy never sees e.g. a vertical-tab as a line terminator.
+    for (char c : std::as_const(header)) {
+        const unsigned char b = static_cast<unsigned char>(c);
+        if ((b < 0x20 && b != '\t') || b == 0x7F) {
+            qCWarning(lcIframeAuth) << "applyProfile: refusing header with control byte; id=" << profileId;
+            return;
+        }
     }
 
     {
