@@ -55,7 +55,14 @@ void BasicAuthInterceptor::applyProfile(const QString &profileId,
         const QByteArray creds = (username + QLatin1Char(':') + secret).toUtf8();
         header = QByteArrayLiteral("Basic ") + creds.toBase64();
     } else if (authType == QLatin1String("bearer")) {
-        header = QByteArrayLiteral("Bearer ") + secret.toUtf8();
+        // Trim surrounding whitespace — RFC 7235 §2.1 token68 forbids whitespace
+        // inside the credential, and an operator pasting a token from clipboard
+        // commonly drags a trailing space along. Fail-closed proxies (oauth2-
+        // proxy in strict mode, some auth-proxy implementations) reject the
+        // request with 401 and the operator sees an unauthenticated dashboard
+        // with no clear failure path — a paste-typo becomes an availability
+        // issue. Parity with the `raw` branch's hygiene.
+        header = QByteArrayLiteral("Bearer ") + secret.trimmed().toUtf8();
     } else if (authType == QLatin1String("raw")) {
         // Strip whitespace and surrounding quotes that users sometimes paste.
         QString cleaned = secret.trimmed();
@@ -89,7 +96,19 @@ void BasicAuthInterceptor::applyProfile(const QString &profileId,
     {
         QWriteLocker locker(&m_headersLock);
         for (const QString &h : hosts) {
-            m_headers.insert(h.toLower(), header);
+            // Trim + skip empty hosts. An empty string here would register
+            // m_headers[""], and QUrl::host() returns an empty string for a
+            // malformed-but-http-schemed URL whose authority is degenerate
+            // (e.g. "http:///path"). The scheme gate in interceptRequest()
+            // wouldn't catch that — it only filters on scheme, not on host
+            // shape — so the empty-key entry would leak the Authorization
+            // header to a request the operator never registered.
+            const QString hLower = h.trimmed().toLower();
+            if (hLower.isEmpty()) {
+                qCWarning(lcIframeAuth) << "applyProfile: skipping empty/whitespace host entry; id=" << profileId;
+                continue;
+            }
+            m_headers.insert(hLower, header);
         }
     }
     qCInfo(lcIframeAuth) << "applyProfile: id=" << profileId
