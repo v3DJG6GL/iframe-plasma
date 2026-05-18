@@ -165,7 +165,23 @@ KCM.SimpleKCM {
                             Layout.fillWidth: true
                             placeholderText: "https://grafana.example.com/d-solo/..."
                             text: url
-                            onEditingFinished: { listModel.setProperty(index, "url", text); store.serialize() }
+                            // Strip CR/LF/NUL on save. The Grafana-helper paste
+                            // path already rejects these (c4886a4), but this
+                            // direct URL field would otherwise persist them
+                            // straight into urlsJson — bypassing the helper's
+                            // check. parseTabs in main.qml only screens the
+                            // scheme prefix (/^https?:\/\//), so a typed/
+                            // pasted URL containing \r\n\0 survives the
+                            // round-trip and reaches WebEngineView navigation.
+                            // Same threat-class as the helper reject + the
+                            // auth-interceptor C0-byte reject + the userAgent
+                            // CR/LF strip.
+                            onEditingFinished: {
+                                const cleaned = String(text).replace(/[\r\n\0]/g, "");
+                                if (cleaned !== text) text = cleaned;
+                                listModel.setProperty(index, "url", cleaned);
+                                store.serialize();
+                            }
                         }
                         // Auth profile selector. Profiles are managed on the
                         // Authentication tab — pick one (or "None") here.
