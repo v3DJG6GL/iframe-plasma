@@ -37,6 +37,17 @@ KCM.SimpleKCM {
         }
     }
 
+    // Heuristic: does this URL look like a Grafana embed? Matches
+    // `/d/<uid>/...` (full dashboard) or `/d-solo/<uid>/...` (single
+    // panel embed) — both are stable since Grafana 8.x and are what the
+    // helper dialog produces or accepts. Used to gate the per-card
+    // "Edit Grafana settings…" button so it doesn't appear on non-
+    // Grafana tabs (e.g., a Home Assistant dashboard URL).
+    function isGrafanaEmbed(u) {
+        if (!u) return false;
+        return /\/d(-solo)?\/[A-Za-z0-9_-]+\//.test(u);
+    }
+
     // Read-only mirror of the Auth tab's profile list. KCM auto-binds
     // any `cfg_*` property to the matching kcfg key bidirectionally, so
     // changes made on the Authentication tab are visible HERE LIVE — no
@@ -232,6 +243,23 @@ KCM.SimpleKCM {
                                     return idx >= 0 ? idx : 0;
                                 }
                             }
+                            // Edit Grafana settings — only shown on cards
+                            // whose URL looks like a Grafana embed (/d/
+                            // or /d-solo/). Opens the helper dialog in
+                            // Edit mode with checkboxes/combos pre-filled
+                            // from the current URL. Hides on non-Grafana
+                            // tabs (e.g., a Home Assistant dashboard) so
+                            // the card UI stays uncluttered there.
+                            QQC.ToolButton {
+                                visible: page.isGrafanaEmbed(url)
+                                text: i18n("Edit Grafana settings…")
+                                icon.name: "configure"
+                                display: QQC.AbstractButton.TextBesideIcon
+                                onClicked: grafanaHelper.openForEdit(index, url, label)
+                                QQC.ToolTip.visible: hovered
+                                QQC.ToolTip.delay: 400
+                                QQC.ToolTip.text: i18n("Edit the Grafana embed parameters (time range, kiosk, theme, auto-refresh, branding, panel menu) on this tab without re-pasting the URL.")
+                            }
                         }
 
                         // Thumbnail mode. Applied ONLY to the panel-slot
@@ -380,13 +408,31 @@ KCM.SimpleKCM {
     // Grafana URL helper — converts /d/ or /goto/ URLs into /d-solo/ + applies
     // common embedding parameters (kiosk, theme, refresh, default time range).
     // Stable across Grafana 10/11/12 per docs at https://grafana.com/blog/
+    //
+    // Two modes (driven by `editingIndex`):
+    //   editingIndex == -1  →  ADD mode (default): paste a URL, OK appends
+    //                          a new tab to listModel.
+    //   editingIndex >=  0  →  EDIT mode: pre-filled from listModel[idx]'s
+    //                          URL. The paste/label/single-panel fields hide
+    //                          (the URL is the card's URL, not pasted). OK
+    //                          strips managed params from the existing URL
+    //                          and reapplies them per the current toggles.
     QQC.Dialog {
         id: grafanaHelper
-        title: i18n("Add from Grafana URL")
+        property int editingIndex: -1
+        property string editingLabel: ""
+        title: editingIndex >= 0
+             ? i18n("Edit Grafana settings: %1", editingLabel || i18n("(no label)"))
+             : i18n("Add from Grafana URL")
         anchors.centerIn: parent
         modal: true
         standardButtons: QQC.Dialog.Cancel | QQC.Dialog.Ok
         width: Math.min(parent.width * 0.9, Kirigami.Units.gridUnit * 42)
+
+        // Reset editingIndex on any close so the next open() starts fresh.
+        // Without this, OK in Edit mode would leave editingIndex set and a
+        // subsequent "From Grafana URL…" click would still be in Edit mode.
+        onClosed: { editingIndex = -1; editingLabel = ""; }
 
         // Time-range presets — see https://grafana.com/docs/grafana/latest/dashboards/time-range-controls/
         readonly property var timeRangePresets: [
@@ -409,19 +455,28 @@ KCM.SimpleKCM {
         contentItem: ColumnLayout {
             spacing: Kirigami.Units.smallSpacing
 
+            // Intro paragraph + URL paste + Label fields + Single-panel
+            // toggle are Add-mode-only. In Edit mode the URL is the
+            // existing card's URL (we don't show it for re-paste; the
+            // user clicked Edit on a known card), and the /d/→/d-solo/
+            // conversion is a one-shot transform we can't reverse, so
+            // we hide its checkbox to avoid implying it can be undone.
             QQC.Label {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
+                visible: grafanaHelper.editingIndex < 0
                 text: i18n("Paste any Grafana URL — either a full dashboard `/d/...` URL (with viewPanel=panel-N) or a `/goto/<id>` short link. The helper applies the embedding parameters you select below.")
             }
             QQC.TextField {
                 id: pastedUrl
                 Layout.fillWidth: true
+                visible: grafanaHelper.editingIndex < 0
                 placeholderText: "https://grafana.example.com/d/abc/dash?…&viewPanel=panel-5"
             }
             QQC.TextField {
                 id: pastedLabel
                 Layout.fillWidth: true
+                visible: grafanaHelper.editingIndex < 0
                 placeholderText: i18n("Label (optional — falls back to panel id)")
             }
 
@@ -431,7 +486,8 @@ KCM.SimpleKCM {
 
                 QQC.CheckBox {
                     id: convertDSolo
-                    Kirigami.FormData.label: i18n("Single panel:")
+                    visible: grafanaHelper.editingIndex < 0
+                    Kirigami.FormData.label: visible ? i18n("Single panel:") : ""
                     text: i18n("Convert /d/ to /d-solo/ (panelId from viewPanel)")
                     checked: true
                 }
@@ -496,7 +552,7 @@ KCM.SimpleKCM {
                 Layout.fillWidth: true
                 Layout.topMargin: Kirigami.Units.smallSpacing
                 type: Kirigami.MessageType.Information
-                visible: pastedUrl.text.indexOf("/goto/") !== -1
+                visible: grafanaHelper.editingIndex < 0 && pastedUrl.text.indexOf("/goto/") !== -1
                 text: i18n("This is a `/goto/<id>` short URL. Kiosk / theme / refresh / time range will be appended, but `/d/` → `/d-solo/` rewrite needs the resolved dashboard URL — paste the `/d/...?...&viewPanel=panel-N` form for full conversion.")
             }
         }
@@ -615,7 +671,118 @@ KCM.SimpleKCM {
             return "";
         }
 
+        // Parse a URL's managed params back into the dialog control state.
+        // Used when opening in Edit mode so the checkboxes/combos reflect
+        // the card's current URL. Anything not matching a managed pattern
+        // is preserved verbatim by stripManagedParams + the re-application
+        // path in onAccepted.
+        function parseSettings(url) {
+            const u = String(url || "");
+            // Time range — match from=now-<X> shape (the form we emit).
+            // Hand-edited URLs with absolute timestamps or now-2h-style
+            // offsets that don't match any preset fall back to "no
+            // override" (combo head row).
+            let tr = "";
+            const fromMatch = u.match(/[?&]from=now-([0-9]+(?:[smhdwMy]))(?:&|$|#)/);
+            if (fromMatch) {
+                const cand = fromMatch[1];
+                for (const p of grafanaHelper.timeRangePresets) {
+                    if (p.val === cand) { tr = cand; break; }
+                }
+            }
+            // Refresh — extract the seconds value if present + ending in 's'
+            // (the form transformUrl emits). Anything else (1m, 30, no
+            // refresh) → toggle off, keep SpinBox at last value.
+            let refreshOn = false;
+            let refreshSec = refreshInterval.value;
+            const refMatch = u.match(/[?&]refresh=([0-9]+)s(?:&|$|#)/);
+            if (refMatch) {
+                refreshOn = true;
+                refreshSec = parseInt(refMatch[1], 10);
+                if (refreshSec < refreshInterval.from) refreshSec = refreshInterval.from;
+                if (refreshSec > refreshInterval.to)   refreshSec = refreshInterval.to;
+            }
+            return {
+                timeRange: tr,
+                kiosk:        /[?&]kiosk(=|&|$|#)/.test(u),
+                // Any `theme=…` value (literal `light`/`dark` or our
+                // ${theme} sentinel) counts as on — saving will normalize
+                // to ${theme}, overwriting hand-edited literals.
+                theme:        /[?&]theme=/.test(u),
+                refreshOn:    refreshOn,
+                refreshSec:   refreshSec,
+                hideLogo:     /[?&]hideLogo=/.test(u),
+                hidePanelMenu:/[?&]_ifp_hidePanelMenu=/.test(u)
+            };
+        }
+
+        // Strip every param the helper manages so onAccepted can cleanly
+        // reapply them per the current toggle state. Anything else
+        // (panelId, orgId, var-*, dashboard-specific flags) is preserved.
+        function stripManagedParams(url) {
+            let u = url;
+            u = stripParam(u, "from");
+            u = stripParam(u, "to");
+            u = stripParam(u, "refresh");
+            u = stripParam(u, "theme");
+            u = stripParam(u, "hideLogo");
+            u = stripParam(u, "_ifp_hidePanelMenu");
+            // `kiosk` is a valueless flag — stripParam targets `key=…`,
+            // so handle the bare-flag form separately (also covering
+            // legacy `kiosk=1` / `kiosk=tv` values just in case).
+            const [base, frag] = splitFragment(u);
+            let b = base
+                .replace(/[?&]kiosk(?==[^&]*)(=[^&]*)?(?=&|$)/g, "")
+                .replace(/[?&]kiosk(?=&|$)/g, "");
+            // Normalize stray `?&` / trailing `?`/`&` from removals.
+            b = b.replace(/\?&/, "?").replace(/&&+/g, "&").replace(/[?&]$/, "");
+            return b + frag;
+        }
+
+        // Open the dialog in Edit mode for an existing tab card.
+        function openForEdit(idx, currentUrl, currentLabel) {
+            const s = parseSettings(currentUrl);
+            // Pre-fill controls from the parsed settings.
+            timeRangeCombo.currentIndex = (function() {
+                if (!s.timeRange) return 0;   // head row "(keep URL's range)"
+                for (let i = 0; i < grafanaHelper.timeRangePresets.length; i++) {
+                    if (grafanaHelper.timeRangePresets[i].val === s.timeRange) return i;
+                }
+                return 0;
+            })();
+            addKiosk.checked         = s.kiosk;
+            addTheme.checked         = s.theme;
+            addRefresh.checked       = s.refreshOn;
+            refreshInterval.value    = s.refreshSec;
+            addHideLogo.checked      = s.hideLogo;
+            addHidePanelMenu.checked = s.hidePanelMenu;
+            // Stash the row index + label, then open. Title binding picks
+            // up editingLabel; onClosed resets both fields.
+            editingLabel = currentLabel || "";
+            editingIndex = idx;
+            open();
+        }
+
         onAccepted: {
+            if (editingIndex >= 0) {
+                // Edit mode: rebuild the URL from the row's current value
+                // (NOT pastedUrl, which is hidden + empty in this path)
+                // by stripping every managed param and reapplying through
+                // transformUrl's append pipeline. The /d/→/d-solo/
+                // conversion step in transformUrl is gated on
+                // convertDSolo.checked, which is hidden+true in Edit
+                // mode — but the conversion is a no-op on a URL that's
+                // already /d-solo/, and a no-op on /d/ URLs without a
+                // viewPanel param (the viewPanel match guards it). So the
+                // existing transformUrl handles both cleanly.
+                const row = listModel.get(editingIndex);
+                const stripped = stripManagedParams(row.url);
+                const out = transformUrl(stripped);
+                if (!out) return;
+                listModel.setProperty(editingIndex, "url", out);
+                store.serialize();
+                return;
+            }
             const out = transformUrl(pastedUrl.text);
             if (!out) return;
             const vpMatch = pastedUrl.text.match(/[?&]viewPanel=panel-(\d+)/);
