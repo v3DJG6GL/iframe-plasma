@@ -93,7 +93,13 @@ KCM.SimpleKCM {
                     name: entry.name || "",
                     authType: entry.authType || "basic",
                     username: entry.username || "",
-                    autheliaHost: entry.autheliaHost || ""
+                    // Sanitise on load too — the on-edit + on-persist sanitisers
+                    // (3224e0e) close the in-session input path, but legacy JSON
+                    // written before 3224e0e (or hand-edited config) carries the
+                    // unsanitised value through `store.serialize()` verbatim and
+                    // would bypass the WebTab overlay-host comparison until the
+                    // user manually re-edits the field.
+                    autheliaHost: sanitizeAutheliaHost(entry.autheliaHost)
                 });
             }
             // Persist synthesized UUIDs immediately — otherwise the next load
