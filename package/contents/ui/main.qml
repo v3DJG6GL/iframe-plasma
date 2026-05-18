@@ -1413,7 +1413,6 @@ PlasmoidItem {
                     required property var modelData
                     required property int index
 
-                    tabConfig: modelData
                     profile: root.profileForAuthId(modelData.authProfileId)
                     // Authelia host is now per-profile (0.4.0+). Falls back to
                     // the deprecated global setting for unmigrated configs.

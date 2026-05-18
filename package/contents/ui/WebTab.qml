@@ -8,7 +8,6 @@ import QtWebEngine
 Item {
     id: tab
 
-    property var tabConfig: ({})
     property WebEngineProfile profile
     property string autheliaHost: ""
     property int zoomPct: 100
