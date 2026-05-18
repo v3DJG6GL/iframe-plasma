@@ -316,6 +316,20 @@ Item {
             }
         }
 
+        // Bounded one-shot reload after a renderer crash. Without a handler
+        // the view just goes blank — both a DoS vector (hostile page crashes
+        // its own renderer to disable the widget) and a forensics gap. Cap at
+        // one retry per session to avoid a crash-loop hammering plasmashell.
+        property bool _renderRetried: false
+        onRenderProcessTerminated: function(status, exitCode) {
+            console.warn("iframe-plasma[render] terminated status=" + status
+                + " exitCode=" + exitCode + " retried=" + _renderRetried);
+            if (status !== WebEngineView.NormalTerminationStatus && !_renderRetried) {
+                _renderRetried = true;
+                webview.reload();
+            }
+        }
+
         onAuthenticationDialogRequested: function(request) {
             console.info("iframe-plasma[auth] dialog requested type=" + request.type
                 + " url=" + request.url + " realm=" + request.realm);

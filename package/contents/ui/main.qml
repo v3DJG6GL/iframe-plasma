@@ -732,6 +732,14 @@ PlasmoidItem {
                 console.warn("iframe-plasma[mini-file] rejected dialog mode=" + request.mode);
                 request.dialogReject();
             }
+            // Log-only on the thumb (no auto-reload): the thumb is a passive
+            // render of an unattended URL. A crash-loop here would keep
+            // hammering Chromium with no UI feedback to the user. Surface the
+            // event to the journal so plasmashell-restart hooks have a trail.
+            onRenderProcessTerminated: function(status, exitCode) {
+                console.warn("iframe-plasma[mini-render] terminated status=" + status
+                    + " exitCode=" + exitCode);
+            }
 
             transform: Scale {
                 origin.x: 0; origin.y: 0
