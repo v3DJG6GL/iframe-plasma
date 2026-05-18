@@ -230,6 +230,17 @@ PlasmoidItem {
         httpUserAgent: Plasmoid.configuration.userAgentOverride.length > 0
             ? Plasmoid.configuration.userAgentOverride.replace(/[\r\n\0]/g, "")
             : ""
+
+        // Refuse downloads outright: the widget is a passive dashboard viewer,
+        // never expected to write to disk. Catching at the profile level covers
+        // both webview and miniView in one place. Qt's current default is to
+        // ignore unaccepted requests, but pinning the policy explicit makes it
+        // survive future API-default drift.
+        onDownloadRequested: function(item) {
+            console.warn("iframe-plasma[dl] blocked download url=" + item.url
+                + " mime=" + item.mimeType);
+            item.cancel();
+        }
     }
 
     // Attach/detach the interceptor whenever the toggle or plugin availability changes.
@@ -693,6 +704,34 @@ PlasmoidItem {
             zoomFactor: 1.0
             enabled: false   // pass clicks through to the MouseArea above
             smooth: true
+
+            // Mirror WebTab.qml policy pins on the thumbnail; `enabled:false`
+            // only suppresses input, not Chromium-side capability defaults, so
+            // the miniView still needs explicit denies in case a configured
+            // URL or downstream redirect triggers any of these requests during
+            // the thumb's render window.
+            onFeaturePermissionRequested: function(securityOrigin, feature) {
+                console.warn("iframe-plasma[mini-perm] denied feature=" + feature
+                    + " origin=" + securityOrigin);
+                miniView.grantFeaturePermission(securityOrigin, feature, false);
+            }
+            onPermissionRequested: function(perm) {
+                console.warn("iframe-plasma[mini-perm] denied permission=" + perm.permissionType
+                    + " origin=" + perm.origin);
+                perm.deny();
+            }
+            onFullScreenRequested: function(request) {
+                console.warn("iframe-plasma[mini-fs] rejected fullScreen request");
+                request.reject();
+            }
+            onRegisterProtocolHandlerRequested: function(request) {
+                console.warn("iframe-plasma[mini-proto] rejected scheme=" + request.scheme);
+                request.reject();
+            }
+            onFileDialogRequested: function(request) {
+                console.warn("iframe-plasma[mini-file] rejected dialog mode=" + request.mode);
+                request.dialogReject();
+            }
 
             transform: Scale {
                 origin.x: 0; origin.y: 0

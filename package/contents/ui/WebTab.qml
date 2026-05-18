@@ -322,6 +322,42 @@ Item {
             tab.basicAuthRequested(request);
         }
 
+        // Defense-in-depth: deny every page-driven permission upgrade. The
+        // widget is a passive dashboard viewer with no UX path to surface a
+        // permission prompt, so a panel that calls getUserMedia / geolocation
+        // / notifications must never silently inherit a future Qt default-
+        // grant. Cover both per-origin (onFeaturePermissionRequested) and
+        // per-frame (onPermissionRequested, Qt 6.8+) shapes.
+        onFeaturePermissionRequested: function(securityOrigin, feature) {
+            console.warn("iframe-plasma[perm] denied feature=" + feature
+                + " origin=" + securityOrigin);
+            webview.grantFeaturePermission(securityOrigin, feature, false);
+        }
+        onPermissionRequested: function(perm) {
+            console.warn("iframe-plasma[perm] denied permission=" + perm.permissionType
+                + " origin=" + perm.origin);
+            perm.deny();
+        }
+        // Fullscreen takeover by a hostile dashboard could mimic the lock
+        // screen / fake an Authelia prompt; reject unconditionally.
+        onFullScreenRequested: function(request) {
+            console.warn("iframe-plasma[fs] rejected fullScreen request toggleOn=" + request.toggleOn);
+            request.reject();
+        }
+        // Reject custom-protocol registration; widget never wants page-driven
+        // mailto/web+xxx hijacking.
+        onRegisterProtocolHandlerRequested: function(request) {
+            console.warn("iframe-plasma[proto] rejected scheme=" + request.scheme
+                + " url=" + request.url);
+            request.reject();
+        }
+        // Reject page-initiated file dialogs — closes the exfiltration vector
+        // from a compromised panel that auto-clicks an <input type=file>.
+        onFileDialogRequested: function(request) {
+            console.warn("iframe-plasma[file] rejected dialog mode=" + request.mode);
+            request.dialogReject();
+        }
+
         // Open user-clicked links externally; iframe sub-resources still load normally.
         // Restrict to web/mail/tel schemes — anything else (e.g. file:, smb:,
         // vnc:, ssh:, custom xdg handlers) could let a compromised page invoke
