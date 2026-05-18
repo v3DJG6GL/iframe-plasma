@@ -769,6 +769,34 @@ PlasmoidItem {
                 console.warn("iframe-plasma[mini-webauth] cancelled state=" + request.state);
                 request.cancel();
             }
+            // Parity with WebTab.qml's tooltipRequested suppression — Qt's
+            // default tooltip is a top-level platform widget that escapes the
+            // miniView's clip rect, so a hostile page can paint arbitrary
+            // text next to the panel slot. The thumb is `enabled:false` so
+            // pointer hover doesn't reach Chromium normally, but the request
+            // can still fire from JS-injected `dispatchEvent` paths or
+            // touch-equivalent inputs depending on Qt build flags.
+            onTooltipRequested: function(request) {
+                request.accepted = true;
+            }
+            onColorDialogRequested: function(request) {
+                console.warn("iframe-plasma[mini-color] rejected color dialog");
+                request.dialogReject();
+            }
+            onDesktopMediaRequested: function(request) {
+                console.warn("iframe-plasma[mini-dispmedia] cancelled screen-capture request");
+                request.cancel();
+            }
+            onFileSystemAccessRequested: function(request) {
+                console.warn("iframe-plasma[mini-fs-access] rejected origin=" + request.origin
+                    + " handleType=" + request.handleType);
+                request.reject();
+            }
+            onQuotaRequested: function(request) {
+                console.warn("iframe-plasma[mini-quota] rejected origin=" + request.origin
+                    + " requestedSize=" + request.requestedSize);
+                request.reject();
+            }
             // Reject every page-driven HTTP-auth dialog on the thumb. Without
             // this, a 401 from a configured or redirect-chain URL pops Qt's
             // system Basic-auth dialog over the panel slot — the thumb is
