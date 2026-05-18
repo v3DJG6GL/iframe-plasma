@@ -41,8 +41,18 @@ Rectangle {
 
     MouseArea {
         anchors.fill: parent
-        // Block clicks from reaching the webview while overlay is visible
+        // Block ALL pointer events from reaching the webview while overlay is
+        // visible. The default acceptedButtons is Qt.LeftButton — right-click
+        // and middle-click would fall through to the page below (middle-click
+        // opens links / pastes selection on X11, right-click hits the
+        // pre-suppressed context-menu path but is still a behavioural channel
+        // to attacker JS via mousedown/auxclick listeners). hoverEnabled +
+        // onWheel: wheel.accepted=true swallows scroll so an Auth-Required
+        // overlay over an autoscroll exploit can't drive the page off-screen.
         enabled: parent.visible
+        acceptedButtons: Qt.AllButtons
+        hoverEnabled: true
+        onWheel: function(wheel) { wheel.accepted = true; }
     }
 
     ColumnLayout {
