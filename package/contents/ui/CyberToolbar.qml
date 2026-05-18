@@ -14,8 +14,6 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as QQC
-import QtQuick.Effects
-import org.kde.kirigami as Kirigami
 import "sanitize.js" as Sanitize
 
 Rectangle {
