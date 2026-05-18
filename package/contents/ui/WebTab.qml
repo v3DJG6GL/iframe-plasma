@@ -203,7 +203,11 @@ Item {
         id: webview
         anchors.fill: parent
         profile: tab.profile
-        url: tab.url
+        // Defense-in-depth: parseTabs already rejects non-http(s) entries
+        // before they reach here, but pin the scheme guard at the binding
+        // so a future caller-path can't smuggle data:/file:/javascript:
+        // into the shared profile.
+        url: /^https?:\/\//i.test(String(tab.url)) ? tab.url : "about:blank"
         zoomFactor: Math.max(0.25, Math.min(5.0, tab.zoomPct / 100.0))
 
         settings.javascriptEnabled: true

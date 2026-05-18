@@ -84,10 +84,19 @@ PlasmoidItem {
         return i18np("1 tab", "%1 tabs (%2 active)", tabs.length, currentTabIndex + 1);
     }
 
+    // Tab URLs are loaded as the primary navigation in a WebEngineView sharing
+    // sharedProfile with all other tabs. Restrict to http(s) so a pasted
+    // `data:`, `file:`, `javascript:`, `blob:` etc. cannot execute in the
+    // shared cookie/storage origin or read local files.
+    function _isSafeTabUrl(s) {
+        if (typeof s !== "string") return false;
+        return /^https?:\/\//i.test(s);
+    }
+
     function parseTabs(jsonStr) {
         try {
             const arr = JSON.parse(jsonStr || "[]");
-            if (Array.isArray(arr)) return arr.filter(t => t && t.url);
+            if (Array.isArray(arr)) return arr.filter(t => t && _isSafeTabUrl(t.url));
         } catch (e) {
             console.warn("iframe-plasma: bad urlsJson:", e.message);
         }
