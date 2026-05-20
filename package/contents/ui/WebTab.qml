@@ -14,6 +14,14 @@ Item {
     property url url
     property int debugPort: 0
 
+    // Lifecycle gating — main.qml sets desiredActive true only for the tab the
+    // user is actually looking at. When false the WebEngineView goes invisible
+    // and WebViewLifecycle freezes (then discards) it, so background tabs and a
+    // collapsed/locked popup stop running Grafana's JS, timers and network.
+    property bool desiredActive: true
+    property int  freezeDelaySec: 30
+    property int  discardDelaySec: 600
+
     // True once the user clicked "Log in here" — suppresses the overlay for
     // subsequent Authelia subpages (TOTP, WebAuthn) until we land off-host.
     property bool loginInProgress: false
@@ -227,6 +235,12 @@ Item {
         // into the shared profile.
         url: /^https?:\/\//i.test(String(tab.url)) ? tab.url : "about:blank"
         zoomFactor: Math.max(0.25, Math.min(5.0, tab.zoomPct / 100.0))
+
+        // QtWebEngine only allows a non-Active lifecycleState on an invisible
+        // view, so visibility must track desiredActive. StackLayout already
+        // hides non-current tabs; this additionally covers the screen-locked
+        // case (popup still mapped behind the locker).
+        visible: tab.desiredActive
 
         settings.javascriptEnabled: true
         settings.localStorageEnabled: true
@@ -551,6 +565,16 @@ Item {
         onReloadClicked: webview.reload()
         onOpenExternalClicked: openExternal()
         onLoginClicked: tab.loginInProgress = true
+    }
+
+    // Freezes/discards `webview` when this tab isn't the one on screen.
+    // No staleness-reload here: a full-rep tab resumes instantly with its
+    // page state intact (Hybrid intent); only Discarded->Active reloads.
+    WebViewLifecycle {
+        target: webview
+        desiredActive: tab.desiredActive
+        freezeDelaySec: tab.freezeDelaySec
+        discardDelaySec: tab.discardDelaySec
     }
 
     // Read responseStatus + duration from the PerformanceNavigationTiming entry.

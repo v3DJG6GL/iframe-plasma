@@ -13,6 +13,12 @@ import io.github.v3DJG6GL.iframe 1.0 as IframePlasma
 QtObject {
     id: support
 
+    // Screen-lock state, bridged from the C++ plugin's D-Bus monitor
+    // (org.freedesktop.ScreenSaver). main.qml uses it to pause web views and
+    // the auto-cycle while the screen is locked. Stays false if the D-Bus
+    // service is unavailable — the rest of the widget is unaffected.
+    readonly property bool screenLocked: IframePlasma.ScreenLockMonitor.locked
+
     // Factory: mint a new BasicAuthInterceptor parented to this QtObject so
     // its lifetime tracks the auth-support context.  Returns null if the C++
     // plugin isn't loaded.

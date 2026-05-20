@@ -22,6 +22,10 @@ Rectangle {
     property var tabs: []
     property int currentIndex: 0
     property var statuses: []
+    // True while the popup is open. The accent-glow animation is infinite, so
+    // without this gate it keeps the QtQuick animation timer ticking even when
+    // the popup is collapsed (the full representation is hidden, not destroyed).
+    property bool popupExpanded: false
     signal tabSelected(int index)
     signal reloadRequested(int index)
 
@@ -139,7 +143,7 @@ Rectangle {
                         brightness: 0.15
                         SequentialAnimation on opacity {
                             loops: Animation.Infinite
-                            running: true
+                            running: bar.popupExpanded
                             NumberAnimation { from: 0.55; to: 0.95; duration: 1200; easing.type: Easing.InOutSine }
                             NumberAnimation { from: 0.95; to: 0.55; duration: 1200; easing.type: Easing.InOutSine }
                         }

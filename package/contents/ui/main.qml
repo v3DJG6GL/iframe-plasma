@@ -4,6 +4,7 @@
  */
 import QtCore
 import QtQuick
+import QtQuick.Window
 import QtQuick.Layouts
 import QtQuick.Controls as QQC
 import QtWebEngine
@@ -236,6 +237,24 @@ PlasmoidItem {
     }
     readonly property var authSupport: authSupportLoader.item
 
+    // --- Observability ------------------------------------------------------
+    // Recurring work (web views, the auto-cycle, the thumbnail poll) must be
+    // gated on whether it is actually being seen — and there are two separate
+    // questions, not one:
+    //   fullRepVisible    — is the popup being looked at?
+    //   compactObservable — is the panel slot itself on screen?
+    // Gating on the wrong one is a bug: pausing the thumbnail on !expanded
+    // would freeze the rotating preview exactly when it should run. See
+    // WebViewLifecycle.qml for how these drive each WebEngineView.
+    readonly property bool screenLocked: root.authSupport
+                                         && root.authSupport.screenLocked === true
+    readonly property bool fullRepVisible: !root.inPanel || root.expanded
+    // Set by the compact representation from its panel window's visibility;
+    // defaults true so an absent window never wrongly pauses the thumbnail.
+    property bool compactWindowVisible: true
+    readonly property bool compactObservable: !root.screenLocked
+                                              && root.compactWindowVisible
+
     readonly property string profileStorageRoot: {
         // StandardPaths.writableLocation returns a QUrl ("file:///…") — strip the
         // scheme so QtWebEngine gets a real filesystem path, not a literal "file:" dir.
@@ -322,6 +341,10 @@ PlasmoidItem {
         // dictionary service.
         profile.spellCheckEnabled = false;
         profile.httpUserAgent = root._sanitisedUserAgent();
+        // Bound the HTTP cache so a widget left running for days can't let it
+        // grow without limit (0 = Qt-auto-managed). 50 MB is ample for the
+        // JS/CSS/font assets a handful of Grafana dashboards reuse.
+        profile.httpCacheMaximumSize = 50 * 1024 * 1024;
         // Refuse downloads outright: the widget is a passive dashboard viewer.
         profile.downloadRequested.connect(root._blockDownload);
         root._profiles[key] = profile;
@@ -616,8 +639,9 @@ PlasmoidItem {
         running: Plasmoid.configuration.autoCycleEnabled
                  && root.tabs.length > 1
                  && !root.expanded
+                 && root.compactObservable
         repeat: true
-        onTriggered: root.setCurrentTab((root.currentTabIndex + 1) % root.tabs.length)
+        onTriggered: root.advanceCycleTab((root.currentTabIndex + 1) % root.tabs.length)
     }
 
     // Cookie clearing per-host needs `profile.cookieStore` which QML doesn't
@@ -660,6 +684,15 @@ PlasmoidItem {
     function setCurrentTab(idx) {
         root.currentTabIndex = idx;
         Plasmoid.configuration.currentTabIndex = idx;
+    }
+
+    // Auto-cycle advances the runtime index only — it must NOT persist.
+    // Routing the cycle through setCurrentTab would rewrite the on-disk
+    // appletsrc every autoCycleIntervalSec for the whole session (a disk
+    // write every 5–30 s, forever). The next *user* tab switch still
+    // persists via setCurrentTab, so session restore keeps working.
+    function advanceCycleTab(idx) {
+        root.currentTabIndex = idx;
     }
 
     // Active WebTab reference. Set from inside fullRepresentation's
@@ -747,6 +780,27 @@ PlasmoidItem {
         readonly property var previewTab: root.tabs.length > 0 ? root.tabs[previewTabIdx] : null
         readonly property bool previewLive: Plasmoid.configuration.compactPreviewEnabled
                                             && previewTab
+
+        // The thumbnail is "active" — live, rendering, polling — when the
+        // panel slot is observable (not screen-locked, panel on screen). It
+        // stays live while the popup is open. When false the miniView is
+        // hidden (so QtWebEngine permits a non-Active lifecycleState) and
+        // frozen, and the icon fallback takes the slot.
+        readonly property bool miniActive: previewLive
+                                           && root.compactObservable
+
+        // The panel window's own visibility — false when the panel's Activity
+        // is not the current one. `Window.window` is null before the slot is
+        // shown; treat that as visible so the thumbnail is never wrongly paused.
+        readonly property bool panelWindowVisible:
+            Window.window ? Window.window.visible : true
+
+        // Feed panel-window visibility up to root.compactObservable.
+        Binding {
+            target: root
+            property: "compactWindowVisible"
+            value: compact.panelWindowVisible
+        }
 
         // Thumbnail mode → CSS selector. Presets target Grafana TimeSeries
         // (uPlot) panels; .u-wrap > canvas is the painted bitmap and is
@@ -836,8 +890,12 @@ PlasmoidItem {
             anchors.top:  parent.top
             anchors.left: parent.left
             z: 0   // below the hover-shield MouseArea so hover doesn't reach Chromium
+            // `active` keeps the WebEngineView instantiated whenever the
+            // preview feature is on, so freeze/thaw is instant; `visible`
+            // narrows to miniActive so the view goes invisible (freezable)
+            // when the slot isn't observed.
             active:  compact.previewLive
-            visible: compact.previewLive
+            visible: compact.miniActive
             sourceComponent: miniViewComp
         }
 
@@ -1250,15 +1308,30 @@ PlasmoidItem {
                 }
             }
 
+            // Freeze the thumbnail (suspends its Grafana JS, the in-page
+            // refresh and the 3 s crop poll) when the slot isn't observed —
+            // screen locked or panel off-screen. stalenessSec is the auto-
+            // cycle interval: a thumbnail frozen longer than one rotation
+            // reloads on resume, so the rotating preview is never stale.
+            WebViewLifecycle {
+                target: miniView
+                desiredActive: compact.miniActive
+                freezeDelaySec: Plasmoid.configuration.webViewFreezeDelaySec
+                discardDelaySec: Plasmoid.configuration.webViewDiscardDelaySec
+                stalenessSec: Math.max(5, Plasmoid.configuration.autoCycleIntervalSec)
+            }
+
             }
         }
 
         // --- Icon fallback --------------------------------------------------
+        // Shows whenever the live thumbnail isn't: feature disabled, no tab,
+        // screen locked, or panel slot off-screen.
         Kirigami.Icon {
             anchors.centerIn: parent
             width: Math.min(parent.width, parent.height) - Kirigami.Units.smallSpacing
             height: width
-            visible: !compact.previewLive
+            visible: !compact.miniActive
             source: Plasmoid.icon || "applications-internet"
             z: 0
         }
@@ -1367,6 +1440,7 @@ PlasmoidItem {
             tabs: root.tabs
             currentIndex: root.currentTabIndex
             statuses: root.tabStatuses
+            popupExpanded: root.expanded
             onTabSelected: idx => root.setCurrentTab(idx)
             onReloadRequested: idx => {
                 const view = webStack.itemAt(idx);
@@ -1423,6 +1497,13 @@ PlasmoidItem {
                     zoomPct: Plasmoid.configuration.zoomFactor
                     url: root.resolveUrl(modelData)
                     debugPort: Plasmoid.configuration.remoteDebuggingPort
+                    // Live only for the tab actually on screen; the rest are
+                    // frozen, then discarded after a long idle.
+                    desiredActive: root.fullRepVisible
+                                   && index === root.currentTabIndex
+                                   && !root.screenLocked
+                    freezeDelaySec: Plasmoid.configuration.webViewFreezeDelaySec
+                    discardDelaySec: Plasmoid.configuration.webViewDiscardDelaySec
                     onBasicAuthRequested: req => root.handleBasicAuth(req, modelData)
                     onAuthRequired: () => root.expanded = true
                     onLoadStatusChanged: root.setTabStatus(index, loadStatus)
