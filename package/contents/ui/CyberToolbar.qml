@@ -14,6 +14,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as QQC
+import org.kde.kirigami as Kirigami
 import "sanitize.js" as Sanitize
 
 Rectangle {
@@ -71,6 +72,9 @@ Rectangle {
         Row {
             spacing: 0
             Layout.alignment: Qt.AlignVCenter
+            // Primary action — pin its width so a cramped toolbar never
+            // shrinks it (RowLayout would otherwise collapse it toward 0).
+            Layout.minimumWidth: implicitWidth
 
             QQC.AbstractButton {
                 id: reloadBtn
@@ -221,8 +225,11 @@ Rectangle {
 
         // --- HTTP status chip ----------------------------------------------
         Rectangle {
-            visible: tb.httpStatus > 0
+            // Informational only — the first chip to drop when the popup is
+            // too narrow to also fit the reload control + both dropdowns.
+            visible: tb.httpStatus > 0 && tb.width >= Kirigami.Units.gridUnit * 22
             Layout.preferredHeight: Theme.chipHeight
+            Layout.minimumWidth: implicitWidth
             Layout.alignment: Qt.AlignVCenter
             implicitWidth: statusLabel.implicitWidth + Theme.chipPadding * 2
             color: Theme.surface
@@ -247,10 +254,19 @@ Rectangle {
 
         // --- Hostname + TLS chip -------------------------------------------
         Rectangle {
+            id: hostChip
             visible: tb.host.length > 0
             Layout.preferredHeight: Theme.chipHeight
             Layout.alignment: Qt.AlignVCenter
-            implicitWidth: hostRow.implicitWidth + Theme.chipPadding * 2
+            // Small floor — keep the TLS glyph + a few host chars legible even
+            // on the narrowest popup; the label below elides to whatever width
+            // RowLayout grants instead of overflowing the chip / the toolbar.
+            Layout.minimumWidth: Kirigami.Units.gridUnit * 3
+            // Derived from the label's *natural* width (implicitWidth), never
+            // its laid-out width — hostLabel.width depends on hostChip.width,
+            // so feeding it back here would form a binding loop.
+            implicitWidth: lockGlyph.implicitWidth + hostRow.spacing
+                           + hostLabel.implicitWidth + Theme.chipPadding * 2
             color: Theme.surface
             border.color: Theme.fgMute
             border.width: 1
@@ -260,13 +276,21 @@ Rectangle {
                 anchors.centerIn: parent
                 spacing: 4
                 QQC.Label {
+                    id: lockGlyph
                     text: tb.tlsOk ? "🔒" : "⚠"
                     font.pixelSize: 9
                     color: tb.tlsOk ? Theme.success : Theme.warning
                 }
                 QQC.Label {
+                    id: hostLabel
                     // hostSafe strips bidi/format/control chars - see top of file.
+                    // Width tracks the chip's granted size so a long hostname
+                    // elides rather than overflowing the chip or the toolbar.
+                    width: Math.min(implicitWidth,
+                                    Math.max(0, hostChip.width - lockGlyph.implicitWidth
+                                                - hostRow.spacing - Theme.chipPadding * 2))
                     text: tb.hostSafe
+                    elide: Text.ElideRight
                     font.family: Theme.fontBody
                     font.pixelSize: 9
                     color: Theme.fg

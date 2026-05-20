@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file. The format
 is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **Tab strip no longer hides tabs past the right edge.** With enough URLs configured the tab strip's `RowLayout` laid the rightmost tabs beyond the popup edge, where they were unreachable without widening the widget. The strip is now a horizontal `ListView` that scrolls (mouse-wheel / drag / flick); the active tab is auto-scrolled into view, and edge-fade gradients hint that there are off-screen tabs. Tab labels now elide instead of stretching a single tab arbitrarily wide.
+- **Toolbar chips no longer overlap on a narrow popup.** The reload control and the time-range / refresh dropdowns now hold their minimum width instead of being squeezed toward zero (which let their centred contents overlap). The hostname elides responsively to the space available, and the HTTP-status chip hides when the popup is too narrow to also fit the controls.
+- **Active-tab accent glow now renders.** Its `MultiEffect` anchored to an item that, from inside the `Component`, was neither parent nor sibling — the anchor silently failed and the effect had zero size.
+
 ## [0.5.0] — 2026-05-20
 
 ### Added

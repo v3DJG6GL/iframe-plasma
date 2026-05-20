@@ -30,6 +30,10 @@ Rectangle {
 
     Layout.preferredHeight: Theme.chipHeight + 2
     Layout.alignment: Qt.AlignVCenter
+    // Never let a cramped toolbar squeeze this interactive chip below its
+    // content — RowLayout would otherwise shrink it toward 0 and the
+    // centered Row would overflow / overlap its neighbours.
+    Layout.minimumWidth: implicitWidth
     implicitWidth: row.implicitWidth + Theme.chipPadding * 2
     color: ma.containsMouse || (menu && menu.opened) ? Theme.surfaceHi : Theme.surface
     border.color: ma.containsMouse || (menu && menu.opened) ? Theme.accent : Theme.fgMute
