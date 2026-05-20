@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file. The format
 is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] — 2026-05-20
+
+### Added
+- **Load-aware WebEngine lifecycle.** Each embedded view is now driven through Chromium's page-lifecycle states: a tab that is not on screen is *frozen* (its JavaScript and Grafana auto-refresh suspended) after a delay, then *discarded* (renderer subprocess shut down, memory reclaimed) after a longer idle. Applies to background tabs, the collapsed popup, and — new — the screen-locked session. Cuts CPU and wakeups to near-zero when the widget is not observed. New `WebViewLifecycle.qml` controller (Qt's official lifecycle-example pattern).
+- **Screen-lock detection.** New C++ `ScreenLockMonitor` bridges `org.freedesktop.ScreenSaver` D-Bus `ActiveChanged` into QML, so web views, the panel thumbnail and the auto-cycle all pause while the screen is locked. Degrades silently if the D-Bus service is unavailable.
+- **Freeze / discard delays** are configurable on the Advanced tab (defaults: freeze after 30 s, discard after 600 s). Set discard very high to freeze-only.
+- **`docs/PERFORMANCE.md`** — system-load guidance, including the `--process-per-site` Chromium flag for collapsing same-host tabs onto one renderer process, and Grafana dashboard tuning.
+
+### Changed
+- The in-panel thumbnail pauses while the screen is locked or its panel slot is off-screen, and reloads — refreshed — on resume, so a rotating preview never resumes showing data older than one auto-cycle interval.
+- HTTP cache is now bounded at 50 MB per profile so a long-running widget can't grow it without limit.
+- The active-tab accent-glow animation no longer runs while the popup is collapsed.
+
+### Fixed
+- **Auto-cycle no longer writes the config file on every rotation.** `cycleTimer` routed through `setCurrentTab`, which persisted `currentTabIndex` to the on-disk `appletsrc` every interval (a disk write every 5–30 s for the whole session). The cycle now advances the runtime index only; the next *user* tab switch still persists.
+
 ## [0.4.2] — 2026-05-17
 
 ### Fixed

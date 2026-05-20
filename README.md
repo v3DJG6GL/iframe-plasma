@@ -36,6 +36,10 @@ support for **Authelia SSO** and **HTTP Basic Auth** behind a reverse proxy.
 - **Refresh toolbar** (0.2): split reload button with menu (soft reload,
   hard reload bypassing cache, clear HTTP cache + reload, open in browser);
   keyboard shortcuts (Ctrl+R / Ctrl+Shift+R / Ctrl+W / Ctrl+Tab / Ctrl+1-9).
+- **Load-aware**: web views freeze (JavaScript and auto-refresh suspended)
+  when their tab isn't on screen, when the popup is collapsed, or when the
+  session is locked — and are discarded after a longer idle to reclaim
+  renderer memory. See [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
 
 ## Requirements
 
@@ -179,9 +183,12 @@ Deleting a profile that's still referenced by URLs warns you and unlinks the URL
 
 ### Advanced tab
 
-Private browsing, User-Agent override, remote DevTools port (for debugging
-embedded pages — set port then run plasmashell with
-`QTWEBENGINE_REMOTE_DEBUGGING=<port> kstart plasmashell`).
+User-Agent override; remote DevTools port (for debugging embedded pages — set
+port then run plasmashell with `QTWEBENGINE_REMOTE_DEBUGGING=<port> kstart
+plasmashell`); and the **freeze / discard delays** that control how soon a tab
+you are not looking at has its JavaScript suspended and, later, its renderer
+process shut down. See [docs/PERFORMANCE.md](docs/PERFORMANCE.md) for tuning
+guidance, including the `--process-per-site` flag for multi-tab setups.
 
 ## Grafana server-side setup
 
