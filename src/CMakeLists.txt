@@ -9,6 +9,7 @@ qt_add_qml_module(iframe_plasma_qml
     SOURCES
         secretsbridge.cpp secretsbridge.h
         basicauthinterceptor.cpp basicauthinterceptor.h
+        screenlockmonitor.cpp screenlockmonitor.h
 )
 
 # Qt's CMake creates the plugin as a MODULE target which omits the "lib" prefix
@@ -17,6 +18,7 @@ qt_add_qml_module(iframe_plasma_qml
 set_target_properties(iframe_plasma_qml PROPERTIES PREFIX "lib")
 
 target_link_libraries(iframe_plasma_qml PRIVATE
+    Qt6::DBus
     Qt6::Quick
     Qt6::WebEngineCore
     Qt6::WebEngineQuick

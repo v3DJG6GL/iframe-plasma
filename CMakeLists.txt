@@ -18,7 +18,7 @@ include(ECMFindQmlModule)
 include(FeatureSummary)
 
 find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS
-    Core Quick Qml WebEngineCore WebEngineQuick)
+    Core DBus Quick Qml WebEngineCore WebEngineQuick)
 
 find_package(KF6 ${KF6_MIN_VERSION} REQUIRED COMPONENTS
     Wallet I18n CoreAddons Package)
