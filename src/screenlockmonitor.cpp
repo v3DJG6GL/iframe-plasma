@@ -5,10 +5,13 @@
 #include "screenlockmonitor.h"
 
 #include <QDBusConnection>
-#include <QDBusInterface>
+#include <QDBusMessage>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QDebug>
+#include <QLoggingCategory>
+
+Q_LOGGING_CATEGORY(lcIframeLock, "iframeplasma.lock")
 
 namespace
 {
@@ -33,17 +36,20 @@ ScreenLockMonitor::ScreenLockMonitor(QObject *parent)
                                        QStringLiteral("ActiveChanged"),
                                        this, SLOT(onActiveChanged(bool)));
     if (!connected) {
-        qWarning() << "iframe-plasma[lock] could not subscribe to "
-                      "ScreenSaver.ActiveChanged; screen-lock pausing disabled";
+        qCWarning(lcIframeLock) << "could not subscribe to "
+            "ScreenSaver.ActiveChanged; screen-lock pausing disabled";
         return;
     }
 
     // Seed the current state asynchronously — never block the QML engine on a
-    // D-Bus round-trip. Best-effort: if it fails, m_locked stays false and the
-    // first ActiveChanged corrects it.
-    QDBusInterface iface(kService, kPath, kInterface, bus);
-    auto *watcher = new QDBusPendingCallWatcher(
-        iface.asyncCall(QStringLiteral("GetActive")), this);
+    // D-Bus round-trip. A hand-built QDBusMessage is used rather than
+    // QDBusInterface because the latter's constructor performs a blocking
+    // introspection round-trip before any async call can be issued.
+    // Best-effort: if it fails, m_locked stays false and the first
+    // ActiveChanged corrects it.
+    const QDBusMessage seed = QDBusMessage::createMethodCall(
+        kService, kPath, kInterface, QStringLiteral("GetActive"));
+    auto *watcher = new QDBusPendingCallWatcher(bus.asyncCall(seed), this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
             [this](QDBusPendingCallWatcher *w) {
                 const QDBusPendingReply<bool> reply = *w;
