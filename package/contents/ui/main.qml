@@ -1276,6 +1276,12 @@ PlasmoidItem {
                     }
                     zoomPct: Plasmoid.configuration.zoomFactor
                     url: root.resolveUrl(modelData)
+                    // Popup-only CSS-selector crop. fullPanel mode (or empty
+                    // selector) → no crop; custom mode passes the user's
+                    // selector to CropEngine isolation in WebTab.qml.
+                    popupSelector: (modelData.popupMode === "custom")
+                                   ? (modelData.popupSelector || "")
+                                   : ""
                     debugPort: Plasmoid.configuration.remoteDebuggingPort
                     // Live only for the tab actually on screen; the rest are
                     // frozen, then discarded after a long idle.

@@ -30,7 +30,9 @@ KCM.SimpleKCM {
                     authProfileId: row.authProfileId || "",
                     thumbMode: row.thumbMode || "chartOnly",
                     thumbSelector: row.thumbSelector || "",
-                    thumbTimeRange: row.thumbTimeRange || ""
+                    thumbTimeRange: row.thumbTimeRange || "",
+                    popupMode: row.popupMode || "fullPanel",
+                    popupSelector: row.popupSelector || ""
                 });
             }
             json = JSON.stringify(arr);
@@ -97,13 +99,20 @@ KCM.SimpleKCM {
                 // rawAuthHeader) are migrated to auth profiles in main.qml at
                 // widget startup. Here on the config page we just read
                 // `authProfileId` which is set after migration.
+                // popupMode legacy migration: a tab with no popupMode but a
+                // popupSelector set is a hand-edited config — treat as custom.
+                let pmode = entry.popupMode || "";
+                const psel = entry.popupSelector || "";
+                if (!pmode) pmode = psel.length > 0 ? "custom" : "fullPanel";
                 listModel.append({
                     label: entry.label || "",
                     url: entry.url || "",
                     authProfileId: entry.authProfileId || "",
                     thumbMode: mode,
                     thumbSelector: sel,
-                    thumbTimeRange: entry.thumbTimeRange || ""
+                    thumbTimeRange: entry.thumbTimeRange || "",
+                    popupMode: pmode,
+                    popupSelector: psel
                 });
             }
         } catch (e) { console.warn("ConfigUrls: parse error", e.message); }
@@ -122,7 +131,7 @@ KCM.SimpleKCM {
                 text: i18n("Add URL")
                 icon.name: "list-add"
                 onClicked: {
-                    listModel.append({ label: "", url: "https://", authProfileId: "", thumbMode: "chartOnly", thumbSelector: "", thumbTimeRange: "" });
+                    listModel.append({ label: "", url: "https://", authProfileId: "", thumbMode: "chartOnly", thumbSelector: "", thumbTimeRange: "", popupMode: "fullPanel", popupSelector: "" });
                     store.serialize();
                     urlList.currentIndex = listModel.count - 1;
                 }
@@ -152,6 +161,8 @@ KCM.SimpleKCM {
                 required property string thumbMode
                 required property string thumbSelector
                 required property string thumbTimeRange
+                required property string popupMode
+                required property string popupSelector
 
                 width: ListView.view.width
 
@@ -272,7 +283,7 @@ KCM.SimpleKCM {
                             Layout.fillWidth: true
                             spacing: Kirigami.Units.smallSpacing
                             QQC.Label {
-                                text: i18n("Thumbnail:")
+                                text: i18n("Thumbnail (panel slot):")
                                 color: Kirigami.Theme.disabledTextColor
                             }
                             QQC.ComboBox {
@@ -372,6 +383,60 @@ KCM.SimpleKCM {
                                 QQC.ToolTip.text: i18n("Override the time range for the panel-slot thumbnail. `Same as widget` keeps the URL's own from/to (popup and thumbnail show the same range). Picking a preset rewrites from=now-<range>&to=now ONLY for the thumbnail's WebEngineView — the popup is unaffected.")
                                 NoWheel {}
                             }
+                        }
+
+                        // Widget (popup) crop. Independent of the thumbnail
+                        // selector — same engine (CropEngine.js generic
+                        // isolation path), different scope. Use for sites
+                        // where the popup should show one panel/card from a
+                        // larger dashboard. Grafana presets are thumbnail-
+                        // only (canvas-pixel-blit doesn't help an
+                        // interactive popup), so the popup combo offers just
+                        // "Full page" vs "Custom CSS selector".
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: Kirigami.Units.smallSpacing
+                            QQC.Label {
+                                text: i18n("Widget (popup):")
+                                color: Kirigami.Theme.disabledTextColor
+                            }
+                            QQC.ComboBox {
+                                id: popupModeCombo
+                                Layout.fillWidth: true
+                                readonly property var presets: [
+                                    { value: "fullPanel", display: i18n("Full page (no crop)") },
+                                    { value: "custom",    display: i18n("Custom CSS selector…") }
+                                ]
+                                model: presets
+                                textRole: "display"
+                                valueRole: "value"
+                                currentIndex: {
+                                    const idx = presets.findIndex(x => x.value === popupMode);
+                                    return idx >= 0 ? idx : 0;
+                                }
+                                onActivated: _ => {
+                                    const v = presets[currentIndex].value;
+                                    listModel.setProperty(index, "popupMode", v);
+                                    store.serialize();
+                                }
+                                QQC.ToolTip.visible: hovered
+                                QQC.ToolTip.delay: 600
+                                QQC.ToolTip.text: i18n(
+                                    "How the full popup view renders the page.\n\n"
+                                  + "  • Full page       — entire URL, unchanged.\n"
+                                  + "  • Custom selector — hide everything except the matched element\n"
+                                  + "                       (e.g. one card from a SaaS dashboard).\n\n"
+                                  + "Survives SPA re-renders and works on any tag, not just Grafana canvases.")
+                                NoWheel {}
+                            }
+                        }
+                        QQC.TextField {
+                            id: customPopupSelector
+                            Layout.fillWidth: true
+                            visible: popupMode === "custom"
+                            placeholderText: i18n("e.g. .mb-8, [data-testid='dashboard'], #main")
+                            text: popupSelector
+                            onEditingFinished: { listModel.setProperty(index, "popupSelector", text); store.serialize() }
                         }
                     }
 

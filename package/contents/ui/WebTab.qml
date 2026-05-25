@@ -4,6 +4,7 @@
  */
 import QtQuick
 import QtWebEngine
+import "./CropEngine.js" as CropEngine
 
 Item {
     id: tab
@@ -13,6 +14,9 @@ Item {
     property int zoomPct: 100
     property url url
     property int debugPort: 0
+    // Per-URL popup selector — `""` means show the full page; non-empty
+    // applies CropEngine isolation on every LoadSucceededStatus.
+    property string popupSelector: ""
 
     // Lifecycle gating — main.qml sets desiredActive true only for the tab the
     // user is actually looking at. When false the WebEngineView goes invisible
@@ -388,6 +392,7 @@ Item {
                     statusOverlay.hide();
                 }
                 tab._captureNavTiming();
+                tab._applyPopupSelector();
             } else if (info.status === WebEngineView.LoadFailedStatus) {
                 console.warn("iframe-plasma[load] FAILED url=" + info.url
                     + " code=" + info.errorCode + " msg=" + info.errorString);
@@ -575,6 +580,31 @@ Item {
         desiredActive: tab.desiredActive
         freezeDelaySec: tab.freezeDelaySec
         discardDelaySec: tab.discardDelaySec
+    }
+
+    // Apply the popup CSS-selector crop (or clear it). Called on each
+    // LoadSucceededStatus and whenever popupSelector changes. Empty
+    // selector → tear down via CropEngine.buildClearJs (restores the
+    // original page without a reload).
+    function _applyPopupSelector() {
+        const sel = String(tab.popupSelector || "");
+        if (sel.length === 0) {
+            webview.runJavaScript(CropEngine.buildClearJs(), function(r) {
+                console.info("iframe-plasma[popup] clear=" + r);
+            });
+            return;
+        }
+        webview.runJavaScript(CropEngine.buildApplyJs(sel), function(r) {
+            console.info("iframe-plasma[popup] applyPopup(" + JSON.stringify(sel) + ") = " + r);
+        });
+    }
+
+    onPopupSelectorChanged: {
+        // Only fire if the view has actually loaded — otherwise the next
+        // LoadSucceededStatus handles it.
+        if (webview && !webview.loading && String(webview.url) !== "about:blank") {
+            _applyPopupSelector();
+        }
     }
 
     // Read responseStatus + duration from the PerformanceNavigationTiming entry.
