@@ -295,6 +295,40 @@ const _CLEAR_BODY = `(function(){
 // CSS-Modules-style `__hash` and Vite-style `_HASH` suffixes that change
 // between builds) → short structural path with nth-of-type fallback.
 const _PICKER_START_BODY = `(function(){
+  // Defensive teardown inline at start — folding the equivalent of
+  // buildClearJs into the same runJavaScript call eliminates the
+  // microtask gap between WebTab's previous two-call sequence
+  // (buildClearJs → buildPickerStartJs). The renderer used to keep
+  // the isolated layout cached between the two callbacks long enough
+  // for elementFromPoint to return descendants of the previously-
+  // isolated card; folding here + a synchronous reflow guarantees
+  // a fresh layout before the picker's first listener fires.
+  if (window.__ifpThumbObserver)     try { window.__ifpThumbObserver.disconnect();     } catch(e) {}
+  if (window.__ifpThumbWrapObserver) try { window.__ifpThumbWrapObserver.disconnect(); } catch(e) {}
+  if (window.__ifpThumbResize)       try { window.__ifpThumbResize.disconnect();       } catch(e) {}
+  if (window.__ifpThumbInterval)     clearInterval(window.__ifpThumbInterval);
+  window.__ifpThumbObserver = null;
+  window.__ifpThumbWrapObserver = null;
+  window.__ifpThumbResize = null;
+  window.__ifpThumbInterval = null;
+  window.__ifpThumbSchedule = null;
+  document.documentElement.removeAttribute('data-ifp-thumb');
+  document.documentElement.removeAttribute('data-ifp-isolate');
+  const _keeps = document.querySelectorAll('[data-ifp-keep="1"]');
+  for (let _i = 0; _i < _keeps.length; _i++) _keeps[_i].removeAttribute('data-ifp-keep');
+  const _targets = document.querySelectorAll('[data-ifp-target="1"]');
+  for (let _j = 0; _j < _targets.length; _j++) _targets[_j].removeAttribute('data-ifp-target');
+  const _st = document.getElementById('ifp-thumb-style');
+  if (_st && _st.parentNode) _st.parentNode.removeChild(_st);
+  const _dispOld = document.getElementById('ifp-thumb-display');
+  if (_dispOld && _dispOld.parentNode) _dispOld.parentNode.removeChild(_dispOld);
+  const _miss = document.getElementById('ifp-miss-banner');
+  if (_miss && _miss.parentNode) _miss.parentNode.removeChild(_miss);
+  // Synchronous layout flush — reading offsetHeight forces Blink to
+  // re-compute layout NOW, before the picker attaches listeners. Without
+  // this, the first elementFromPoint() can return stale-layout hits.
+  void document.documentElement.offsetHeight;
+
   if (window.__ifpPickerActive) return 'already-active';
   window.__ifpPickerActive = true;
   window.__ifpPicked = null;
@@ -397,7 +431,17 @@ const _PICKER_START_BODY = `(function(){
     e.stopPropagation();
     finish(compute(t));
   }
-  function key(e) { if (e.key === 'Escape') { e.preventDefault(); finish(''); } }
+  function key(e) {
+    if (e.key === 'Escape') {
+      // Also stop propagation so Chromium doesn't re-post the unhandled
+      // key event to the host window — without that Plasma's popup-close
+      // shortcut fires before the QML layer can decide whether to swallow.
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      e.stopPropagation();
+      finish('');
+    }
+  }
   function finish(result) {
     window.__ifpPickerActive = false;
     window.__ifpPicked = result || '';

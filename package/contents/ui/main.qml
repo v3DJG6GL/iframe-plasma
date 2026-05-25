@@ -120,6 +120,16 @@ PlasmoidItem {
         return String(tab.url).replace(/\$\{theme\}/g, resolveTheme());
     }
 
+    // Same heuristic as ConfigUrls.qml's isGrafanaEmbed — duplicated
+    // here (rather than singleton-extracted) because the regex is two
+    // lines and pulling KCM-singleton scope into the popup isn't worth
+    // the indirection. Used by the toolbar to gate the Time-range and
+    // Refresh-interval chips, which rewrite Grafana-shaped URL params.
+    function isGrafanaEmbed(u) {
+        if (!u) return false;
+        return /\/d(-solo)?\/[A-Za-z0-9_-]+\//.test(String(u));
+    }
+
     // Live session time-range from the popup's active WebTab — updates when
     // the user picks a different preset in the toolbar's time-range
     // dropdown. Used by resolveThumbUrl when thumbTimeRange === "auto" so
@@ -504,17 +514,20 @@ PlasmoidItem {
     }
 
     // Persist a picked selector into urlsJson at `tabIdx`. `scope` is
-    // "thumb" or "popup". Also flips the corresponding *Mode to "custom"
-    // so the selector field actually engages.
+    // "thumb" | "popup" | "both". Flips the corresponding *Mode(s) to
+    // "custom" so the selector field actually engages. "both" writes
+    // both fields in a single parse/stringify cycle (one config write,
+    // one cascade of onUrlsJsonChanged side effects).
     function savePickedSelector(tabIdx, scope, sel) {
         try {
             const arr = JSON.parse(Plasmoid.configuration.urlsJson || "[]");
             if (!Array.isArray(arr) || tabIdx < 0 || tabIdx >= arr.length) return;
             const entry = arr[tabIdx] || {};
-            if (scope === "thumb") {
+            if (scope === "thumb" || scope === "both") {
                 entry.thumbMode = "custom";
                 entry.thumbSelector = sel;
-            } else {
+            }
+            if (scope === "popup" || scope === "both") {
                 entry.popupMode = "custom";
                 entry.popupSelector = sel;
             }
@@ -1261,6 +1274,15 @@ PlasmoidItem {
                 standardButtons: Kirigami.Dialog.NoButton
                 customFooterActions: [
                     Kirigami.Action {
+                        text: i18n("Save for both")
+                        icon.name: "edit-copy"
+                        onTriggered: {
+                            root.savePickedSelector(savePickedDialog.tabIdx, "both",
+                                                    savePickedDialog.pickedSelector);
+                            savePickedDialog.close();
+                        }
+                    },
+                    Kirigami.Action {
                         text: i18n("Save as Thumbnail")
                         icon.name: "view-preview"
                         onTriggered: {
@@ -1306,7 +1328,20 @@ PlasmoidItem {
                         text: i18n("Thumbnail crops the panel slot only; Widget crops the full popup view.")
                     }
                 }
-                onClosed: destroy()
+                // onClosed handles both Save and Cancel paths:
+                //   - Save: popupSelector property already changed via the
+                //     urlsJson cascade, so _applyPopupSelector re-applies
+                //     with the new value (a no-op if the property hadn't
+                //     yet propagated; harmless either way).
+                //   - Cancel: popupSelector unchanged; _applyPopupSelector
+                //     restores the original isolation that the picker
+                //     teardown had cleared.
+                onClosed: {
+                    destroy();
+                    if (root.activeTab && typeof root.activeTab._applyPopupSelector === "function") {
+                        root.activeTab._applyPopupSelector();
+                    }
+                }
             }
         }
 
@@ -1329,6 +1364,7 @@ PlasmoidItem {
             loading:         root.activeTab ? root.activeTab.loadStatus === "loading" : false
             timeRange:       root.activeTab ? root.activeTab.currentTimeRange       : ""
             refreshInterval: root.activeTab ? root.activeTab.currentRefreshInterval : ""
+            isGrafana:       root.activeTab ? root.isGrafanaEmbed(root.activeTab.webView.url) : false
             onReloadClicked:        root.activeTab?.reload()
             onHardReloadClicked:    root.activeTab?.hardReload()
             onOpenExternalClicked:  root.activeTab?.openExternal()

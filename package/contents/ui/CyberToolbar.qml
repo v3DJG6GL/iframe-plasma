@@ -40,6 +40,11 @@ Rectangle {
     // and refresh interval (e.g. "30s" or ""). Drive the dropdown selection.
     property string timeRange: ""
     property string refreshInterval: ""
+    // True when the active tab's URL looks like a Grafana embed. Gates
+    // the Time-range and Refresh-interval chips — both rewrite
+    // Grafana-shaped URL params (`from=now-X&to=now`, `refresh=`) and
+    // make no sense on plain web pages. Bound from main.qml.
+    property bool isGrafana: false
 
     signal reloadClicked()
     signal hardReloadClicked()
@@ -158,7 +163,7 @@ Rectangle {
         // --- Time-range chip dropdown ---------------------------------------
         CyberChipDropdown {
             id: timeChip
-            visible: tb.host.length > 0
+            visible: tb.isGrafana && tb.host.length > 0
             icon: "⏱"
             value: tb.timeRange
             emptyText: "—"
@@ -197,7 +202,7 @@ Rectangle {
         // --- Refresh-interval chip dropdown ---------------------------------
         CyberChipDropdown {
             id: refreshChip
-            visible: tb.host.length > 0
+            visible: tb.isGrafana && tb.host.length > 0
             icon: "⟳"   // distinct from the reload button's ↻
             iconPixelSize: 10
             iconColor: tb.refreshInterval.length > 0 ? Theme.success : Theme.fgDim
@@ -254,13 +259,19 @@ Rectangle {
                 border.color: Theme.fgMute
                 border.width: 1
                 radius: 2
-                QQC.Label {
+                // Kirigami.Icon auto-centres a Breeze SVG inside its box,
+                // sidestepping the asymmetric sidebearings of the ⌖
+                // glyph (U+2316) in monospaced fonts that left the
+                // previous Label visually offset. `tool_color_picker`
+                // is the standard Breeze action icon for an in-app
+                // element/colour picker — semantically closest to
+                // "click an element to capture its selector".
+                Kirigami.Icon {
                     anchors.centerIn: parent
-                    text: "⌖"
+                    width: 14; height: 14
+                    source: "tool_color_picker"
                     color: Theme.accent
-                    font.family: Theme.fontHeader
-                    font.pixelSize: 13
-                    font.bold: true
+                    isMask: true
                 }
             }
         }

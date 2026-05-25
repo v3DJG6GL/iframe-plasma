@@ -67,23 +67,53 @@ Item {
     function reload() { webview.reload() }
     function hardReload() { webview.triggerWebAction(WebEngineView.ReloadAndBypassCache) }
 
-    // Click-to-pick element selector. Tears down any active CropEngine
-    // isolation FIRST (otherwise data-ifp-isolate hides every sibling
-    // subtree, and document.elementFromPoint inside the picker can only
-    // return descendants of the currently-isolated element — the user
-    // could only "pick" inside the card they already cropped to). After
-    // the picker resolves we re-fire _applyPopupSelector: cancel-path
-    // restores the original isolation, save-path re-applies via the
-    // property-binding chain triggered by savePickedSelector.
+    // Click-to-pick element selector. The picker IIFE itself tears down
+    // any active CropEngine isolation BEFORE attaching listeners (a fold
+    // we did inside _PICKER_START_BODY so the clear+inject runs in a
+    // single synchronous JS turn — splitting them across two
+    // runJavaScript callbacks left a microtask gap where the renderer
+    // kept the old isolated layout cached, and the user could only pick
+    // descendants of the previously-isolated element). Cancel/restore is
+    // handled by:
+    //   - empty result (Esc / Cancel button in page): pickerTimer calls
+    //     _applyPopupSelector() to restore the original selector
+    //   - non-empty result: main.qml shows the save dialog; that dialog's
+    //     onClosed handler calls _applyPopupSelector(), which applies the
+    //     NEW selector after Save (property binding cascade) or restores
+    //     the OLD selector after Cancel.
+    property bool pickerActive: false
     function startPicker() {
-        webview.runJavaScript(CropEngine.buildClearJs(), function(clearResult) {
-            webview.runJavaScript(CropEngine.buildPickerStartJs(), function(r) {
-                console.info("iframe-plasma[picker] start=" + r
-                    + " (cleared=" + JSON.stringify(clearResult) + ")");
-            });
-            pickerTimer.restart();
+        tab.pickerActive = true;
+        webview.runJavaScript(CropEngine.buildPickerStartJs(), function(r) {
+            console.info("iframe-plasma[picker] start=" + r);
         });
+        pickerTimer.restart();
     }
+
+    // Esc cancels the picker locally — without this, Chromium re-posts
+    // the unhandled Escape to the host PlasmaWindow, which collapses
+    // the popup (the user's primary complaint). The page-side keydown
+    // handler in CropEngine already calls preventDefault +
+    // stopImmediatePropagation, which kills the re-post when the page
+    // has focus. This QML Shortcut covers the corner case where focus
+    // momentarily leaves the WebEngineView (e.g. a toolbar button keeps
+    // focus after the picker starts), AND it gives the user the same
+    // affordance from anywhere in the popup.
+    Shortcut {
+        sequence: "Escape"
+        enabled: tab.pickerActive
+        context: Qt.WindowShortcut
+        onActivated: {
+            console.info("iframe-plasma[picker] Esc shortcut → cancel");
+            // Seed __ifpPicked = "" so the next pickerTimer tick sees
+            // a cancel result and runs the cancel-restore path. Using
+            // PickerClearJs (read-and-clear) sets __ifpPicked to null
+            // — we need it to be the empty STRING so the poll fires
+            // exactly once. Same shape as the in-page key handler.
+            webview.runJavaScript("window.__ifpPicked = '';");
+        }
+    }
+
     Timer {
         id: pickerTimer
         interval: 200
@@ -96,6 +126,7 @@ Item {
             if (++ticks > 600) {
                 stop();
                 ticks = 0;
+                tab.pickerActive = false;
                 tab._applyPopupSelector();   // restore isolation on timeout
                 return;
             }
@@ -103,17 +134,19 @@ Item {
                 if (result === undefined || result === null) return;
                 stop();
                 pickerTimer.ticks = 0;
+                tab.pickerActive = false;
                 console.info("iframe-plasma[picker] result=" + JSON.stringify(result));
-                tab.selectorPicked(String(result));
-                // Restore isolation. If the user cancelled (result === ""),
-                // _applyPopupSelector re-applies the existing popupSelector
-                // (or no-op if none). If the user picked, the save-dialog
-                // path triggers a popupSelector property change which fires
-                // _applyPopupSelector again via onPopupSelectorChanged —
-                // calling here is a redundant no-op on the same value, but
-                // covers the case where the user picks then dismisses the
-                // dialog with Cancel (no property change).
-                tab._applyPopupSelector();
+                // Empty result = Esc / Cancel in-page — restore old
+                // isolation immediately. Non-empty = user picked an
+                // element; main.qml will show the save dialog and its
+                // onClosed handler restores isolation (either to the new
+                // selector via property binding after Save, or back to
+                // the old selector after Cancel).
+                if (String(result).length === 0) {
+                    tab._applyPopupSelector();
+                } else {
+                    tab.selectorPicked(String(result));
+                }
             });
         }
     }
