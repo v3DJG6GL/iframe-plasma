@@ -207,6 +207,20 @@ const _APPLY_BODY = `(function(sel){
   const obs = new MutationObserver(schedule);
   obs.observe(document.body, { childList: true, subtree: true });
   window.__ifpThumbObserver = obs;
+  // SPA navigation hook: WebTab.qml installs a MainWorld bridge that
+  // dispatches an \`ifp-navigation\` CustomEvent on history.{push,replace}-
+  // State / popstate / hashchange. Custom DOM events cross worlds, so we
+  // can listen here in the isolated world and re-evaluate the selector
+  // when the React/Vue router changes route without a full reload. The
+  // window.__ifpThumbSchedule indirection lets a re-injected IIFE swap
+  // in a fresh schedule() closure without re-adding the listener.
+  window.__ifpThumbSchedule = schedule;
+  if (!window.__ifpNavListenerAdded) {
+    window.__ifpNavListenerAdded = true;
+    window.addEventListener('ifp-navigation', function(){
+      if (window.__ifpThumbSchedule) window.__ifpThumbSchedule();
+    });
+  }
   // Periodic re-copy: Grafana's \`refresh=30s\` re-renders the canvas
   // pixel buffer via canvas 2D context calls — those do NOT fire any
   // DOM mutation, so the MutationObserver doesn't catch new data.
@@ -229,6 +243,7 @@ const _CLEAR_BODY = `(function(){
     window.__ifpThumbWrapObserver = null;
     window.__ifpThumbResize = null;
     window.__ifpThumbInterval = null;
+    window.__ifpThumbSchedule = null;
     document.documentElement.removeAttribute('data-ifp-thumb');
     document.documentElement.removeAttribute('data-ifp-isolate');
     const keeps = document.querySelectorAll('[data-ifp-keep="1"]');

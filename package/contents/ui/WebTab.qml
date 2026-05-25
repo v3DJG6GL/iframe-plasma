@@ -363,6 +363,37 @@ Item {
                 "  }\n" +
                 "})();";
             webview.userScripts.insert(hp);
+
+            // Bridge MainWorld history navigation into an isolated-world
+            // DOM event so CropEngine's selector re-evaluates on SPA route
+            // changes. CropEngine.js runs in the isolated world (default
+            // for runJavaScript), so a direct history-patch there would
+            // miss page-initiated pushState/replaceState calls (they
+            // happen in MainWorld). Custom DOM events DO cross worlds
+            // (window-attached, not closure-scoped), so we patch MainWorld
+            // here, dispatch `ifp-navigation`, and the IIFE listens for it.
+            // Coexists with the refresh-control history patch above —
+            // wrapping is order-independent (both call origPS/origRS).
+            const nb = WebEngine.script();
+            nb.name = "iframe-plasma-nav-bridge";
+            nb.injectionPoint = WebEngineScript.DocumentCreation;
+            nb.worldId = WebEngineScript.MainWorld;
+            nb.runOnSubFrames = false;
+            nb.sourceCode =
+                "(function(){\n" +
+                "  if (window.__ifpNavBridged) return;\n" +
+                "  window.__ifpNavBridged = true;\n" +
+                "  var origPS = history.pushState.bind(history);\n" +
+                "  var origRS = history.replaceState.bind(history);\n" +
+                "  var fire = function(){\n" +
+                "    try { window.dispatchEvent(new CustomEvent('ifp-navigation')); } catch(e) {}\n" +
+                "  };\n" +
+                "  history.pushState    = function(){ var r = origPS.apply(history, arguments); fire(); return r; };\n" +
+                "  history.replaceState = function(){ var r = origRS.apply(history, arguments); fire(); return r; };\n" +
+                "  window.addEventListener('popstate', fire);\n" +
+                "  window.addEventListener('hashchange', fire);\n" +
+                "})();";
+            webview.userScripts.insert(nb);
         }
 
         onLoadingChanged: function(info) {
