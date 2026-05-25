@@ -577,20 +577,25 @@ PlasmoidItem {
                 root.tabs[tabIdx].popupSelector = entry.popupSelector;
             }
 
-            // Push popup selector imperatively onto the live WebTab —
-            // the declarative `popupSelector: modelData.popupMode
-            // === "custom" ? modelData.popupSelector : ""` binding
-            // can't see a JS-object property mutation, so we set the
-            // property by hand. The Repeater binding re-establishes
-            // automatically on the next structural rebuild.
+            // Apply the new popup selector DIRECTLY via the WebTab's
+            // applyImmediately() function. Previously this assigned to
+            // wt.popupSelector and relied on the onPopupSelectorChanged
+            // handler to fire CropEngine.buildApplyJs — but that handler
+            // had a !webview.loading guard that silently swallowed the
+            // apply during transient sub-resource loads (the user's
+            // "save doesn't change anything, even reload doesn't help"
+            // bug). applyImmediately runs runJavaScript on the live
+            // webview unconditionally; Chromium queues against the
+            // current document and the apply lands either now or on
+            // first paint after load.
             if (scope === "popup" || scope === "both") {
                 const wt = repeater.itemAt(tabIdx);
-                if (wt) {
+                if (wt && typeof wt.applyImmediately === "function") {
                     const newPopupSel = (entry.popupMode === "custom")
                                       ? (entry.popupSelector || "") : "";
-                    if (wt.popupSelector !== newPopupSel) {
-                        wt.popupSelector = newPopupSel;
-                    }
+                    wt.applyImmediately(newPopupSel);
+                } else {
+                    console.warn("iframe-plasma[picker] no live WebTab at idx=" + tabIdx);
                 }
             }
 
@@ -1418,20 +1423,17 @@ PlasmoidItem {
                         text: i18n("Thumbnail crops the panel slot only; Widget crops the full popup view.")
                     }
                 }
-                // onClosed handles both Save and Cancel paths:
-                //   - Save: popupSelector property already changed via the
-                //     urlsJson cascade, so _applyPopupSelector re-applies
-                //     with the new value (a no-op if the property hadn't
-                //     yet propagated; harmless either way).
-                //   - Cancel: popupSelector unchanged; _applyPopupSelector
-                //     restores the original isolation that the picker
-                //     teardown had cleared.
-                onClosed: {
-                    destroy();
-                    if (root.activeTab && typeof root.activeTab._applyPopupSelector === "function") {
-                        root.activeTab._applyPopupSelector();
-                    }
-                }
+                // Save path: savePickedSelector already called
+                // applyImmediately() — no need to re-fire here, doing so
+                // would race the property-binding chain and risk
+                // re-applying the OLD value (the property's declarative
+                // binding may not have re-evaluated yet from the
+                // in-place modelData mutation). Cancel path: pickerTimer
+                // already called _applyPopupSelector on the empty result
+                // restore path before this dialog had a chance to open
+                // (cancel doesn't open the dialog at all). Just clean up
+                // the Dialog instance.
+                onClosed: destroy()
             }
         }
 

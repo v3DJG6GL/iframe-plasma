@@ -100,36 +100,33 @@ Item {
     }
 
     // Cancel an active picker session (toolbar-click toggle / outside-
-    // trigger). Same shape as an in-page Esc: seeds __ifpPicked = ""
-    // so the next pickerTimer tick fires the empty-result restore path
-    // (which calls _applyPopupSelector to re-establish the prior
-    // isolation, and flips pickerActive back to false).
+    // trigger). Calls the in-page `finish('')` so the overlay (outline
+    // + instruction banner) tears down AND the listeners detach AND
+    // __ifpPicked is seeded for the next pickerTimer tick. Previously
+    // we only seeded __ifpPicked, which left the overlay visible until
+    // the user clicked on the page (fires the page-side click handler
+    // which calls finish itself).
     function cancelPicker() {
         if (!tab.pickerActive) return;
-        webview.runJavaScript("window.__ifpPicked = '';");
+        webview.runJavaScript(
+            "if (typeof window.__ifpPickerFinish === 'function') window.__ifpPickerFinish('');");
     }
 
-    // Esc cancels the picker locally — without this, Chromium re-posts
-    // the unhandled Escape to the host PlasmaWindow, which collapses
-    // the popup (the user's primary complaint). The page-side keydown
-    // handler in CropEngine already calls preventDefault +
-    // stopImmediatePropagation, which kills the re-post when the page
-    // has focus. This QML Shortcut covers the corner case where focus
-    // momentarily leaves the WebEngineView (e.g. a toolbar button keeps
-    // focus after the picker starts), AND it gives the user the same
-    // affordance from anywhere in the popup.
+    // Esc cancels the picker. The page-side keydown handler does the
+    // teardown when the WebEngineView has focus (we call
+    // forceActiveFocus on startPicker to ensure that), but focus can
+    // drift back to QML chrome (toolbar dropdown, dialog, etc.) — in
+    // that case this Shortcut catches Esc and calls the same in-page
+    // finish() the keydown handler would have, so the overlay
+    // disappears uniformly regardless of where focus sits.
     Shortcut {
         sequence: "Escape"
         enabled: tab.pickerActive
         context: Qt.WindowShortcut
         onActivated: {
             console.info("iframe-plasma[picker] Esc shortcut → cancel");
-            // Seed __ifpPicked = "" so the next pickerTimer tick sees
-            // a cancel result and runs the cancel-restore path. Using
-            // PickerClearJs (read-and-clear) sets __ifpPicked to null
-            // — we need it to be the empty STRING so the poll fires
-            // exactly once. Same shape as the in-page key handler.
-            webview.runJavaScript("window.__ifpPicked = '';");
+            webview.runJavaScript(
+                "if (typeof window.__ifpPickerFinish === 'function') window.__ifpPickerFinish('');");
         }
     }
 
@@ -723,22 +720,38 @@ Item {
     // selector → tear down via CropEngine.buildClearJs (restores the
     // original page without a reload).
     function _applyPopupSelector() {
-        const sel = String(tab.popupSelector || "");
-        if (sel.length === 0) {
+        applyImmediately(String(tab.popupSelector || ""));
+    }
+
+    // Apply an arbitrary popup selector to this tab's webview without
+    // going through the popupSelector property. Used by the picker
+    // save path in main.qml — bypasses the onPopupSelectorChanged
+    // handler entirely, so the property's binding-vs-imperative race
+    // and the "about:blank" guard can't silently drop the apply.
+    // runJavaScript is safe to queue mid-load; Chromium binds it to
+    // the current document.
+    function applyImmediately(sel) {
+        if (!webview) return;
+        const s = String(sel || "");
+        if (s.length === 0) {
             webview.runJavaScript(CropEngine.buildClearJs(), function(r) {
-                console.info("iframe-plasma[popup] clear=" + r);
+                console.info("iframe-plasma[popup] applyImmediately(clear) = " + r);
             });
             return;
         }
-        webview.runJavaScript(CropEngine.buildApplyJs(sel), function(r) {
-            console.info("iframe-plasma[popup] applyPopup(" + JSON.stringify(sel) + ") = " + r);
+        webview.runJavaScript(CropEngine.buildApplyJs(s), function(r) {
+            console.info("iframe-plasma[popup] applyImmediately(" + JSON.stringify(s) + ") = " + r);
         });
     }
 
     onPopupSelectorChanged: {
-        // Only fire if the view has actually loaded — otherwise the next
-        // LoadSucceededStatus handles it.
-        if (webview && !webview.loading && String(webview.url) !== "about:blank") {
+        // about:blank is the only state where injecting JS is pointless —
+        // a fresh webview without a URL has nothing to attach to. The
+        // previous "webview.loading" guard caused silent skips during
+        // transient sub-resource loads (the picker's teardown can
+        // briefly leave loading=true with no subsequent LoadSucceeded
+        // event to retry from). runJavaScript is safe to queue mid-load.
+        if (webview && String(webview.url) !== "about:blank") {
             _applyPopupSelector();
         }
     }

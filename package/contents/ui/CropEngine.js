@@ -127,6 +127,11 @@ const _APPLY_BODY = `(function(sel){
   // already marked. Strips stale data-ifp-keep from nodes that are no longer
   // ancestors (so SPA route changes that pick a different target self-clean).
   function isolateElement(el) {
+    // Picker-armed guard: when the picker overlay is active, never
+    // re-isolate behind it. Stops orphaned observers, pending rAF
+    // callbacks queued before teardown, and any stray re-application
+    // from cancelling the user's reveal mid-pick.
+    if (window.__ifpPickerArmed) return;
     if (!el || !el.parentNode) return;
     const keep = new Set();
     let node = el;
@@ -152,6 +157,10 @@ const _APPLY_BODY = `(function(sel){
   }
 
   function apply() {
+    // Picker-armed guard: same as isolateElement(). Short-circuits
+    // every code path that could re-set data-ifp-isolate while the
+    // user is mid-pick.
+    if (window.__ifpPickerArmed) return 'picker-active';
     let el;
     try { el = document.querySelector(sel); }
     catch(e) { console.warn('[ifp-thumb] invalid selector "'+sel+'": '+e.message); return 'invalid'; }
@@ -211,9 +220,19 @@ const _APPLY_BODY = `(function(sel){
     if (b && b.parentNode) b.parentNode.removeChild(b);
   }
   function schedule() {
+    // Don't schedule new work while the picker is armed — and cancel
+    // any rAF queued before the picker armed (rAF is not cancelled by
+    // disconnecting the observer that scheduled it, which is exactly
+    // how the user saw "page flashes full then re-isolates").
+    if (window.__ifpPickerArmed) return;
     if (rafId) return;
     rafId = requestAnimationFrame(function(){
       rafId = 0;
+      window.__ifpThumbRaf = 0;
+      // If the picker armed between the rAF being queued and the
+      // callback firing, drop on the floor — early-return below in
+      // apply() would also catch it, but cheaper to bail here.
+      if (window.__ifpPickerArmed) return;
       const r = apply();
       if (r === 'wait') {
         // ~10 consecutive misses. With the 3 s poll alone that's 30 s;
@@ -238,6 +257,10 @@ const _APPLY_BODY = `(function(sel){
         console.info('[ifp-thumb] MATCHED tag=' + el.tagName + (el.className ? '.' + String(el.className).split(' ').slice(0,2).join('.') : ''));
       }
     });
+    // Expose the pending rAF id on window so picker teardown can
+    // cancel it — without this, an rAF queued just before teardown
+    // still fires after and calls apply(), re-isolating the page.
+    window.__ifpThumbRaf = rafId;
   }
   const obs = new MutationObserver(schedule);
   obs.observe(document.body, { childList: true, subtree: true });
@@ -317,10 +340,17 @@ const _PICKER_START_BODY = `(function(){
   if (window.__ifpThumbWrapObserver) try { window.__ifpThumbWrapObserver.disconnect(); } catch(e) {}
   if (window.__ifpThumbResize)       try { window.__ifpThumbResize.disconnect();       } catch(e) {}
   if (window.__ifpThumbInterval)     clearInterval(window.__ifpThumbInterval);
+  // Cancel any pending rAF queued by schedule() before our teardown —
+  // disconnecting the observer that scheduled the rAF does NOT cancel
+  // the already-queued frame. Without this, the queued callback fires
+  // AFTER our teardown, calls apply(), re-sets data-ifp-isolate, and
+  // the user sees the page "flash full then snap back to isolated".
+  if (window.__ifpThumbRaf) { try { cancelAnimationFrame(window.__ifpThumbRaf); } catch(e) {} }
   window.__ifpThumbObserver = null;
   window.__ifpThumbWrapObserver = null;
   window.__ifpThumbResize = null;
   window.__ifpThumbInterval = null;
+  window.__ifpThumbRaf = 0;
   window.__ifpThumbSchedule = null;
   document.documentElement.removeAttribute('data-ifp-thumb');
   document.documentElement.removeAttribute('data-ifp-isolate');
@@ -338,6 +368,12 @@ const _PICKER_START_BODY = `(function(){
   // re-compute layout NOW, before the picker attaches listeners. Without
   // this, the first elementFromPoint() can return stale-layout hits.
   void document.documentElement.offsetHeight;
+
+  // ARM THE PICKER: every code path in _APPLY_BODY (apply,
+  // isolateElement, schedule) early-returns while this is true.
+  // Belt-and-braces against any rAF/observer/timer we might have
+  // missed in the teardown above. finish() flips it back to false.
+  window.__ifpPickerArmed = true;
 
   if (window.__ifpPickerActive) return 'already-active';
   window.__ifpPickerActive = true;
@@ -454,6 +490,8 @@ const _PICKER_START_BODY = `(function(){
   }
   function finish(result) {
     window.__ifpPickerActive = false;
+    window.__ifpPickerArmed = false;   // disarm so post-pick applies can run
+    window.__ifpPickerFinish = null;
     window.__ifpPicked = result || '';
     document.removeEventListener('mousemove', move, true);
     document.removeEventListener('click',     click, true);
@@ -462,6 +500,13 @@ const _PICKER_START_BODY = `(function(){
     if (banner.parentNode)  banner.parentNode.removeChild(banner);
     console.info('[ifp-picker] result=' + JSON.stringify(window.__ifpPicked));
   }
+  // Expose finish() to the QML side so a Shortcut-Esc / toolbar-click
+  // cancel can tear down the overlay completely (remove the outline +
+  // banner, detach the page-side listeners) — seeding __ifpPicked
+  // alone leaves the visible overlay until a page click hits the
+  // in-page handler. main.qml / WebTab.qml call it via
+  // runJavaScript("if(window.__ifpPickerFinish)window.__ifpPickerFinish('');").
+  window.__ifpPickerFinish = finish;
   document.addEventListener('mousemove', move,  true);
   document.addEventListener('click',     click, true);
   document.addEventListener('keydown',   key,   true);
