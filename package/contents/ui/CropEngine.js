@@ -184,11 +184,36 @@ const _APPLY_BODY = `(function(sel){
   if (window.__ifpThumbResize) { try{window.__ifpThumbResize.disconnect();}catch(e){} }
   let rafId = 0;
   let lastEl = null;
+  let missStreak = 0;
+  // Inject a small in-page banner after a sustained miss so the user
+  // knows the selector didn't match (instead of staring at an
+  // unexpectedly-uncropped page). Self-removes when apply() matches.
+  function showMissBanner() {
+    if (document.getElementById('ifp-miss-banner')) return;
+    const b = document.createElement('div');
+    b.id = 'ifp-miss-banner';
+    b.style.cssText = 'position:fixed!important;bottom:8px!important;left:8px!important;background:#1f1f1f!important;color:#fff!important;padding:6px 12px!important;border:1px solid #ff8000!important;border-radius:4px!important;font:12px/1.4 sans-serif!important;z-index:2147483647!important;pointer-events:none!important;max-width:60vw!important;box-shadow:0 2px 6px rgba(0,0,0,0.6)!important;';
+    b.textContent = "iframe-plasma: selector '" + sel + "' not found — showing full page";
+    (document.body || document.documentElement).appendChild(b);
+  }
+  function hideMissBanner() {
+    const b = document.getElementById('ifp-miss-banner');
+    if (b && b.parentNode) b.parentNode.removeChild(b);
+  }
   function schedule() {
     if (rafId) return;
     rafId = requestAnimationFrame(function(){
       rafId = 0;
       const r = apply();
+      if (r === 'wait') {
+        // ~10 consecutive misses. With the 3 s poll alone that's 30 s;
+        // burst MutationObserver fires usually reach the threshold within
+        // a few seconds of an SPA mounting nothing matching.
+        if (++missStreak >= 10) showMissBanner();
+      } else if (r === 'matched') {
+        missStreak = 0;
+        hideMissBanner();
+      }
       const el = document.querySelector(sel);
       if (r === 'matched' && el && el !== lastEl) {
         lastEl = el;
@@ -254,6 +279,8 @@ const _CLEAR_BODY = `(function(){
     if (disp && disp.parentNode) disp.parentNode.removeChild(disp);
     const style = document.getElementById('ifp-thumb-style');
     if (style && style.parentNode) style.parentNode.removeChild(style);
+    const banner = document.getElementById('ifp-miss-banner');
+    if (banner && banner.parentNode) banner.parentNode.removeChild(banner);
     return 'cleared';
   } catch (e) { return 'clear-error: ' + e.message; }
 })()`;
