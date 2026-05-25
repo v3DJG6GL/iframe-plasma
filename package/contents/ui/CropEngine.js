@@ -155,7 +155,17 @@ const _APPLY_BODY = `(function(sel){
     let el;
     try { el = document.querySelector(sel); }
     catch(e) { console.warn('[ifp-thumb] invalid selector "'+sel+'": '+e.message); return 'invalid'; }
-    if (!el) return 'wait';
+    if (!el) {
+      // Fail open: when the new selector can't match yet (SPA hasn't
+      // mounted the target, page mid-route-change), drop the gating
+      // data-ifp-* attributes so the body is fully visible instead
+      // of blanked by the leftover isolation rule from the previous
+      // selector. Observers will re-engage isolation on the next
+      // mutation if/when the target eventually appears.
+      document.documentElement.removeAttribute('data-ifp-isolate');
+      document.documentElement.removeAttribute('data-ifp-thumb');
+      return 'wait';
+    }
     ensureStyle();
     if (el.tagName === 'CANVAS') {
       document.documentElement.setAttribute('data-ifp-thumb','1');

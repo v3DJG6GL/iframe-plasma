@@ -83,11 +83,30 @@ Item {
     //     the OLD selector after Cancel.
     property bool pickerActive: false
     function startPicker() {
+        if (tab.pickerActive) return;       // double-start no-op
         tab.pickerActive = true;
+        // Hand keyboard focus to the WebEngineView so the in-page
+        // keydown handler catches Esc — when focus stays on the QML
+        // toolbar (i.e. on the ⌖ button the user just clicked),
+        // Chromium never sees the key and Plasma's popup-close
+        // shortcut fires uncontested. Page-side preventDefault +
+        // stopImmediatePropagation only work when the page actually
+        // has focus.
+        webview.forceActiveFocus();
         webview.runJavaScript(CropEngine.buildPickerStartJs(), function(r) {
             console.info("iframe-plasma[picker] start=" + r);
         });
         pickerTimer.restart();
+    }
+
+    // Cancel an active picker session (toolbar-click toggle / outside-
+    // trigger). Same shape as an in-page Esc: seeds __ifpPicked = ""
+    // so the next pickerTimer tick fires the empty-result restore path
+    // (which calls _applyPopupSelector to re-establish the prior
+    // isolation, and flips pickerActive back to false).
+    function cancelPicker() {
+        if (!tab.pickerActive) return;
+        webview.runJavaScript("window.__ifpPicked = '';");
     }
 
     // Esc cancels the picker locally — without this, Chromium re-posts

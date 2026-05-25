@@ -42,6 +42,16 @@ PlasmoidItem {
     // Parsed tab list, refreshed whenever config changes
     property var tabs: parseTabs(Plasmoid.configuration.urlsJson)
     property int currentTabIndex: Math.max(0, Math.min(Plasmoid.configuration.currentTabIndex, tabs.length - 1))
+    // One-shot guard: when savePickedSelector writes urlsJson, set
+    // this to true so onUrlsJsonChanged skips the tabs[] reassignment
+    // (which would destroy/recreate every WebTab delegate and force a
+    // from-scratch WebEngineView reload — the "blank greyish page"
+    // the user saw after every picker save). The picker save instead
+    // pushes selector updates directly to the live WebTab and the
+    // compact thumbnail, keeping the WebEngineView's loaded state
+    // intact. The flag self-clears on the first consume so it can't
+    // accidentally swallow a later structural change.
+    property bool _suppressTabsRebuildOnce: false
 
     // Named auth profiles. Re-parsed on config change.
     property var authProfiles: parseAuthProfiles(Plasmoid.configuration.authProfilesJson)
@@ -188,6 +198,16 @@ PlasmoidItem {
     Connections {
         target: Plasmoid.configuration
         function onUrlsJsonChanged() {
+            // Skip the tabs[] reassignment (and the cascade of Repeater
+            // delegate destroy/recreate that comes with it) when the
+            // change came from savePickedSelector — that path pushed
+            // the selector updates to live WebTabs directly. Without
+            // this guard every picker save would blank the popup.
+            if (root._suppressTabsRebuildOnce) {
+                root._suppressTabsRebuildOnce = false;
+                console.info("iframe-plasma[urls] selector-only update; tabs[] rebuild skipped");
+                return;
+            }
             root.tabs = root.parseTabs(Plasmoid.configuration.urlsJson);
             if (root.currentTabIndex >= root.tabs.length) {
                 root.setCurrentTab(Math.max(0, root.tabs.length - 1));
@@ -400,6 +420,12 @@ PlasmoidItem {
     signal reloadAllRequested()
     function reloadAll() { reloadAllRequested() }
 
+    // Fired by savePickedSelector when a thumb-scope save happened —
+    // the compact rep listens and reloads its mini-view if the saved
+    // tab is the currently-previewed one. Cleaner than reaching the
+    // private `miniLoader` id from outside the compact's QML scope.
+    signal _thumbSelectorSaved(int tabIdx)
+
     function syncInterceptor() {
         const enabled = Plasmoid.configuration.useBasicAuthInjection;
         console.info("iframe-plasma[sync] authSupport=" + (root.authSupport ? "available" : "null")
@@ -516,8 +542,16 @@ PlasmoidItem {
     // Persist a picked selector into urlsJson at `tabIdx`. `scope` is
     // "thumb" | "popup" | "both". Flips the corresponding *Mode(s) to
     // "custom" so the selector field actually engages. "both" writes
-    // both fields in a single parse/stringify cycle (one config write,
-    // one cascade of onUrlsJsonChanged side effects).
+    // both fields in a single parse/stringify cycle.
+    //
+    // CRITICAL: the prior implementation just wrote urlsJson and let
+    // the Connections.onUrlsJsonChanged cascade reassign root.tabs,
+    // which destroyed the Repeater delegates and forced every
+    // WebEngineView to reload from scratch (the "blank greyish page"
+    // bug). This version mutates the live tabs[] entry in place,
+    // pushes selector updates directly to the live WebTab + compact
+    // thumbnail, and sets the _suppressTabsRebuildOnce guard so the
+    // urlsJson write triggers persistence WITHOUT a rebuild.
     function savePickedSelector(tabIdx, scope, sel) {
         try {
             const arr = JSON.parse(Plasmoid.configuration.urlsJson || "[]");
@@ -532,6 +566,47 @@ PlasmoidItem {
                 entry.popupSelector = sel;
             }
             arr[tabIdx] = entry;
+
+            // Mutate the live tabs[] entry in place so any binding
+            // that re-reads modelData fields sees the new values
+            // without the Repeater being rebuilt.
+            if (root.tabs[tabIdx]) {
+                root.tabs[tabIdx].thumbMode    = entry.thumbMode;
+                root.tabs[tabIdx].thumbSelector = entry.thumbSelector;
+                root.tabs[tabIdx].popupMode    = entry.popupMode;
+                root.tabs[tabIdx].popupSelector = entry.popupSelector;
+            }
+
+            // Push popup selector imperatively onto the live WebTab —
+            // the declarative `popupSelector: modelData.popupMode
+            // === "custom" ? modelData.popupSelector : ""` binding
+            // can't see a JS-object property mutation, so we set the
+            // property by hand. The Repeater binding re-establishes
+            // automatically on the next structural rebuild.
+            if (scope === "popup" || scope === "both") {
+                const wt = repeater.itemAt(tabIdx);
+                if (wt) {
+                    const newPopupSel = (entry.popupMode === "custom")
+                                      ? (entry.popupSelector || "") : "";
+                    if (wt.popupSelector !== newPopupSel) {
+                        wt.popupSelector = newPopupSel;
+                    }
+                }
+            }
+
+            // Notify the thumbnail (if currently showing this tab) so
+            // it reloads with the new selector. The compact rep is
+            // lazy and lives in a separate QML scope; a root-level
+            // signal is cleaner than trying to reach `miniLoader`
+            // through `compactRepresentationItem`.
+            if (scope === "thumb" || scope === "both") {
+                root._thumbSelectorSaved(tabIdx);
+            }
+
+            // Persist to urlsJson — guarded so onUrlsJsonChanged
+            // skips the tabs[] reassignment that would have rebuilt
+            // the Repeater (blanking every WebEngineView).
+            root._suppressTabsRebuildOnce = true;
             Plasmoid.configuration.urlsJson = JSON.stringify(arr);
             console.info("iframe-plasma[picker] saved scope=" + scope
                 + " sel=" + JSON.stringify(sel) + " idx=" + tabIdx);
@@ -887,6 +962,21 @@ PlasmoidItem {
                 + " → selector=" + JSON.stringify(thumbSelector)
                 + "; reloading miniView");
             if (miniLoader.item) miniLoader.item.reload();
+        }
+
+        // Direct trigger from savePickedSelector when the picker save
+        // touched a thumb-scope selector. The compact's thumbSelector
+        // binding can't see a JS-object property mutation, so the
+        // onThumbSelectorChanged handler above won't fire — this
+        // signal route forces the same reload explicitly.
+        Connections {
+            target: root
+            function on_ThumbSelectorSaved(tabIdx) {
+                if (tabIdx === compact.previewTabIdx && miniLoader.item) {
+                    console.info("iframe-plasma[compact] thumb-save reload idx=" + tabIdx);
+                    miniLoader.item.reload();
+                }
+            }
         }
 
         // Panel-slot sizing. The canonical Plasma 6 rule (mirroring
@@ -1371,7 +1461,14 @@ PlasmoidItem {
             onClearCookiesClicked:  root.clearCacheAndReload()
             onSelectTimeRange:        range    => root.activeTab?.setTimeRange(range)
             onSelectRefreshInterval:  interval => root.activeTab?.setRefreshInterval(interval)
-            onPickElementClicked:     root.activeTab?.startPicker()
+            // Toggle: if the active tab's picker is already running,
+            // cancel it (same shape as in-page Esc); otherwise start.
+            onPickElementClicked: {
+                const t = root.activeTab;
+                if (!t) return;
+                if (t.pickerActive) t.cancelPicker();
+                else                t.startPicker();
+            }
         }
 
         CyberTabBar {
