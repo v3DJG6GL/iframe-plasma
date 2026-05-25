@@ -258,10 +258,154 @@ const _CLEAR_BODY = `(function(){
   } catch (e) { return 'clear-error: ' + e.message; }
 })()`;
 
+// Element picker. Highlights hovered elements with an outline and a small
+// instruction banner, then on click computes a robust CSS selector and
+// stashes it on `window.__ifpPicked`. QML polls that property via
+// buildPickerPollJs(). Esc cancels (sets __ifpPicked = "").
+//
+// Selector preference: unique #id → unique [data-testid|data-test|data-cy|
+// data-qa] → unique [aria-label] → unique stable class chain (filters out
+// CSS-Modules-style `__hash` and Vite-style `_HASH` suffixes that change
+// between builds) → short structural path with nth-of-type fallback.
+const _PICKER_START_BODY = `(function(){
+  if (window.__ifpPickerActive) return 'already-active';
+  window.__ifpPickerActive = true;
+  window.__ifpPicked = null;
+
+  const outline = document.createElement('div');
+  outline.id = '__ifpPickerOutline';
+  outline.style.cssText = 'position:fixed!important;pointer-events:none!important;z-index:2147483647!important;background:rgba(255,128,0,0.20)!important;outline:2px solid #ff8000!important;outline-offset:-2px!important;box-shadow:0 0 0 1px rgba(0,0,0,0.6)!important;transition:none!important;';
+  document.documentElement.appendChild(outline);
+
+  const banner = document.createElement('div');
+  banner.id = '__ifpPickerBanner';
+  banner.style.cssText = 'position:fixed!important;top:8px!important;left:50%!important;transform:translateX(-50%)!important;background:#1f1f1f!important;color:#fff!important;padding:6px 14px!important;border:1px solid #ff8000!important;border-radius:4px!important;font:13px/1.4 sans-serif!important;z-index:2147483647!important;pointer-events:none!important;box-shadow:0 2px 8px rgba(0,0,0,0.6)!important;';
+  banner.textContent = 'iframe-plasma: pick an element — Esc to cancel';
+  document.documentElement.appendChild(banner);
+
+  function cssEscape(s) {
+    // Chromium (Qt WebEngine) always exposes CSS.escape; the fallback is
+    // belt-and-braces for older WebEngine builds. Escapes the same set as
+    // the CSS Object Model spec — anything not [A-Za-z0-9_-].
+    if (window.CSS && CSS.escape) return CSS.escape(s);
+    return String(s).replace(/[^a-zA-Z0-9_-]/g, function(c){ return '\\\\' + c; });
+  }
+  // True for tokens that look like CSS-Modules / Vite / styled-components
+  // hash suffixes — we exclude them from the class-chain selector because
+  // they change on every build.
+  function looksHashed(c) {
+    if (!/^[a-zA-Z][\\w-]*$/.test(c)) return true;
+    if (/__[a-z0-9]{4,}$/i.test(c)) return true;        // CSS Modules: Foo__abc123
+    if (/_[A-Z0-9]{4,}$/.test(c))   return true;        // Vite: foo_ABC12
+    if (/^css-[a-z0-9]{4,}$/i.test(c)) return true;     // emotion: css-abc123
+    if (/^sc-[a-zA-Z0-9]{6,}$/.test(c)) return true;    // styled-components: sc-aBcDeF
+    return false;
+  }
+  function structural(el) {
+    const parts = [];
+    let cur = el, depth = 0;
+    while (cur && cur.tagName && cur !== document.body && depth < 4) {
+      if (cur.id) { parts.unshift('#' + cssEscape(cur.id)); break; }
+      let part = cur.tagName.toLowerCase();
+      const sibs = cur.parentElement
+        ? Array.from(cur.parentElement.children).filter(c => c.tagName === cur.tagName)
+        : [];
+      if (sibs.length > 1) part += ':nth-of-type(' + (sibs.indexOf(cur) + 1) + ')';
+      parts.unshift(part);
+      cur = cur.parentElement;
+      depth++;
+    }
+    return parts.join(' > ');
+  }
+  function compute(el) {
+    if (!el || !el.tagName) return '';
+    if (el.id) {
+      const sel = '#' + cssEscape(el.id);
+      try { if (document.querySelectorAll(sel).length === 1) return sel; } catch(e) {}
+    }
+    const attrs = ['data-testid','data-test','data-cy','data-qa'];
+    for (let i = 0; i < attrs.length; i++) {
+      const v = el.getAttribute(attrs[i]);
+      if (v) {
+        const sel = '[' + attrs[i] + '="' + v.replace(/"/g, '\\\\"') + '"]';
+        try { if (document.querySelectorAll(sel).length === 1) return sel; } catch(e) {}
+      }
+    }
+    const aria = el.getAttribute('aria-label');
+    if (aria) {
+      const sel = '[aria-label="' + aria.replace(/"/g, '\\\\"') + '"]';
+      try { if (document.querySelectorAll(sel).length === 1) return sel; } catch(e) {}
+    }
+    if (el.classList && el.classList.length > 0) {
+      const stable = Array.from(el.classList).filter(c => !looksHashed(c));
+      if (stable.length > 0) {
+        const sel = '.' + stable.map(cssEscape).join('.');
+        try { if (document.querySelectorAll(sel).length === 1) return sel; } catch(e) {}
+      }
+    }
+    return structural(el);
+  }
+
+  let lastHover = null;
+  function move(e) {
+    // Hide the outline so elementFromPoint returns the underlying element,
+    // not the outline itself.
+    outline.style.display = 'none';
+    const t = document.elementFromPoint(e.clientX, e.clientY);
+    outline.style.display = 'block';
+    if (!t || t === outline || t === banner) return;
+    if (t === lastHover) return;
+    lastHover = t;
+    const r = t.getBoundingClientRect();
+    outline.style.left   = r.left   + 'px';
+    outline.style.top    = r.top    + 'px';
+    outline.style.width  = Math.max(2, r.width)  + 'px';
+    outline.style.height = Math.max(2, r.height) + 'px';
+  }
+  function click(e) {
+    outline.style.display = 'none';
+    const t = document.elementFromPoint(e.clientX, e.clientY) || lastHover;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    e.stopPropagation();
+    finish(compute(t));
+  }
+  function key(e) { if (e.key === 'Escape') { e.preventDefault(); finish(''); } }
+  function finish(result) {
+    window.__ifpPickerActive = false;
+    window.__ifpPicked = result || '';
+    document.removeEventListener('mousemove', move, true);
+    document.removeEventListener('click',     click, true);
+    document.removeEventListener('keydown',   key,   true);
+    if (outline.parentNode) outline.parentNode.removeChild(outline);
+    if (banner.parentNode)  banner.parentNode.removeChild(banner);
+    console.info('[ifp-picker] result=' + JSON.stringify(window.__ifpPicked));
+  }
+  document.addEventListener('mousemove', move,  true);
+  document.addEventListener('click',     click, true);
+  document.addEventListener('keydown',   key,   true);
+  return 'started';
+})()`;
+
+const _PICKER_POLL_BODY = "(window.__ifpPicked === undefined ? null : window.__ifpPicked)";
+const _PICKER_CLEAR_BODY = "(function(){ const v = window.__ifpPicked; window.__ifpPicked = null; return v; })()";
+
 function buildApplyJs(selector) {
     return _APPLY_BODY + "(" + JSON.stringify(selector) + ")";
 }
 
 function buildClearJs() {
     return _CLEAR_BODY;
+}
+
+function buildPickerStartJs() {
+    return _PICKER_START_BODY;
+}
+
+function buildPickerPollJs() {
+    return _PICKER_POLL_BODY;
+}
+
+function buildPickerClearJs() {
+    return _PICKER_CLEAR_BODY;
 }

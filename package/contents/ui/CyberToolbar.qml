@@ -49,6 +49,9 @@ Rectangle {
     // routes these to the active tab's setTimeRange / setRefreshInterval.
     signal selectTimeRange(string range)        // "24h" / "" / "custom"
     signal selectRefreshInterval(string interval)  // "30s" / "off"
+    // Activate the click-to-pick element overlay in the live view —
+    // main.qml routes this to the active tab's startPicker().
+    signal pickElementClicked()
 
     implicitHeight: Theme.toolbarHeight
     color: Theme.bg
@@ -221,6 +224,39 @@ Rectangle {
                 { val: "30m", label: i18n("Every 30 minutes")  }
             ]
             onValueSelected: (v) => tb.selectRefreshInterval(v)
+        }
+
+        // --- Pick-element button --------------------------------------------
+        // Activates the in-page click-to-pick overlay so the user can
+        // visually select an element instead of authoring a CSS selector
+        // by hand. Result is sent back via the active tab's
+        // selectorPicked signal — main.qml prompts for scope (thumbnail
+        // vs widget) and writes to the URL config.
+        QQC.AbstractButton {
+            id: pickBtn
+            Layout.preferredWidth: Theme.chipHeight
+            Layout.preferredHeight: Theme.chipHeight
+            Layout.alignment: Qt.AlignVCenter
+            visible: tb.host.length > 0
+            hoverEnabled: true
+            onClicked: tb.pickElementClicked()
+            QQC.ToolTip.text: i18n("Pick an element to crop to — click any element in the page, Esc to cancel")
+            QQC.ToolTip.visible: hovered
+            QQC.ToolTip.delay: 600
+            contentItem: Rectangle {
+                color: pickBtn.hovered ? Theme.surfaceHi : Theme.surface
+                border.color: Theme.fgMute
+                border.width: 1
+                radius: 2
+                QQC.Label {
+                    anchors.centerIn: parent
+                    text: "⌖"
+                    color: Theme.accent
+                    font.family: Theme.fontHeader
+                    font.pixelSize: 13
+                    font.bold: true
+                }
+            }
         }
 
         // --- HTTP status chip ----------------------------------------------

@@ -61,9 +61,40 @@ Item {
 
     signal authRequired(string originalUrl)
     signal basicAuthRequested(var request)
+    // Fired when the click-to-pick overlay returns. Empty string = cancelled.
+    signal selectorPicked(string selector)
 
     function reload() { webview.reload() }
     function hardReload() { webview.triggerWebAction(WebEngineView.ReloadAndBypassCache) }
+
+    // Click-to-pick element selector. Injects an outline + banner overlay,
+    // intercepts the next click (capture phase), computes a robust selector
+    // and emits selectorPicked. Esc cancels (empty string).
+    function startPicker() {
+        webview.runJavaScript(CropEngine.buildPickerStartJs(), function(r) {
+            console.info("iframe-plasma[picker] start=" + r);
+        });
+        pickerTimer.restart();
+    }
+    Timer {
+        id: pickerTimer
+        interval: 200
+        repeat: true
+        // Cap polling — 2 minutes is plenty for any deliberate pick action
+        // and protects against an orphaned timer if the page navigates away
+        // mid-pick (which would wipe window.__ifpPicked anyway).
+        property int ticks: 0
+        onTriggered: {
+            if (++ticks > 600) { stop(); ticks = 0; return; }
+            webview.runJavaScript(CropEngine.buildPickerClearJs(), function(result) {
+                if (result === undefined || result === null) return;
+                stop();
+                pickerTimer.ticks = 0;
+                console.info("iframe-plasma[picker] result=" + JSON.stringify(result));
+                tab.selectorPicked(String(result));
+            });
+        }
+    }
     // Same scheme allowlist as onNewWindowRequested — if a redirect chain ever
     // lands the view on a non-http(s) URL (data:, file:, custom xdg handlers),
     // refuse to hand it off to the system URI dispatcher.

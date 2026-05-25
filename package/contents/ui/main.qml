@@ -482,6 +482,43 @@ PlasmoidItem {
         }
     }
 
+    // Receives the result of WebTab.startPicker(). `sel == ""` means the
+    // user pressed Esc / cancelled — no-op. Otherwise hands off to the
+    // save dialog which lets the user choose whether to apply the selector
+    // to the panel-slot thumbnail or the popup widget.
+    function handlePickedSelector(tabIdx, sel) {
+        console.info("iframe-plasma[picker] handlePickedSelector idx=" + tabIdx
+            + " sel=" + JSON.stringify(sel));
+        if (!sel || sel.length === 0) return;
+        savePickedDialog.tabIdx = tabIdx;
+        savePickedDialog.pickedSelector = sel;
+        savePickedDialog.open();
+    }
+
+    // Persist a picked selector into urlsJson at `tabIdx`. `scope` is
+    // "thumb" or "popup". Also flips the corresponding *Mode to "custom"
+    // so the selector field actually engages.
+    function savePickedSelector(tabIdx, scope, sel) {
+        try {
+            const arr = JSON.parse(Plasmoid.configuration.urlsJson || "[]");
+            if (!Array.isArray(arr) || tabIdx < 0 || tabIdx >= arr.length) return;
+            const entry = arr[tabIdx] || {};
+            if (scope === "thumb") {
+                entry.thumbMode = "custom";
+                entry.thumbSelector = sel;
+            } else {
+                entry.popupMode = "custom";
+                entry.popupSelector = sel;
+            }
+            arr[tabIdx] = entry;
+            Plasmoid.configuration.urlsJson = JSON.stringify(arr);
+            console.info("iframe-plasma[picker] saved scope=" + scope
+                + " sel=" + JSON.stringify(sel) + " idx=" + tabIdx);
+        } catch (e) {
+            console.warn("iframe-plasma[picker] save error:", e.message);
+        }
+    }
+
     // Handler invoked from WebTab on every authenticationDialogRequested.
     // Contract: leave request.accepted=false to let Qt show its default prompt;
     // set accepted=true + dialogAccept(user,pw) to supply stored creds silently.
@@ -1194,6 +1231,68 @@ PlasmoidItem {
         Layout.preferredHeight: 500
         spacing: 0
 
+        // Save-selector dialog (opened from picker callback). Three buttons:
+        // apply to thumbnail, apply to popup widget, or cancel. Keeps the
+        // picker UX out of the toolbar — the user sees what they picked
+        // before committing it to config.
+        QQC.Dialog {
+            id: savePickedDialog
+            modal: true
+            title: i18n("Save picked element selector")
+            anchors.centerIn: parent
+            // Live state from handlePickedSelector.
+            property int tabIdx: -1
+            property string pickedSelector: ""
+            // Standard footer is OK + Cancel; we want three custom buttons,
+            // so override with a Row of three explicit Buttons. Apply-to-
+            // thumbnail is leading because the existing flow's primary use
+            // case (panel-slot crop) hits that path more often.
+            footer: QQC.DialogButtonBox {
+                QQC.Button {
+                    text: i18n("Save as Thumbnail")
+                    onClicked: {
+                        root.savePickedSelector(savePickedDialog.tabIdx, "thumb",
+                                                savePickedDialog.pickedSelector);
+                        savePickedDialog.close();
+                    }
+                }
+                QQC.Button {
+                    text: i18n("Save as Widget popup")
+                    onClicked: {
+                        root.savePickedSelector(savePickedDialog.tabIdx, "popup",
+                                                savePickedDialog.pickedSelector);
+                        savePickedDialog.close();
+                    }
+                }
+                QQC.Button {
+                    text: i18n("Cancel")
+                    onClicked: savePickedDialog.close()
+                }
+            }
+            contentItem: ColumnLayout {
+                spacing: Kirigami.Units.smallSpacing
+                QQC.Label {
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: Kirigami.Units.gridUnit * 28
+                    wrapMode: Text.Wrap
+                    text: i18n("Picked selector — choose where to apply it:")
+                }
+                QQC.TextField {
+                    Layout.fillWidth: true
+                    readOnly: true
+                    selectByMouse: true
+                    text: savePickedDialog.pickedSelector
+                    font.family: Theme.fontBody
+                }
+                QQC.Label {
+                    Layout.fillWidth: true
+                    wrapMode: Text.Wrap
+                    color: Kirigami.Theme.disabledTextColor
+                    text: i18n("Thumbnail crops the panel slot only; Widget crops the full popup view.")
+                }
+            }
+        }
+
         CyberToolbar {
             id: toolbar
             Layout.fillWidth: true
@@ -1211,6 +1310,7 @@ PlasmoidItem {
             onClearCookiesClicked:  root.clearCacheAndReload()
             onSelectTimeRange:        range    => root.activeTab?.setTimeRange(range)
             onSelectRefreshInterval:  interval => root.activeTab?.setRefreshInterval(interval)
+            onPickElementClicked:     root.activeTab?.startPicker()
         }
 
         CyberTabBar {
@@ -1293,6 +1393,7 @@ PlasmoidItem {
                     onBasicAuthRequested: req => root.handleBasicAuth(req, modelData)
                     onAuthRequired: () => root.expanded = true
                     onLoadStatusChanged: root.setTabStatus(index, loadStatus)
+                    onSelectorPicked: sel => root.handlePickedSelector(index, sel)
                 }
             }
         }
