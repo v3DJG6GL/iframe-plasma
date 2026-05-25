@@ -67,14 +67,22 @@ Item {
     function reload() { webview.reload() }
     function hardReload() { webview.triggerWebAction(WebEngineView.ReloadAndBypassCache) }
 
-    // Click-to-pick element selector. Injects an outline + banner overlay,
-    // intercepts the next click (capture phase), computes a robust selector
-    // and emits selectorPicked. Esc cancels (empty string).
+    // Click-to-pick element selector. Tears down any active CropEngine
+    // isolation FIRST (otherwise data-ifp-isolate hides every sibling
+    // subtree, and document.elementFromPoint inside the picker can only
+    // return descendants of the currently-isolated element — the user
+    // could only "pick" inside the card they already cropped to). After
+    // the picker resolves we re-fire _applyPopupSelector: cancel-path
+    // restores the original isolation, save-path re-applies via the
+    // property-binding chain triggered by savePickedSelector.
     function startPicker() {
-        webview.runJavaScript(CropEngine.buildPickerStartJs(), function(r) {
-            console.info("iframe-plasma[picker] start=" + r);
+        webview.runJavaScript(CropEngine.buildClearJs(), function(clearResult) {
+            webview.runJavaScript(CropEngine.buildPickerStartJs(), function(r) {
+                console.info("iframe-plasma[picker] start=" + r
+                    + " (cleared=" + JSON.stringify(clearResult) + ")");
+            });
+            pickerTimer.restart();
         });
-        pickerTimer.restart();
     }
     Timer {
         id: pickerTimer
@@ -85,13 +93,27 @@ Item {
         // mid-pick (which would wipe window.__ifpPicked anyway).
         property int ticks: 0
         onTriggered: {
-            if (++ticks > 600) { stop(); ticks = 0; return; }
+            if (++ticks > 600) {
+                stop();
+                ticks = 0;
+                tab._applyPopupSelector();   // restore isolation on timeout
+                return;
+            }
             webview.runJavaScript(CropEngine.buildPickerClearJs(), function(result) {
                 if (result === undefined || result === null) return;
                 stop();
                 pickerTimer.ticks = 0;
                 console.info("iframe-plasma[picker] result=" + JSON.stringify(result));
                 tab.selectorPicked(String(result));
+                // Restore isolation. If the user cancelled (result === ""),
+                // _applyPopupSelector re-applies the existing popupSelector
+                // (or no-op if none). If the user picked, the save-dialog
+                // path triggers a popupSelector property change which fires
+                // _applyPopupSelector again via onPopupSelectorChanged —
+                // calling here is a redundant no-op on the same value, but
+                // covers the case where the user picks then dismisses the
+                // dialog with Cancel (no property change).
+                tab._applyPopupSelector();
             });
         }
     }

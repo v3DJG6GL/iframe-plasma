@@ -232,11 +232,17 @@ Rectangle {
         // by hand. Result is sent back via the active tab's
         // selectorPicked signal — main.qml prompts for scope (thumbnail
         // vs widget) and writes to the URL config.
+        // Mirror reloadBtn's sizing: hardcoded width/height with zero
+        // padding so the contentItem Rectangle fills the AbstractButton
+        // box. Layout.preferredWidth + QQC2's default 6 px padding
+        // shrinks the Rectangle and pushes the centred ⌖ glyph off-axis.
         QQC.AbstractButton {
             id: pickBtn
-            Layout.preferredWidth: Theme.chipHeight
-            Layout.preferredHeight: Theme.chipHeight
+            width: 22; height: 20
+            padding: 0
             Layout.alignment: Qt.AlignVCenter
+            Layout.preferredWidth: width
+            Layout.preferredHeight: height
             visible: tb.host.length > 0
             hoverEnabled: true
             onClicked: tb.pickElementClicked()

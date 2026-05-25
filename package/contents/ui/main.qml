@@ -490,9 +490,17 @@ PlasmoidItem {
         console.info("iframe-plasma[picker] handlePickedSelector idx=" + tabIdx
             + " sel=" + JSON.stringify(sel));
         if (!sel || sel.length === 0) return;
-        savePickedDialog.tabIdx = tabIdx;
-        savePickedDialog.pickedSelector = sel;
-        savePickedDialog.open();
+        // The dialog lives inside fullRepresentation (it has to be parented
+        // to a real Item that's part of the popup window so Kirigami's
+        // Dialog overlay machinery has something to anchor to). Walk via
+        // the popup item reference; bail quietly if the popup hasn't been
+        // realised yet (shouldn't happen — picker runs from inside it).
+        const popup = root.fullRepresentationItem;
+        if (popup && typeof popup.showSavePickedDialog === "function") {
+            popup.showSavePickedDialog(tabIdx, sel);
+        } else {
+            console.warn("iframe-plasma[picker] no fullRepresentationItem; selector dropped");
+        }
     }
 
     // Persist a picked selector into urlsJson at `tabIdx`. `scope` is
@@ -1222,6 +1230,7 @@ PlasmoidItem {
     }
 
     fullRepresentation: ColumnLayout {
+        id: fullRoot
         // Layout.preferred* only applies on first-ever open; once the user
         // drag-resizes the popup, Plasma persists `popupWidth/popupHeight`
         // in appletsrc and that value wins on subsequent opens.
@@ -1231,66 +1240,82 @@ PlasmoidItem {
         Layout.preferredHeight: 500
         spacing: 0
 
-        // Save-selector dialog (opened from picker callback). Three buttons:
-        // apply to thumbnail, apply to popup widget, or cancel. Keeps the
-        // picker UX out of the toolbar — the user sees what they picked
-        // before committing it to config.
-        QQC.Dialog {
-            id: savePickedDialog
-            modal: true
-            title: i18n("Save picked element selector")
-            anchors.centerIn: parent
-            // Live state from handlePickedSelector.
-            property int tabIdx: -1
-            property string pickedSelector: ""
-            // Standard footer is OK + Cancel; we want three custom buttons,
-            // so override with a Row of three explicit Buttons. Apply-to-
-            // thumbnail is leading because the existing flow's primary use
-            // case (panel-slot crop) hits that path more often.
-            footer: QQC.DialogButtonBox {
-                QQC.Button {
-                    text: i18n("Save as Thumbnail")
-                    onClicked: {
-                        root.savePickedSelector(savePickedDialog.tabIdx, "thumb",
-                                                savePickedDialog.pickedSelector);
-                        savePickedDialog.close();
+        // Save-selector dialog (opened from picker callback). Lazy-built via
+        // Component.createObject so the dialog gets a real parent Item (this
+        // ColumnLayout's id `fullRoot`) at construction time. A plain inline
+        // QQC.Dialog inside a plasmoid fullRepresentation silently renders
+        // nothing — the popup host is a PlasmaWindow (not a Kirigami
+        // ApplicationWindow), so the dialog's default `applicationWindow().
+        // overlay` parent resolves undefined and the popup escapes the
+        // layout flow into a zero-sized item. Same pattern as KDE's
+        // bluedevil ForgetDeviceDialog.
+        Component {
+            id: savePickedDialogComponent
+            Kirigami.PromptDialog {
+                id: savePickedDialog
+                parent: fullRoot
+                modal: true
+                title: i18n("Save picked element selector")
+                property int tabIdx: -1
+                property string pickedSelector: ""
+                standardButtons: Kirigami.Dialog.NoButton
+                customFooterActions: [
+                    Kirigami.Action {
+                        text: i18n("Save as Thumbnail")
+                        icon.name: "view-preview"
+                        onTriggered: {
+                            root.savePickedSelector(savePickedDialog.tabIdx, "thumb",
+                                                    savePickedDialog.pickedSelector);
+                            savePickedDialog.close();
+                        }
+                    },
+                    Kirigami.Action {
+                        text: i18n("Save as Widget popup")
+                        icon.name: "view-fullscreen"
+                        onTriggered: {
+                            root.savePickedSelector(savePickedDialog.tabIdx, "popup",
+                                                    savePickedDialog.pickedSelector);
+                            savePickedDialog.close();
+                        }
+                    },
+                    Kirigami.Action {
+                        text: i18n("Cancel")
+                        icon.name: "dialog-cancel"
+                        onTriggered: savePickedDialog.close()
+                    }
+                ]
+                contentItem: ColumnLayout {
+                    spacing: Kirigami.Units.smallSpacing
+                    QQC.Label {
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: Kirigami.Units.gridUnit * 28
+                        wrapMode: Text.Wrap
+                        text: i18n("Picked selector — choose where to apply it:")
+                    }
+                    QQC.TextField {
+                        Layout.fillWidth: true
+                        readOnly: true
+                        selectByMouse: true
+                        text: savePickedDialog.pickedSelector
+                        font.family: Theme.fontBody
+                    }
+                    QQC.Label {
+                        Layout.fillWidth: true
+                        wrapMode: Text.Wrap
+                        color: Kirigami.Theme.disabledTextColor
+                        text: i18n("Thumbnail crops the panel slot only; Widget crops the full popup view.")
                     }
                 }
-                QQC.Button {
-                    text: i18n("Save as Widget popup")
-                    onClicked: {
-                        root.savePickedSelector(savePickedDialog.tabIdx, "popup",
-                                                savePickedDialog.pickedSelector);
-                        savePickedDialog.close();
-                    }
-                }
-                QQC.Button {
-                    text: i18n("Cancel")
-                    onClicked: savePickedDialog.close()
-                }
+                onClosed: destroy()
             }
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
-                QQC.Label {
-                    Layout.fillWidth: true
-                    Layout.preferredWidth: Kirigami.Units.gridUnit * 28
-                    wrapMode: Text.Wrap
-                    text: i18n("Picked selector — choose where to apply it:")
-                }
-                QQC.TextField {
-                    Layout.fillWidth: true
-                    readOnly: true
-                    selectByMouse: true
-                    text: savePickedDialog.pickedSelector
-                    font.family: Theme.fontBody
-                }
-                QQC.Label {
-                    Layout.fillWidth: true
-                    wrapMode: Text.Wrap
-                    color: Kirigami.Theme.disabledTextColor
-                    text: i18n("Thumbnail crops the panel slot only; Widget crops the full popup view.")
-                }
-            }
+        }
+
+        function showSavePickedDialog(tabIdx, sel) {
+            const dlg = savePickedDialogComponent.createObject(fullRoot, {
+                tabIdx: tabIdx,
+                pickedSelector: sel
+            });
+            if (dlg) dlg.open();
         }
 
         CyberToolbar {
