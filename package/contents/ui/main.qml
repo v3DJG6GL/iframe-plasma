@@ -421,10 +421,14 @@ PlasmoidItem {
     function reloadAll() { reloadAllRequested() }
 
     // Fired by savePickedSelector when a thumb-scope save happened —
-    // the compact rep listens and reloads its mini-view if the saved
-    // tab is the currently-previewed one. Cleaner than reaching the
-    // private `miniLoader` id from outside the compact's QML scope.
-    signal _thumbSelectorSaved(int tabIdx)
+    // the compact rep listens and applies the new selector to its
+    // mini-view if the saved tab is the currently-previewed one. We
+    // pass the new selector through the signal because the compact's
+    // declarative `thumbSelector` binding can't see a JS-object
+    // property mutation on root.tabs[i], so the previous "fire a
+    // reload and let onLoadingChanged re-apply" pattern would have
+    // re-applied the OLD cached binding value.
+    signal _thumbSelectorSaved(int tabIdx, string newSelector)
 
     function syncInterceptor() {
         const enabled = Plasmoid.configuration.useBasicAuthInjection;
@@ -577,35 +581,42 @@ PlasmoidItem {
                 root.tabs[tabIdx].popupSelector = entry.popupSelector;
             }
 
-            // Apply the new popup selector DIRECTLY via the WebTab's
-            // applyImmediately() function. Previously this assigned to
-            // wt.popupSelector and relied on the onPopupSelectorChanged
-            // handler to fire CropEngine.buildApplyJs — but that handler
-            // had a !webview.loading guard that silently swallowed the
-            // apply during transient sub-resource loads (the user's
-            // "save doesn't change anything, even reload doesn't help"
-            // bug). applyImmediately runs runJavaScript on the live
-            // webview unconditionally; Chromium queues against the
-            // current document and the apply lands either now or on
-            // first paint after load.
+            // Apply the new popup selector DIRECTLY via WebTab's
+            // applyImmediately(). The lookup of the live WebTab MUST
+            // go through fullRoot.applyPopupSelectorAt — the
+            // Repeater's `id: repeater` lives inside the
+            // fullRepresentation Component's ID scope, which root
+            // can't see. A direct `repeater.itemAt(tabIdx)` here
+            // threw `ReferenceError: repeater is not defined` and
+            // the try/catch silently swallowed it, leaving every
+            // picker save a no-op (the urlsJson write below never
+            // even ran). Confirmed in journal as `save error:
+            // repeater is not defined`.
             if (scope === "popup" || scope === "both") {
-                const wt = repeater.itemAt(tabIdx);
-                if (wt && typeof wt.applyImmediately === "function") {
-                    const newPopupSel = (entry.popupMode === "custom")
-                                      ? (entry.popupSelector || "") : "";
-                    wt.applyImmediately(newPopupSel);
+                const newPopupSel = (entry.popupMode === "custom")
+                                  ? (entry.popupSelector || "") : "";
+                const fr = root.fullRepresentationItem;
+                if (fr && typeof fr.applyPopupSelectorAt === "function") {
+                    const ok = fr.applyPopupSelectorAt(tabIdx, newPopupSel);
+                    if (!ok) console.warn("iframe-plasma[picker] no live WebTab at idx=" + tabIdx);
                 } else {
-                    console.warn("iframe-plasma[picker] no live WebTab at idx=" + tabIdx);
+                    console.warn("iframe-plasma[picker] fullRepresentationItem unavailable");
                 }
             }
 
-            // Notify the thumbnail (if currently showing this tab) so
-            // it reloads with the new selector. The compact rep is
-            // lazy and lives in a separate QML scope; a root-level
-            // signal is cleaner than trying to reach `miniLoader`
-            // through `compactRepresentationItem`.
+            // Notify the thumbnail (if currently showing this tab)
+            // with the NEW selector — compact's binding-based
+            // thumbSelector can't see the modelData mutation, so we
+            // pass the resolved selector explicitly. Mirror the same
+            // preset→selector mapping the compact's `thumbSelector`
+            // binding uses (chartOnly→.u-wrap>canvas etc.).
             if (scope === "thumb" || scope === "both") {
-                root._thumbSelectorSaved(tabIdx);
+                const newThumbSel =
+                      entry.thumbMode === "chartOnly"     ? ".u-wrap > canvas"
+                    : entry.thumbMode === "chartWithAxes" ? ".u-wrap"
+                    : entry.thumbMode === "custom"        ? (entry.thumbSelector || "")
+                    : "";   // fullPanel / unknown
+                root._thumbSelectorSaved(tabIdx, newThumbSel);
             }
 
             // Persist to urlsJson — guarded so onUrlsJsonChanged
@@ -971,13 +982,28 @@ PlasmoidItem {
 
         // Direct trigger from savePickedSelector when the picker save
         // touched a thumb-scope selector. The compact's thumbSelector
-        // binding can't see a JS-object property mutation, so the
-        // onThumbSelectorChanged handler above won't fire — this
-        // signal route forces the same reload explicitly.
+        // binding can't see a JS-object property mutation on
+        // root.tabs[i], so the onThumbSelectorChanged handler above
+        // won't fire automatically — this signal route forces the
+        // apply with the EXPLICIT new selector (passed through the
+        // signal payload). A full reload would re-fetch the URL
+        // unnecessarily AND re-apply via the still-cached binding
+        // value, so we call applyThumbCrop directly.
         Connections {
             target: root
-            function on_ThumbSelectorSaved(tabIdx) {
-                if (tabIdx === compact.previewTabIdx && miniLoader.item) {
+            function on_ThumbSelectorSaved(tabIdx, newSelector) {
+                if (tabIdx !== compact.previewTabIdx) return;
+                if (!miniLoader.item) return;
+                if (newSelector && newSelector.length > 0
+                    && typeof miniLoader.item.applyThumbCrop === "function") {
+                    console.info("iframe-plasma[compact] thumb-save apply idx=" + tabIdx
+                        + " sel=" + JSON.stringify(newSelector));
+                    miniLoader.item.applyThumbCrop(newSelector);
+                } else {
+                    // fullPanel / empty selector — fall back to a
+                    // reload (no clear-attribute path on the mini
+                    // view today; reload returns the page to its
+                    // natural un-cropped state).
                     console.info("iframe-plasma[compact] thumb-save reload idx=" + tabIdx);
                     miniLoader.item.reload();
                 }
@@ -1347,6 +1373,24 @@ PlasmoidItem {
         Layout.preferredWidth:  800
         Layout.preferredHeight: 500
         spacing: 0
+
+        // Bridge for root.savePickedSelector — it can't reach the
+        // Repeater's `id: repeater` directly because QML Components
+        // are ID-isolated (a lazy fullRepresentation Component owns a
+        // separate ID namespace from root). The previous direct
+        // `repeater.itemAt(tabIdx)` from root scope threw
+        // `ReferenceError: repeater is not defined`, the try/catch
+        // swallowed it, and every picker save silently no-op'd
+        // (urlsJson never even got written). This helper lives in
+        // scope and routes the apply through WebTab.applyImmediately.
+        function applyPopupSelectorAt(tabIdx, sel) {
+            const wt = repeater.itemAt(tabIdx);
+            if (wt && typeof wt.applyImmediately === "function") {
+                wt.applyImmediately(sel);
+                return true;
+            }
+            return false;
+        }
 
         // Save-selector dialog (opened from picker callback). Lazy-built via
         // Component.createObject so the dialog gets a real parent Item (this
