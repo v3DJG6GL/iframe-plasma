@@ -160,9 +160,26 @@ KCM.SimpleKCM {
                 required property string authProfileId
                 required property string thumbMode
                 required property string thumbSelector
-                required property string thumbTimeRange
                 required property string popupMode
                 required property string popupSelector
+                // Compact list of Thumbnail-mode presets shown in the combo.
+                // Filtered down to fullPanel + custom for non-Grafana URLs
+                // because chartOnly/chartWithAxes are uPlot-specific. The
+                // Grafana helper "Edit Grafana settings…" path (and legacy
+                // configs) can still write thumbMode=chartOnly into the
+                // JSON — the combo just falls back to fullPanel for display
+                // when the stored value isn't in the filtered list.
+                readonly property var thumbModePresets: page.isGrafanaEmbed(url)
+                    ? [
+                        { value: "chartOnly",     display: i18n("Chart only") },
+                        { value: "chartWithAxes", display: i18n("Chart + axes") },
+                        { value: "fullPanel",     display: i18n("Full page (no crop)") },
+                        { value: "custom",        display: i18n("Custom CSS selector…") }
+                      ]
+                    : [
+                        { value: "fullPanel",     display: i18n("Full page (no crop)") },
+                        { value: "custom",        display: i18n("Custom CSS selector…") }
+                      ]
 
                 width: ListView.view.width
 
@@ -274,11 +291,11 @@ KCM.SimpleKCM {
                         }
 
                         // Thumbnail mode. Applied ONLY to the panel-slot
-                        // mini-view, NOT the popup. The presets target
-                        // Grafana TimeSeries (uPlot) panels — for Stat /
-                        // Gauge / table panels pick `Full panel`, or use
-                        // `Custom CSS selector…` with the stable test-contract
-                        // [data-testid='data-testid panel content'].
+                        // mini-view, NOT the popup. Preset list comes from
+                        // the delegate-scoped `thumbModePresets` binding,
+                        // which filters out the uPlot-specific chartOnly /
+                        // chartWithAxes presets when the URL doesn't look
+                        // like a Grafana embed.
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: Kirigami.Units.smallSpacing
@@ -289,18 +306,21 @@ KCM.SimpleKCM {
                             QQC.ComboBox {
                                 id: thumbModeCombo
                                 Layout.fillWidth: true
-                                readonly property var presets: [
-                                    { value: "chartOnly",     display: i18n("Chart only (recommended for Grafana)") },
-                                    { value: "chartWithAxes", display: i18n("Chart + axes") },
-                                    { value: "fullPanel",     display: i18n("Full panel (no crop)") },
-                                    { value: "custom",        display: i18n("Custom CSS selector…") }
-                                ]
-                                model: presets
+                                model: thumbModePresets
                                 textRole: "display"
                                 valueRole: "value"
                                 currentIndex: {
-                                    const idx = presets.findIndex(x => x.value === thumbMode);
-                                    return idx >= 0 ? idx : 0;
+                                    const idx = thumbModePresets.findIndex(x => x.value === thumbMode);
+                                    // Stored thumbMode might be a Grafana-only
+                                    // preset (chartOnly / chartWithAxes) on a
+                                    // non-Grafana URL — those aren't in the
+                                    // filtered list, so fall back to the
+                                    // fullPanel index. We don't auto-rewrite
+                                    // the JSON; switching the URL back to
+                                    // Grafana later should restore the value.
+                                    if (idx >= 0) return idx;
+                                    const fp = thumbModePresets.findIndex(x => x.value === "fullPanel");
+                                    return fp >= 0 ? fp : 0;
                                 }
                                 // Arrow form names the signal param `_` so it
                                 // doesn't shadow the delegate's `index` —
@@ -309,19 +329,25 @@ KCM.SimpleKCM {
                                 // listModel row (the activated combo item
                                 // index, not the URL-row index).
                                 onActivated: _ => {
-                                    const v = presets[currentIndex].value;
+                                    const v = thumbModePresets[currentIndex].value;
                                     listModel.setProperty(index, "thumbMode", v);
                                     store.serialize();
                                 }
                                 QQC.ToolTip.visible: hovered
                                 QQC.ToolTip.delay: 600
-                                QQC.ToolTip.text: i18n(
-                                    "How the panel-slot mini-view crops the page.\n\n"
-                                  + "  • Chart only      — uPlot's painted canvas (no axes, no title).\n"
-                                  + "  • Chart + axes    — chart plus tick labels.\n"
-                                  + "  • Full panel      — entire d-solo view.\n"
-                                  + "  • Custom selector — any CSS selector you provide.\n\n"
-                                  + "Note: .u-over and .u-under are uPlot's TRANSPARENT overlay layers — they render blank.")
+                                QQC.ToolTip.text: page.isGrafanaEmbed(url)
+                                    ? i18n(
+                                        "How the panel-slot mini-view crops the page.\n\n"
+                                      + "  • Chart only      — uPlot's painted canvas (no axes, no title).\n"
+                                      + "  • Chart + axes    — chart plus tick labels.\n"
+                                      + "  • Full page       — entire view, no crop.\n"
+                                      + "  • Custom selector — any CSS selector you provide.")
+                                    : i18n(
+                                        "How the panel-slot mini-view crops the page.\n\n"
+                                      + "  • Full page       — entire view, no crop.\n"
+                                      + "  • Custom selector — any CSS selector you provide (the\n"
+                                      + "                      sibling DOM is hidden and the target is\n"
+                                      + "                      sized to fill the slot).")
                                 NoWheel {}
                             }
                         }
@@ -332,57 +358,6 @@ KCM.SimpleKCM {
                             placeholderText: i18n("e.g. .u-wrap, canvas, [data-testid='data-testid panel content']")
                             text: thumbSelector
                             onEditingFinished: { listModel.setProperty(index, "thumbSelector", text); store.serialize() }
-                        }
-
-                        // Thumbnail time-range. Empty = "Same as widget"
-                        // (use URL's own from/to); a preset like "24h"
-                        // rewrites the URL's from/to params for the panel-
-                        // slot view ONLY. The popup tab is unaffected.
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: Kirigami.Units.smallSpacing
-                            QQC.Label {
-                                text: i18n("Time range:")
-                                color: Kirigami.Theme.disabledTextColor
-                            }
-                            QQC.ComboBox {
-                                id: thumbTimeRangeCombo
-                                Layout.fillWidth: true
-                                readonly property var presets: [
-                                    { val: "auto", label: i18n("Same as widget (use URL's range)") },
-                                    { val: "5m",   label: i18n("Last 5 minutes")  },
-                                    { val: "15m",  label: i18n("Last 15 minutes") },
-                                    { val: "30m",  label: i18n("Last 30 minutes") },
-                                    { val: "1h",   label: i18n("Last 1 hour")     },
-                                    { val: "6h",   label: i18n("Last 6 hours")    },
-                                    { val: "12h",  label: i18n("Last 12 hours")   },
-                                    { val: "24h",  label: i18n("Last 24 hours")   },
-                                    { val: "7d",   label: i18n("Last 7 days")     },
-                                    { val: "30d",  label: i18n("Last 30 days")    },
-                                    { val: "90d",  label: i18n("Last 90 days")    }
-                                ]
-                                model: presets
-                                textRole: "label"
-                                valueRole: "val"
-                                // Empty string in saved JSON = "auto" (back-compat).
-                                currentIndex: {
-                                    const v = thumbTimeRange || "auto";
-                                    const idx = presets.findIndex(x => x.val === v);
-                                    return idx >= 0 ? idx : 0;
-                                }
-                                // Arrow form avoids signal-param `index`
-                                // shadowing the delegate's `index` property
-                                // (same trap as the thumbMode combo above).
-                                onActivated: _ => {
-                                    const v = presets[currentIndex].val;
-                                    listModel.setProperty(index, "thumbTimeRange", v);
-                                    store.serialize();
-                                }
-                                QQC.ToolTip.visible: hovered
-                                QQC.ToolTip.delay: 600
-                                QQC.ToolTip.text: i18n("Override the time range for the panel-slot thumbnail. `Same as widget` keeps the URL's own from/to (popup and thumbnail show the same range). Picking a preset rewrites from=now-<range>&to=now ONLY for the thumbnail's WebEngineView — the popup is unaffected.")
-                                NoWheel {}
-                            }
                         }
 
                         // Widget (popup) crop. Independent of the thumbnail
