@@ -1282,6 +1282,29 @@ PlasmoidItem {
                                                   && slotMode !== "icon"
                                                   && slotMode !== "excluded"
 
+                    // Picker-save force-flag for the Loader gate. When a
+                    // picker thumb-save lands on a slot whose modelData.thumbMode
+                    // was excluded/text/icon, savePickedSelector mutates
+                    // thumbMode="custom" in place — but the slotMode binding
+                    // (on modelData.thumbMode) emits no NOTIFY for JS-field
+                    // writes, so wantLive stays cached at false. Without
+                    // this override the Loader would stay inactive, the
+                    // webThumbComp would never instantiate, and the
+                    // _thumbSelectorSaved signal would land on no receiver.
+                    // Set by the Connections below; cleared by the next
+                    // Repeater rebuild (delegate destroyed → default false).
+                    property bool _forceLive: false
+                    Connections {
+                        target: root
+                        function on_ThumbSelectorSaved(tabIdx, newSelector) {
+                            if (tabIdx !== thumbSlot.index) return;
+                            if (!thumbSlot.wantLive
+                                && newSelector && newSelector.length > 0) {
+                                thumbSlot._forceLive = true;
+                            }
+                        }
+                    }
+
                     // --- Live web preview (per tab) -----------------------
                     // Loader-gated so excluded / text / icon tabs pay zero
                     // Chromium-renderer cost. When `active` flips false the
@@ -1294,7 +1317,7 @@ PlasmoidItem {
                         anchors.left: parent.left
                         width: compact.internalWidth
                         height: compact.internalHeight
-                        active: thumbSlot.wantLive
+                        active: thumbSlot.wantLive || thumbSlot._forceLive
                         sourceComponent: webThumbComp
 
                         // Per-instance data plumbed via Loader properties —
@@ -1376,7 +1399,17 @@ PlasmoidItem {
                 readonly property var ownTab: parent.ownTab
                 readonly property int ownIndex: parent.ownIndex
                 readonly property bool ownIsCurrent: parent.ownIsCurrent
-                readonly property string ownSelector: root.thumbSelectorFor(ownTab)
+                // Writable (not readonly) — the _thumbSelectorSaved handler
+                // imperatively pins this after a picker save. The binding
+                // reads modelData.thumbMode/.thumbSelector via thumbSelectorFor;
+                // savePickedSelector mutates those JS-object fields in place
+                // under _suppressTabsRebuildOnce, but QML emits no NOTIFY for
+                // plain-JS field writes, so without the imperative pin the
+                // cached value stays stale and the next reload (lifecycle
+                // resume, Ctrl+R, LoadSucceededStatus) re-applies the OLD
+                // selector — silently reverting the saved crop. Same severable-
+                // binding pattern as WebTab.popupSelector (see L1755-1771).
+                property string ownSelector: root.thumbSelectorFor(ownTab)
 
                 // Set true when a hard-reload arrives while the view is
                 // Discarded; consumed by onLoadingChanged on the next
@@ -1591,6 +1624,12 @@ PlasmoidItem {
                     target: root
                     function on_ThumbSelectorSaved(tabIdx, newSelector) {
                         if (tabIdx !== miniView.ownIndex) return;
+                        // Pin ownSelector imperatively — modelData.thumbMode/
+                        // .thumbSelector were mutated in place by
+                        // savePickedSelector with no NOTIFY, so the binding's
+                        // cached value would still return the OLD selector on
+                        // the next LoadSucceededStatus / reflow / reload.
+                        miniView.ownSelector = String(newSelector || "");
                         if (newSelector && newSelector.length > 0) {
                             console.info("iframe-plasma[compact] thumb-save apply idx=" + tabIdx
                                 + " sel=" + JSON.stringify(newSelector));
