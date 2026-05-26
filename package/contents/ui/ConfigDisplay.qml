@@ -21,13 +21,12 @@ KCM.SimpleKCM {
     QtObject { id: themeStore; property string value: "auto" }
 
     Kirigami.FormLayout {
-        QQC.SpinBox {
+        UnitSpinBox {
             id: zoom
             Kirigami.FormData.label: i18n("Zoom:")
             from: 25; to: 500; stepSize: 5
             value: 100
-            textFromValue: (v) => v + " %"
-            NoWheel {}
+            suffix: " %"
         }
         QQC.ComboBox {
             id: themeCombo
@@ -75,27 +74,16 @@ KCM.SimpleKCM {
             text: i18n("Render a live mini-preview in the Plasma panel slot")
             checked: true
         }
-        QQC.SpinBox {
+        UnitSpinBox {
             id: longAxisSpin
             Kirigami.FormData.label: i18n("Preview size:")
             enabled: compactSwitch.checked
-            // Wider range + step=1 + custom value parser so users can type
-            // ANY integer (e.g. 250) directly. Previously stepSize=8 limited
-            // valid values to multiples of 8, AND the default valueFromText
-            // (Number.fromLocaleString) couldn't parse "200 px" so SpinBox
-            // snapped to the min (32) for any non-numeric input.
             from: 16; to: 4000; stepSize: 1
             value: 160
-            editable: true
-            textFromValue: (v) => v + " px"
-            valueFromText: (text) => {
-                const n = parseInt(String(text).replace(/[^0-9-]/g, ''), 10);
-                return isNaN(n) ? value : Math.max(from, Math.min(to, n));
-            }
+            suffix: " px"
             QQC.ToolTip.visible: hovered
             QQC.ToolTip.delay: 600
             QQC.ToolTip.text: i18n("Long-axis size of the panel slot. Horizontal panel → slot width; vertical panel → slot height. The other axis is fixed by the Plasma panel's thickness. Type any value; the field accepts integers from 16 to 4000.")
-            NoWheel {}
         }
         QQC.CheckBox {
             id: showLabelSwitch
@@ -114,13 +102,12 @@ KCM.SimpleKCM {
                 text: i18n("Cycle through tabs every")
                 checked: false
             }
-            QQC.SpinBox {
+            UnitSpinBox {
                 id: cycleSpin
                 from: 5; to: 3600
                 value: 30
                 enabled: cycleBox.checked
-                textFromValue: (v) => v + " s"
-                NoWheel {}
+                suffix: " s"
             }
         }
         QQC.Label {

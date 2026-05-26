@@ -636,13 +636,12 @@ KCM.SimpleKCM {
                 RowLayout {
                     Kirigami.FormData.label: i18n("Auto-refresh:")
                     QQC.CheckBox { id: addRefresh; text: i18n("every"); checked: true }
-                    QQC.SpinBox {
+                    UnitSpinBox {
                         id: refreshInterval
                         from: 5; to: 3600
                         value: 30
                         enabled: addRefresh.checked
-                        textFromValue: (v) => v + " s"
-                        NoWheel {}
+                        suffix: " s"
                     }
                 }
                 // hideLogo=true removes Grafana 12.4+'s "Powered by Grafana"

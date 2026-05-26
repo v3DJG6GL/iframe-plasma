@@ -24,12 +24,11 @@ KCM.SimpleKCM {
 
         Item { Kirigami.FormData.isSection: true }
 
-        QQC.SpinBox {
+        UnitSpinBox {
             id: debugPortBox
             Kirigami.FormData.label: i18n("Remote DevTools port:")
             from: 0; to: 65535; value: 0
-            textFromValue: (v) => v === 0 ? i18n("disabled") : String(v)
-            NoWheel {}
+            textFormatter: (v) => v === 0 ? i18n("disabled") : String(v)
         }
         QQC.Label {
             Layout.fillWidth: true
@@ -42,19 +41,17 @@ KCM.SimpleKCM {
 
         Item { Kirigami.FormData.isSection: true }
 
-        QQC.SpinBox {
+        UnitSpinBox {
             id: freezeBox
             Kirigami.FormData.label: i18n("Freeze hidden views after:")
             from: 1; to: 3600; value: 30
-            textFromValue: (v) => i18np("%1 second", "%1 seconds", v)
-            NoWheel {}
+            textFormatter: (v) => i18np("%1 second", "%1 seconds", v)
         }
-        QQC.SpinBox {
+        UnitSpinBox {
             id: discardBox
             Kirigami.FormData.label: i18n("Discard frozen views after:")
             from: 1; to: 86400; value: 600
-            textFromValue: (v) => i18np("%1 second", "%1 seconds", v)
-            NoWheel {}
+            textFormatter: (v) => i18np("%1 second", "%1 seconds", v)
         }
         QQC.Label {
             Layout.fillWidth: true
