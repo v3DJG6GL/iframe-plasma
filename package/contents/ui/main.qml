@@ -1397,6 +1397,14 @@ PlasmoidItem {
                         if (miniView.ownIndex !== currentIdx) return;
                         const t = miniView.ownTab;
                         if (!t || (t.thumbTimeRange || "auto") !== "auto") return;
+                        // 'custom' is the sentinel WebTab.currentTimeRange
+                        // returns when the popup URL's from/to don't match
+                        // now-Nu/now (user picked absolute timestamps in
+                        // Grafana). resolveThumbUrlWith's regex validator
+                        // would reject it and log a spurious "rejected
+                        // invalid thumbTimeRange" warning. Skip silently;
+                        // thumb keeps its configured range.
+                        if (newRange === "custom") return;
                         console.info("iframe-plasma[mini-range] idx=" + miniView.ownIndex
                             + " applying override=" + JSON.stringify(newRange));
                         miniView.sessionRangeOverride = newRange;
