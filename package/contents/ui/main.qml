@@ -1337,6 +1337,15 @@ PlasmoidItem {
                 readonly property bool ownIsCurrent: parent.ownIsCurrent
                 readonly property string ownSelector: root.thumbSelectorFor(ownTab)
 
+                // Set true when a hard-reload arrives while the view is
+                // Discarded; consumed by onLoadingChanged on the next
+                // LoadStartedStatus, which stops the engine's automatic
+                // cache-honoring reload from Discarded->Active and
+                // re-issues it as ReloadAndBypassCache. Without this
+                // hand-off the bypass-cache intent races the auto-reload
+                // on Chromium's IO thread and is typically lost.
+                property bool _pendingHardReload: false
+
                 // Per-delegate auto-follow override. Defaults to "" (use
                 // tab's static thumbTimeRange / URL-own range). The
                 // Connections handler below bumps this when the user picks
@@ -1479,6 +1488,15 @@ PlasmoidItem {
                         + " idx=" + miniView.ownIndex
                         + " url=" + info.url
                         + " thumbSelector=" + JSON.stringify(miniView.ownSelector));
+                    if (info.status === WebEngineView.LoadStartedStatus
+                        && miniView._pendingHardReload)
+                    {
+                        miniView._pendingHardReload = false;
+                        console.info("iframe-plasma[compact] tab-reload hard (post-discard) idx=" + miniView.ownIndex);
+                        miniView.stop();
+                        miniView.triggerWebAction(WebEngineView.ReloadAndBypassCache);
+                        return;
+                    }
                     if (info.status === WebEngineView.LoadSucceededStatus
                         && miniView.ownSelector.length > 0)
                     {
@@ -1541,14 +1559,19 @@ PlasmoidItem {
                     function on_TabReloadRequested(tabIdx, kind) {
                         if (tabIdx !== miniView.ownIndex) return;
                         // Discarded views have no live renderer; promoting
-                        // lifecycleState to Active auto-reloads (per the
-                        // WebViewLifecycle controller). For soft reload, that
-                        // is enough on its own. For hard reload, promote
-                        // first so triggerWebAction has a renderer to drive.
+                        // lifecycleState to Active triggers WebEngine's
+                        // automatic (cache-honoring) reload. For soft that
+                        // is the right behavior. For hard we arm
+                        // _pendingHardReload; onLoadingChanged then aborts
+                        // the auto-reload and re-issues ReloadAndBypassCache
+                        // once the renderer is up — calling triggerWebAction
+                        // synchronously here would race the auto-reload on
+                        // Chromium's IO thread and lose the bypass intent.
                         const isDiscarded = miniView.lifecycleState === WebEngineView.LifecycleState.Discarded;
                         if (isDiscarded) {
+                            if (kind === "hard") miniView._pendingHardReload = true;
                             miniView.lifecycleState = WebEngineView.LifecycleState.Active;
-                            if (kind === "soft") return;   // promotion auto-reloads
+                            return;
                         }
                         if (kind === "hard") {
                             console.info("iframe-plasma[compact] tab-reload hard idx=" + tabIdx);
