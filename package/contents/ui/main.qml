@@ -933,6 +933,16 @@ PlasmoidItem {
             Plasmoid.configuration.compactPreviewMigrated = true;
             return;
         }
+        // Out-of-range pinned index would exclude EVERY tab (the i===pinned
+        // guard below never matches), wiping the user's "show only this tab"
+        // intent into "show nothing." Treat it as a corrupt config and skip
+        // the migration entirely so the new default (follow popup) takes over.
+        if (!Number.isInteger(pinned) || pinned < 0 || pinned >= tabsRaw.length) {
+            console.warn("iframe-plasma[compact-migrate] pinned index out-of-range ("
+                + pinned + "/" + tabsRaw.length + "); skipping exclusion sweep");
+            Plasmoid.configuration.compactPreviewMigrated = true;
+            return;
+        }
         let mutated = false;
         for (let i = 0; i < tabsRaw.length; i++) {
             if (i === pinned) continue;   // keep the pinned tab visible
