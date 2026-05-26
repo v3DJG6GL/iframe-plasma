@@ -56,6 +56,13 @@
         <entry name="compactPreviewLongAxisPx" type="Int">
             <default>160</default>
         </entry>
+        <!-- When true, the popup ignores window-deactivation and stays
+             open after the user switches to another window. Toggled
+             from the popup toolbar's pin button; survives plasmashell
+             restart. Default false (Plasma's standard auto-close). -->
+        <entry name="popupPinned" type="Bool">
+            <default>false</default>
+        </entry>
     </group>
     <group name="Auth">
         <!-- Named auth profiles (UUID-keyed). Each profile has metadata

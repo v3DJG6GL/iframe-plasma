@@ -45,6 +45,10 @@ Rectangle {
     // Grafana-shaped URL params (`from=now-X&to=now`, `refresh=`) and
     // make no sense on plain web pages. Bound from main.qml.
     property bool isGrafana: false
+    // Bound from main.qml to Plasmoid.configuration.popupPinned. Drives
+    // the checked state of the pin button below; we never write the
+    // config from here (this component owns no state — see file header).
+    property bool pinned: false
 
     signal reloadClicked()
     signal hardReloadClicked()
@@ -57,6 +61,9 @@ Rectangle {
     // Activate the click-to-pick element overlay in the live view —
     // main.qml routes this to the active tab's startPicker().
     signal pickElementClicked()
+    // Toggle the popup-pin (keep open across focus loss). main.qml flips
+    // Plasmoid.configuration.popupPinned in response.
+    signal pinToggled()
 
     implicitHeight: Theme.toolbarHeight
     color: Theme.bg
@@ -232,6 +239,46 @@ Rectangle {
         }
 
         // --- Pick-element button --------------------------------------------
+        // Pin toggle — keeps the popup open when the user switches to
+        // another window. Default Plasma popups auto-close on focus loss;
+        // canonical pattern (plasma-workspace systemtray) is a checkable
+        // window-pin button that flips Plasmoid.configuration.popupPinned.
+        // Sizing mirrors pickBtn/reloadBtn for visual coherence.
+        QQC.AbstractButton {
+            id: pinBtn
+            width: 22; height: 20
+            padding: 0
+            Layout.alignment: Qt.AlignVCenter
+            Layout.preferredWidth: width
+            Layout.preferredHeight: height
+            hoverEnabled: true
+            checkable: true
+            checked: tb.pinned
+            onToggled: tb.pinToggled()
+            QQC.ToolTip.text: checked ? i18n("Keep open — popup stays when another window is activated (click to unpin)")
+                                      : i18n("Keep open — pin so the popup stays when another window is activated")
+            QQC.ToolTip.visible: hovered
+            QQC.ToolTip.delay: 600
+            contentItem: Rectangle {
+                color: pinBtn.checked ? Theme.surfaceHi
+                     : pinBtn.hovered ? Theme.surfaceHi : Theme.surface
+                border.color: pinBtn.checked ? Theme.accent : Theme.fgMute
+                border.width: 1
+                radius: 2
+                // `window-pin` is the canonical Breeze action icon for
+                // this affordance; Plasma stock widgets (Folder View,
+                // System Tray) keep a single icon and signal state via
+                // checked-tint rather than swapping to `window-unpin`.
+                Kirigami.Icon {
+                    anchors.centerIn: parent
+                    width: 14; height: 14
+                    source: "window-pin"
+                    color: pinBtn.checked ? Theme.accent : Theme.fgMute
+                    isMask: true
+                }
+            }
+        }
+
         // Activates the in-page click-to-pick overlay so the user can
         // visually select an element instead of authoring a CSS selector
         // by hand. Result is sent back via the active tab's

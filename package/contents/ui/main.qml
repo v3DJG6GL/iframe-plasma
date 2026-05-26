@@ -27,6 +27,13 @@ PlasmoidItem {
     switchWidth:  inPanel ? Number.POSITIVE_INFINITY : Kirigami.Units.gridUnit * 18
     switchHeight: inPanel ? Number.POSITIVE_INFINITY : Kirigami.Units.gridUnit * 12
 
+    // Default Plasma popups auto-close on focus loss. For a live-dashboard
+    // widget the user often wants to keep the popup open while working in
+    // another window — the toolbar pin button writes this kcfg key. The
+    // binding re-evaluates the moment the key flips. Canonical pattern from
+    // plasma-workspace systemtray/digital-clock applets.
+    hideOnWindowDeactivate: !Plasmoid.configuration.popupPinned
+
     Plasmoid.icon: "applications-internet"
 
     // Tell the panel layout: don't reserve hover-indicator padding around the
@@ -1522,6 +1529,8 @@ PlasmoidItem {
             timeRange:       root.activeTab ? root.activeTab.currentTimeRange       : ""
             refreshInterval: root.activeTab ? root.activeTab.currentRefreshInterval : ""
             isGrafana:       root.activeTab ? root.isGrafanaEmbed(root.activeTab.webView.url) : false
+            pinned:          Plasmoid.configuration.popupPinned
+            onPinToggled:    Plasmoid.configuration.popupPinned = !Plasmoid.configuration.popupPinned
             onReloadClicked:        root.activeTab?.reload()
             onHardReloadClicked:    root.activeTab?.hardReload()
             onOpenExternalClicked:  root.activeTab?.openExternal()
