@@ -1747,24 +1747,40 @@ PlasmoidItem {
             const wt = repeater.itemAt(tabIdx);
             if (wt && typeof wt.applyImmediately === "function") {
                 wt.applyImmediately(sel);
+                // Sync the property too — the WebTab.popupSelector binding
+                // is on `modelData.popupSelector`, and modelData is a plain
+                // JS object whose in-place field mutation (savePickedSelector
+                // does this to avoid the Repeater rebuild) does NOT fire
+                // NOTIFY. Without this imperative write the binding's
+                // cached result stays stale, and the next
+                // LoadSucceededStatus → _applyPopupSelector re-applies the
+                // OLD value, silently reverting the just-saved crop.
+                wt.popupSelector = sel;
                 return true;
             }
             return false;
         }
 
-        // Re-engage the WebTab's existing popupSelector — used by the
-        // save-picked dialog's Cancel path. _PICKER_START_BODY's
-        // teardown stripped data-ifp-* + style node before the dialog
-        // opened, so the popup is currently showing the uncropped page;
-        // without this restore, Cancel leaves the popup un-isolated
-        // until the user reloads or switches tabs.
+        // Re-engage the WebTab's popupSelector — used by the save-picked
+        // dialog's Cancel path AND by savePickedSelector's thumb-only
+        // branch. _PICKER_START_BODY's teardown stripped data-ifp-* +
+        // style node before the dialog opened, so the popup is currently
+        // showing the uncropped page; without this restore, dismissal
+        // leaves the popup un-isolated until the user reloads or
+        // switches tabs.
         function restorePopupSelectorAt(tabIdx) {
             const wt = repeater.itemAt(tabIdx);
-            if (wt && typeof wt._applyPopupSelector === "function") {
-                wt._applyPopupSelector();
-                return true;
-            }
-            return false;
+            if (!wt || typeof wt.applyImmediately !== "function") return false;
+            // Read from root.tabs[tabIdx] directly, NOT via the WebTab's
+            // popupSelector property — that property is a binding on
+            // modelData fields that doesn't NOTIFY on in-place mutation,
+            // so it can return a stale cached value after a prior
+            // savePickedSelector. The live model array is the truth.
+            const t = root.tabs[tabIdx];
+            const sel = (t && t.popupMode === "custom") ? (t.popupSelector || "") : "";
+            wt.applyImmediately(sel);
+            wt.popupSelector = sel;
+            return true;
         }
 
         // Save-selector dialog (opened from picker callback). Lazy-built via
