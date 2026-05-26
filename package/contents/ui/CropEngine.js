@@ -328,6 +328,14 @@ const _CLEAR_BODY = `(function(){
 // CSS-Modules-style `__hash` and Vite-style `_HASH` suffixes that change
 // between builds) → short structural path with nth-of-type fallback.
 const _PICKER_START_BODY = `(function(){
+  // Re-entry guard FIRST — must precede the teardown below. If a
+  // previous picker is still mid-flight in this page (__ifpPickerActive
+  // true, listeners attached, page in isolated layout), running the
+  // teardown would strip data-ifp-isolate/keep/target and the style
+  // node while the listeners stay attached, leaving the page
+  // permanently un-isolated until full reload.
+  if (window.__ifpPickerActive) return 'already-active';
+
   // Defensive teardown inline at start — folding the equivalent of
   // buildClearJs into the same runJavaScript call eliminates the
   // microtask gap between WebTab's previous two-call sequence
@@ -375,7 +383,6 @@ const _PICKER_START_BODY = `(function(){
   // missed in the teardown above. finish() flips it back to false.
   window.__ifpPickerArmed = true;
 
-  if (window.__ifpPickerActive) return 'already-active';
   window.__ifpPickerActive = true;
   window.__ifpPicked = null;
 

@@ -1730,6 +1730,21 @@ PlasmoidItem {
             return false;
         }
 
+        // Re-engage the WebTab's existing popupSelector — used by the
+        // save-picked dialog's Cancel path. _PICKER_START_BODY's
+        // teardown stripped data-ifp-* + style node before the dialog
+        // opened, so the popup is currently showing the uncropped page;
+        // without this restore, Cancel leaves the popup un-isolated
+        // until the user reloads or switches tabs.
+        function restorePopupSelectorAt(tabIdx) {
+            const wt = repeater.itemAt(tabIdx);
+            if (wt && typeof wt._applyPopupSelector === "function") {
+                wt._applyPopupSelector();
+                return true;
+            }
+            return false;
+        }
+
         // Save-selector dialog (opened from picker callback). Lazy-built via
         // Component.createObject so the dialog gets a real parent Item (this
         // ColumnLayout's id `fullRoot`) at construction time. A plain inline
@@ -1748,12 +1763,19 @@ PlasmoidItem {
                 title: i18n("Save picked element selector")
                 property int tabIdx: -1
                 property string pickedSelector: ""
+                // Flipped by every Save action before close(). onClosed
+                // uses it to distinguish "user saved" from "user cancelled
+                // / Esc / click-outside". The Cancel path needs to re-engage
+                // the existing popupSelector because _PICKER_START_BODY's
+                // teardown stripped isolation before this dialog opened.
+                property bool _saved: false
                 standardButtons: Kirigami.Dialog.NoButton
                 customFooterActions: [
                     Kirigami.Action {
                         text: i18n("Save for both")
                         icon.name: "edit-copy"
                         onTriggered: {
+                            savePickedDialog._saved = true;
                             root.savePickedSelector(savePickedDialog.tabIdx, "both",
                                                     savePickedDialog.pickedSelector);
                             savePickedDialog.close();
@@ -1763,6 +1785,7 @@ PlasmoidItem {
                         text: i18n("Save as Thumbnail")
                         icon.name: "view-preview"
                         onTriggered: {
+                            savePickedDialog._saved = true;
                             root.savePickedSelector(savePickedDialog.tabIdx, "thumb",
                                                     savePickedDialog.pickedSelector);
                             savePickedDialog.close();
@@ -1772,6 +1795,7 @@ PlasmoidItem {
                         text: i18n("Save as Widget popup")
                         icon.name: "view-fullscreen"
                         onTriggered: {
+                            savePickedDialog._saved = true;
                             root.savePickedSelector(savePickedDialog.tabIdx, "popup",
                                                     savePickedDialog.pickedSelector);
                             savePickedDialog.close();
@@ -1808,14 +1832,18 @@ PlasmoidItem {
                 // Save path: savePickedSelector already called
                 // applyImmediately() — no need to re-fire here, doing so
                 // would race the property-binding chain and risk
-                // re-applying the OLD value (the property's declarative
-                // binding may not have re-evaluated yet from the
-                // in-place modelData mutation). Cancel path: pickerTimer
-                // already called _applyPopupSelector on the empty result
-                // restore path before this dialog had a chance to open
-                // (cancel doesn't open the dialog at all). Just clean up
-                // the Dialog instance.
-                onClosed: destroy()
+                // re-applying the OLD value. Cancel path: the picker's
+                // _PICKER_START_BODY teardown stripped isolation BEFORE
+                // this dialog opened, so the popup is currently showing
+                // the uncropped page. Re-engage the WebTab's existing
+                // popupSelector so dismissal doesn't leave the popup
+                // visually broken until manual reload.
+                onClosed: {
+                    if (!_saved) {
+                        restorePopupSelectorAt(tabIdx);
+                    }
+                    destroy();
+                }
             }
         }
 
