@@ -136,7 +136,26 @@ void BasicAuthInterceptor::interceptRequest(QWebEngineUrlRequestInfo &info)
     if (scheme != QLatin1String("https") && scheme != QLatin1String("http")) {
         return;
     }
-    const QString host = info.requestUrl().host().toLower();
+    // Canonicalize the lookup key to WHATWG `URL.host` semantics — that's
+    // what the QML registration side (`new URL(t.url).host` in
+    // primeAuthProfiles) emits: bare host for default ports (http→80,
+    // https→443), `host:port` for non-default ports. Without this
+    // canonicalization two failure modes appear:
+    //  (a) Tab URL `https://h:9100/` registers key `h:9100`; QUrl::host()
+    //      here returns `h` (port stripped) → lookup misses → auth never
+    //      fires for non-default-port tabs.
+    //  (b) Tab URL `https://h/` registers key `h`; a same-tab fetch to
+    //      `https://h:9100/...` was previously matched as bare `h`
+    //      → Authorization header leaked to an unrelated port on the
+    //      same host (e.g. sidecar metrics endpoints).
+    const QString rawHost = info.requestUrl().host().toLower();
+    const int rawPort = info.requestUrl().port();
+    const bool isDefaultPort = (rawPort == -1)
+        || (scheme == QLatin1String("https") && rawPort == 443)
+        || (scheme == QLatin1String("http")  && rawPort == 80);
+    const QString host = isDefaultPort
+        ? rawHost
+        : rawHost + QLatin1Char(':') + QString::number(rawPort);
     QByteArray header;
     bool hadAny = false;
     {
