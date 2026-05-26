@@ -493,9 +493,15 @@ const _PICKER_START_BODY = `(function(){
     window.__ifpPickerArmed = false;   // disarm so post-pick applies can run
     window.__ifpPickerFinish = null;
     window.__ifpPicked = result || '';
-    document.removeEventListener('mousemove', move, true);
-    document.removeEventListener('click',     click, true);
-    document.removeEventListener('keydown',   key,   true);
+    // Symmetric removeEventListener — same node, same capture flag.
+    // (Listeners are on window because document-level capture is
+    // already populated by React/Vue/etc. and our handler would have
+    // been preempted there; see attach block below.)
+    window.removeEventListener('mousemove',   move,  true);
+    window.removeEventListener('pointerdown', click, true);
+    window.removeEventListener('mousedown',   click, true);
+    window.removeEventListener('click',       click, true);
+    window.removeEventListener('keydown',     key,   true);
     if (outline.parentNode) outline.parentNode.removeChild(outline);
     if (banner.parentNode)  banner.parentNode.removeChild(banner);
     console.info('[ifp-picker] result=' + JSON.stringify(window.__ifpPicked));
@@ -507,9 +513,28 @@ const _PICKER_START_BODY = `(function(){
   // in-page handler. main.qml / WebTab.qml call it via
   // runJavaScript("if(window.__ifpPickerFinish)window.__ifpPickerFinish('');").
   window.__ifpPickerFinish = finish;
-  document.addEventListener('mousemove', move,  true);
-  document.addEventListener('click',     click, true);
-  document.addEventListener('keydown',   key,   true);
+
+  // Attach on WINDOW (not document) in CAPTURE phase. DOM capture-phase
+  // walks window → document → … → target, and within a single node
+  // listeners fire in registration order. React's synthetic-event
+  // delegator on Streamystats (and most modern SPAs) attaches to
+  // document at app-bootstrap time, BEFORE our picker IIFE runs — so
+  // a document-level picker would lose the registration-order race
+  // and React's stopImmediatePropagation() would kill our handler
+  // intermittently (the "clicking has no effect" symptom).
+  //
+  // Trigger on pointerdown (and mousedown as fallback for pages that
+  // preventDefault pointerdown) — these fire EARLIER in the gesture
+  // lifecycle than click, and on pages that swallow click entirely
+  // they still reach us. Same pattern as Chrome DevTools Inspect mode
+  // and uBlock Origin's element picker. Keep a click listener too —
+  // it swallows the synthetic follow-up so the page doesn't get a
+  // phantom activation after the user picks.
+  window.addEventListener('mousemove',   move,  true);
+  window.addEventListener('pointerdown', click, true);
+  window.addEventListener('mousedown',   click, true);
+  window.addEventListener('click',       click, true);
+  window.addEventListener('keydown',     key,   true);
   return 'started';
 })()`;
 
