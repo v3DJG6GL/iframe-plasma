@@ -143,6 +143,17 @@ Item {
                 stop();
                 ticks = 0;
                 tab.pickerActive = false;
+                // In-page teardown — buildPickerClearJs only drains
+                // __ifpPicked, it does NOT detach the click/keydown
+                // listeners, remove the outline/banner, or flip
+                // __ifpPickerActive. Without finish('') the page stays
+                // armed (listeners live, outline visible) and
+                // _PICKER_START_BODY's re-entry guard returns
+                // 'already-active' on the next startPicker(), so the
+                // picker is permanently broken on this tab until URL
+                // reload. Same call as the Esc shortcut.
+                webview.runJavaScript(
+                    "if (typeof window.__ifpPickerFinish === 'function') window.__ifpPickerFinish('');");
                 tab._applyPopupSelector();   // restore isolation on timeout
                 return;
             }
