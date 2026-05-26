@@ -724,9 +724,19 @@ PlasmoidItem {
 
             // Persist to urlsJson — guarded so onUrlsJsonChanged
             // skips the tabs[] reassignment that would have rebuilt
-            // the Repeater (blanking every WebEngineView).
-            root._suppressTabsRebuildOnce = true;
-            Plasmoid.configuration.urlsJson = JSON.stringify(arr);
+            // the Repeater (blanking every WebEngineView). Compare
+            // first: QML's setter elides change-notification for
+            // identical values, so re-saving the same selector
+            // (e.g. confirming the same pick twice) would leave
+            // _suppressTabsRebuildOnce stuck-true and swallow the
+            // NEXT legitimate urlsJson change.
+            const newJson = JSON.stringify(arr);
+            if (newJson === Plasmoid.configuration.urlsJson) {
+                console.info("iframe-plasma[picker] urlsJson unchanged; suppression flag not raised");
+            } else {
+                root._suppressTabsRebuildOnce = true;
+                Plasmoid.configuration.urlsJson = newJson;
+            }
             console.info("iframe-plasma[picker] saved scope=" + scope
                 + " sel=" + JSON.stringify(sel) + " idx=" + tabIdx);
         } catch (e) {
