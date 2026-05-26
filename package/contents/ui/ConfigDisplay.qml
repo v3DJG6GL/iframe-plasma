@@ -13,25 +13,12 @@ KCM.SimpleKCM {
     property alias cfg_themeMode: themeStore.value
     property alias cfg_showTabBar: tabBarSwitch.checked
     property alias cfg_compactPreviewEnabled: compactSwitch.checked
-    property alias cfg_compactPreviewMode: modeStore.value
-    property alias cfg_compactPreviewTabIndex: compactStore.tabIndex
     property alias cfg_compactPreviewLongAxisPx: longAxisSpin.value
     property alias cfg_compactPreviewShowLabel: showLabelSwitch.checked
     property alias cfg_autoCycleEnabled: cycleBox.checked
     property alias cfg_autoCycleIntervalSec: cycleSpin.value
 
-    QtObject { id: themeStore;    property string value: "auto" }
-    QtObject { id: modeStore;     property string value: "auto" }  // "auto" | "fixed"
-    QtObject { id: compactStore;  property int    tabIndex: 0 }
-
-    // Parsed URL list — used to populate the "show preview from" combo
-    property var urlList: {
-        try {
-            const j = Plasmoid.configuration ? Plasmoid.configuration.urlsJson : "[]";
-            const arr = JSON.parse(j || "[]");
-            return Array.isArray(arr) ? arr : [];
-        } catch (e) { return []; }
-    }
+    QtObject { id: themeStore; property string value: "auto" }
 
     Kirigami.FormLayout {
         QQC.SpinBox {
@@ -87,49 +74,6 @@ KCM.SimpleKCM {
             Kirigami.FormData.label: i18n("Panel preview:")
             text: i18n("Render a live mini-preview in the Plasma panel slot")
             checked: true
-        }
-        QQC.ComboBox {
-            id: compactTabCombo
-            Kirigami.FormData.label: i18n("Preview source:")
-            enabled: compactSwitch.checked
-            // Item 0 is the auto-follow sentinel; items 1..N are the configured URLs.
-            // Storing the mode in a separate kcfg key (compactPreviewMode) keeps
-            // compactPreviewTabIndex usable as a simple int when mode=fixed.
-            readonly property var rows: {
-                const base = [{ id: "__auto__",
-                                display: i18n("Active popup tab (auto)") }];
-                for (let i = 0; i < urlList.length; i++) {
-                    const u = urlList[i];
-                    base.push({
-                        id: String(i),
-                        display: (u && u.label && u.label.length > 0)
-                            ? u.label
-                            : ((u && u.url) ? u.url : i18n("Tab %1", i + 1))
-                    });
-                }
-                return base;
-            }
-            model: rows
-            textRole: "display"
-            valueRole: "id"
-            currentIndex: {
-                if (modeStore.value === "auto") return 0;
-                const idx = compactStore.tabIndex + 1;  // shift to 1-based
-                return Math.max(1, Math.min(rows.length - 1, idx));
-            }
-            // Arrow form: avoids the `currentIndex` shadowing / binding-fight
-            // bug we hit with the previous `onActivated: compactStore.tabIndex = currentIndex`.
-            // `idx` is the freshly-clicked row index from the signal.
-            onActivated: idx => {
-                if (idx === 0) {
-                    modeStore.value = "auto";
-                } else {
-                    modeStore.value = "fixed";
-                    compactStore.tabIndex = idx - 1;  // shift back to 0-based
-                }
-            }
-            displayText: rows[currentIndex] ? rows[currentIndex].display : ""
-            NoWheel {}
         }
         QQC.SpinBox {
             id: longAxisSpin
@@ -191,7 +135,7 @@ KCM.SimpleKCM {
         QQC.Label {
             Layout.fillWidth: true
             Layout.maximumWidth: Kirigami.Units.gridUnit * 22
-            text: i18n("The panel slot renders a live mini-view of the selected tab. Per-tab `Panel-slot CSS selector` (URLs tab) crops the thumbnail to just one element — pick `canvas` for the chart pixels, `.u-wrap` for chart + axes. Note: `.u-over` is uPlot's transparent overlay layer — picking it shows nothing.")
+            text: i18n("The panel slot mirrors whichever tab is active in the popup. Per-URL settings on the URLs tab control how each tab is rendered in the slot (Grafana crop, custom CSS selector, plain text, an icon, or excluded from the slot entirely).")
             wrapMode: Text.WordWrap
             color: Kirigami.Theme.disabledTextColor
             font.pixelSize: Kirigami.Theme.defaultFont.pixelSize - 1

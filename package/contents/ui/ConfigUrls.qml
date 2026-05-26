@@ -8,6 +8,7 @@ import QtQuick.Layouts
 import QtQuick.Dialogs
 import org.kde.kcmutils as KCM
 import org.kde.kirigami as Kirigami
+import org.kde.iconthemes as KIconThemes
 
 KCM.SimpleKCM {
     id: page
@@ -30,6 +31,8 @@ KCM.SimpleKCM {
                     authProfileId: row.authProfileId || "",
                     thumbMode: row.thumbMode || "chartOnly",
                     thumbSelector: row.thumbSelector || "",
+                    thumbText: row.thumbText || "",
+                    thumbIconName: row.thumbIconName || "",
                     thumbTimeRange: row.thumbTimeRange || "",
                     popupMode: row.popupMode || "fullPanel",
                     popupSelector: row.popupSelector || ""
@@ -110,6 +113,8 @@ KCM.SimpleKCM {
                     authProfileId: entry.authProfileId || "",
                     thumbMode: mode,
                     thumbSelector: sel,
+                    thumbText: entry.thumbText || "",
+                    thumbIconName: entry.thumbIconName || "",
                     thumbTimeRange: entry.thumbTimeRange || "",
                     popupMode: pmode,
                     popupSelector: psel
@@ -131,7 +136,7 @@ KCM.SimpleKCM {
                 text: i18n("Add URL")
                 icon.name: "list-add"
                 onClicked: {
-                    listModel.append({ label: "", url: "https://", authProfileId: "", thumbMode: "chartOnly", thumbSelector: "", thumbTimeRange: "", popupMode: "fullPanel", popupSelector: "" });
+                    listModel.append({ label: "", url: "https://", authProfileId: "", thumbMode: "chartOnly", thumbSelector: "", thumbText: "", thumbIconName: "", thumbTimeRange: "", popupMode: "fullPanel", popupSelector: "" });
                     store.serialize();
                     urlList.currentIndex = listModel.count - 1;
                 }
@@ -160,26 +165,30 @@ KCM.SimpleKCM {
                 required property string authProfileId
                 required property string thumbMode
                 required property string thumbSelector
+                required property string thumbText
+                required property string thumbIconName
                 required property string popupMode
                 required property string popupSelector
-                // Compact list of Thumbnail-mode presets shown in the combo.
-                // Filtered down to fullPanel + custom for non-Grafana URLs
-                // because chartOnly/chartWithAxes are uPlot-specific. The
-                // Grafana helper "Edit Grafana settings…" path (and legacy
-                // configs) can still write thumbMode=chartOnly into the
-                // JSON — the combo just falls back to fullPanel for display
-                // when the stored value isn't in the filtered list.
-                readonly property var thumbModePresets: page.isGrafanaEmbed(url)
-                    ? [
+                // Thumbnail-mode presets shown in the combo. Grafana embeds
+                // get the uPlot-specific chartOnly/chartWithAxes presets in
+                // addition to the generic options; non-Grafana URLs see only
+                // the generic ones. `text`, `icon`, and `excluded` skip the
+                // WebEngineView render path entirely — cheap stand-ins for
+                // tabs whose live preview is uninteresting or unwanted.
+                readonly property var thumbModePresets: {
+                    const generic = [
+                        { value: "fullPanel", display: i18n("Full page (no crop)") },
+                        { value: "custom",    display: i18n("Custom CSS selector…") },
+                        { value: "text",      display: i18n("Text label") },
+                        { value: "icon",      display: i18n("Icon") },
+                        { value: "excluded",  display: i18n("Hide from panel slot") }
+                    ];
+                    if (!page.isGrafanaEmbed(url)) return generic;
+                    return [
                         { value: "chartOnly",     display: i18n("Chart only") },
-                        { value: "chartWithAxes", display: i18n("Chart + axes") },
-                        { value: "fullPanel",     display: i18n("Full page (no crop)") },
-                        { value: "custom",        display: i18n("Custom CSS selector…") }
-                      ]
-                    : [
-                        { value: "fullPanel",     display: i18n("Full page (no crop)") },
-                        { value: "custom",        display: i18n("Custom CSS selector…") }
-                      ]
+                        { value: "chartWithAxes", display: i18n("Chart + axes") }
+                    ].concat(generic);
+                }
 
                 width: ListView.view.width
 
@@ -337,17 +346,23 @@ KCM.SimpleKCM {
                                 QQC.ToolTip.delay: 600
                                 QQC.ToolTip.text: page.isGrafanaEmbed(url)
                                     ? i18n(
-                                        "How the panel-slot mini-view crops the page.\n\n"
+                                        "How the panel slot renders this tab.\n\n"
                                       + "  • Chart only      — uPlot's painted canvas (no axes, no title).\n"
                                       + "  • Chart + axes    — chart plus tick labels.\n"
                                       + "  • Full page       — entire view, no crop.\n"
-                                      + "  • Custom selector — any CSS selector you provide.")
+                                      + "  • Custom selector — any CSS selector you provide.\n"
+                                      + "  • Text label      — plain text (no live render). Cheap.\n"
+                                      + "  • Icon            — a KDE theme icon. Cheap.\n"
+                                      + "  • Hide            — never show this tab in the slot; skipped during rotation.")
                                     : i18n(
-                                        "How the panel-slot mini-view crops the page.\n\n"
+                                        "How the panel slot renders this tab.\n\n"
                                       + "  • Full page       — entire view, no crop.\n"
                                       + "  • Custom selector — any CSS selector you provide (the\n"
                                       + "                      sibling DOM is hidden and the target is\n"
-                                      + "                      sized to fill the slot).")
+                                      + "                      sized to fill the slot).\n"
+                                      + "  • Text label      — plain text (no live render). Cheap.\n"
+                                      + "  • Icon            — a KDE theme icon. Cheap.\n"
+                                      + "  • Hide            — never show this tab in the slot; skipped during rotation.")
                                 NoWheel {}
                             }
                         }
@@ -358,6 +373,71 @@ KCM.SimpleKCM {
                             placeholderText: i18n("e.g. .u-wrap, canvas, [data-testid='data-testid panel content']")
                             text: thumbSelector
                             onEditingFinished: { listModel.setProperty(index, "thumbSelector", text); store.serialize() }
+                        }
+
+                        // `text` mode follow-up: the panel slot renders this
+                        // string centered (no WebEngineView, no renderer
+                        // process). Falls back to the tab's `label` field
+                        // when empty, so a tab can show its name without an
+                        // extra config step.
+                        QQC.TextField {
+                            id: thumbTextField
+                            Layout.fillWidth: true
+                            visible: thumbMode === "text"
+                            placeholderText: i18n("e.g. DEV, PROD, server-01 (defaults to the tab label)")
+                            text: thumbText
+                            onEditingFinished: { listModel.setProperty(index, "thumbText", text); store.serialize() }
+                        }
+
+                        // `icon` mode follow-up: button opens KDE's icon
+                        // theme picker; the picked name (e.g.
+                        // "applications-internet") is rendered as a
+                        // Kirigami.Icon centered in the slot.
+                        RowLayout {
+                            Layout.fillWidth: true
+                            visible: thumbMode === "icon"
+                            spacing: Kirigami.Units.smallSpacing
+                            Kirigami.Icon {
+                                source: thumbIconName.length > 0 ? thumbIconName : "image-missing"
+                                implicitWidth:  Kirigami.Units.iconSizes.medium
+                                implicitHeight: Kirigami.Units.iconSizes.medium
+                            }
+                            QQC.Label {
+                                Layout.fillWidth: true
+                                text: thumbIconName.length > 0 ? thumbIconName : i18n("(no icon picked)")
+                                color: thumbIconName.length > 0
+                                    ? Kirigami.Theme.textColor
+                                    : Kirigami.Theme.disabledTextColor
+                                elide: Text.ElideRight
+                            }
+                            QQC.Button {
+                                text: thumbIconName.length > 0 ? i18n("Change…") : i18n("Pick icon…")
+                                icon.name: "preferences-desktop-icons"
+                                onClicked: iconDialog.open()
+                            }
+                            KIconThemes.IconDialog {
+                                id: iconDialog
+                                onIconNameChanged: (picked) => {
+                                    // Picker emits an empty string when the
+                                    // user cancels — leave the existing
+                                    // value untouched in that case.
+                                    if (picked && picked.length > 0) {
+                                        listModel.setProperty(index, "thumbIconName", picked);
+                                        store.serialize();
+                                    }
+                                }
+                            }
+                        }
+
+                        // `excluded` mode follow-up: explainer label, no input.
+                        QQC.Label {
+                            Layout.fillWidth: true
+                            Layout.maximumWidth: Kirigami.Units.gridUnit * 22
+                            visible: thumbMode === "excluded"
+                            text: i18n("This URL is hidden from the panel-slot preview and skipped during rotation.")
+                            wrapMode: Text.WordWrap
+                            color: Kirigami.Theme.disabledTextColor
+                            font.pixelSize: Kirigami.Theme.defaultFont.pixelSize - 1
                         }
 
                         // Widget (popup) crop. Independent of the thumbnail
@@ -827,7 +907,7 @@ KCM.SimpleKCM {
             if (!out) return;
             const vpMatch = pastedUrl.text.match(/[?&]viewPanel=panel-(\d+)/);
             const lbl = deriveLabel(vpMatch ? vpMatch[1] : null);
-            listModel.append({ label: lbl, url: out, authProfileId: "", thumbMode: "chartOnly", thumbSelector: "", thumbTimeRange: "" });
+            listModel.append({ label: lbl, url: out, authProfileId: "", thumbMode: "chartOnly", thumbSelector: "", thumbText: "", thumbIconName: "", thumbTimeRange: "", popupMode: "fullPanel", popupSelector: "" });
             store.serialize();
             pastedUrl.text = ""; pastedLabel.text = "";
         }

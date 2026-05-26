@@ -35,13 +35,22 @@
         <entry name="compactPreviewEnabled" type="Bool">
             <default>true</default>
         </entry>
-        <!-- "auto" (default) → thumbnail follows the popup's currentTabIndex.
-             "fixed" → thumbnail uses compactPreviewTabIndex below. -->
+        <!-- DEPRECATED in 0.5.0: the Display-tab "Preview source" dropdown
+             is gone; panel-slot rendering is now configured per-URL via
+             `thumbMode` (including a new `excluded` value for tabs that
+             should never appear in the slot). Kept read-only for the
+             one-shot migration in main.qml. Remove in 0.6.0. -->
         <entry name="compactPreviewMode" type="String">
             <default>auto</default>
         </entry>
         <entry name="compactPreviewTabIndex" type="Int">
             <default>0</default>
+        </entry>
+        <!-- One-shot flag for the per-URL thumbnail-mode migration. Set
+             true after main.qml has translated old compactPreviewMode=fixed
+             setups into per-URL `excluded` flags. -->
+        <entry name="compactPreviewMigrated" type="Bool">
+            <default>false</default>
         </entry>
         <!-- When true, render the URL's `label` field as a semi-transparent
              bar across the top of the panel-slot thumbnail. -->

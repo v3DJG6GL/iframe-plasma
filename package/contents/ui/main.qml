@@ -269,6 +269,11 @@ PlasmoidItem {
             // the old global useBasicAuthInjection to decide defaults, then
             // marks itself done via authProfilesPreemptMigrated.
             root.migratePreemptFlag();
+            // Compact-preview migration: translates the old
+            // compactPreviewMode="fixed" + compactPreviewTabIndex setup
+            // into per-URL thumbMode="excluded" markers. One-shot, marked
+            // via compactPreviewMigrated.
+            root.migrateCompactPreview();
             // Re-read authProfiles after the migration may have rewritten
             // authProfilesJson — the Connections onAuthProfilesJsonChanged
             // handler also re-parses, but the migration writes before that
@@ -850,6 +855,47 @@ PlasmoidItem {
             + " profilesUpdated=" + (mutated ? "yes" : "no"));
     }
 
+    // One-shot 0.5.0 migration: the global "Preview source" dropdown is
+    // gone; panel-slot rendering is now per-URL via thumbMode (with a new
+    // "excluded" value). When the old config had compactPreviewMode="fixed"
+    // + compactPreviewTabIndex=N, mark every OTHER tab as excluded — that
+    // preserves the user's "show only this tab in the panel slot" intent
+    // without needing the deprecated keys. For mode="auto" (or unset),
+    // do nothing: the new default already follows the popup's active tab.
+    function migrateCompactPreview() {
+        if (Plasmoid.configuration.compactPreviewMigrated) return;
+        const oldMode = Plasmoid.configuration.compactPreviewMode || "auto";
+        if (oldMode !== "fixed") {
+            Plasmoid.configuration.compactPreviewMigrated = true;
+            console.info("iframe-plasma[compact-migrate] no-op; oldMode=" + oldMode);
+            return;
+        }
+        const pinned = Plasmoid.configuration.compactPreviewTabIndex;
+        let tabsRaw;
+        try {
+            tabsRaw = JSON.parse(Plasmoid.configuration.urlsJson || "[]");
+            if (!Array.isArray(tabsRaw)) tabsRaw = [];
+        } catch (e) {
+            console.warn("iframe-plasma[compact-migrate] parse error:", e.message);
+            Plasmoid.configuration.compactPreviewMigrated = true;
+            return;
+        }
+        let mutated = false;
+        for (let i = 0; i < tabsRaw.length; i++) {
+            if (i === pinned) continue;   // keep the pinned tab visible
+            const t = tabsRaw[i];
+            if (!t || t.thumbMode === "excluded") continue;
+            t.thumbMode = "excluded";
+            mutated = true;
+        }
+        if (mutated) {
+            Plasmoid.configuration.urlsJson = JSON.stringify(tabsRaw);
+        }
+        Plasmoid.configuration.compactPreviewMigrated = true;
+        console.info("iframe-plasma[compact-migrate] pinned=" + pinned
+            + " tabsExcluded=" + (mutated ? "yes" : "no"));
+    }
+
     // Simple v4 UUID (sufficient for profile identity — not security-critical).
     function newUuid() {
         function hex() { return Math.floor(Math.random() * 16).toString(16); }
@@ -864,9 +910,14 @@ PlasmoidItem {
     }
 
     // Auto-cycle through tabs ONLY while the popup is closed — the panel-slot
-    // thumbnail (in "auto" preview mode) rotates through tabs in the background,
-    // but the moment the user opens the widget the cycle pauses so they can
-    // browse without the active tab being yanked out from under them.
+    // thumbnail rotates through tabs in the background, but the moment the
+    // user opens the widget the cycle pauses so they can browse without the
+    // active tab being yanked out from under them.
+    //
+    // Tabs marked thumbMode="excluded" on the URLs tab are skipped: the next-
+    // index walk advances past them in order. If every tab is excluded (or
+    // only the current one is non-excluded) the timer keeps running but
+    // advanceCycleTab is a no-op for that tick.
     Timer {
         id: cycleTimer
         interval: Math.max(5, Plasmoid.configuration.autoCycleIntervalSec) * 1000
@@ -875,7 +926,21 @@ PlasmoidItem {
                  && !root.expanded
                  && root.compactObservable
         repeat: true
-        onTriggered: root.advanceCycleTab((root.currentTabIndex + 1) % root.tabs.length)
+        onTriggered: {
+            const n = root.tabs.length;
+            if (n < 2) return;
+            // Walk forward up to n-1 steps looking for the next non-excluded
+            // tab. Bail (no-op) if we wrap all the way back to where we
+            // started — all other tabs are excluded.
+            for (let step = 1; step < n; step++) {
+                const candidate = (root.currentTabIndex + step) % n;
+                const t = root.tabs[candidate];
+                if (t && t.thumbMode !== "excluded") {
+                    root.advanceCycleTab(candidate);
+                    return;
+                }
+            }
+        }
     }
 
     // Cookie clearing per-host needs `profile.cookieStore` which QML doesn't
@@ -995,25 +1060,42 @@ PlasmoidItem {
     compactRepresentation: Item {
         id: compact
 
-        // Thumbnail tab source:
-        //   - mode="auto"  (default) → follow the popup's currentTabIndex.
-        //     QML's binding system handles auto-follow automatically:
-        //     currentTabIndex change → previewTabIdx re-evaluates →
-        //     previewTab → miniView.url → WebEngineView reloads.
-        //   - mode="fixed" → use the saved compactPreviewTabIndex.
-        readonly property string previewMode: Plasmoid.configuration.compactPreviewMode || "auto"
+        // Thumbnail tab source: follow the popup's currentTabIndex,
+        // skipping tabs the user marked thumbMode=excluded on the URLs tab.
+        // QML's binding system handles auto-follow automatically:
+        // currentTabIndex change → previewTabIdx re-evaluates → previewTab
+        // → miniView.url → WebEngineView reloads.
+        //
+        // Returns -1 when there is no eligible tab to show (no tabs at all,
+        // current tab is excluded, or out-of-range). The render path falls
+        // back to the plasmoid icon in that case.
         readonly property int previewTabIdx: {
-            if (root.tabs.length === 0) return 0;
-            const cap = root.tabs.length - 1;
-            if (previewMode === "auto") {
-                return Math.max(0, Math.min(root.currentTabIndex, cap));
-            }
-            return Math.max(0, Math.min(
-                Plasmoid.configuration.compactPreviewTabIndex, cap));
+            if (root.tabs.length === 0) return -1;
+            const idx = root.currentTabIndex;
+            if (idx < 0 || idx >= root.tabs.length) return -1;
+            const t = root.tabs[idx];
+            if (!t || t.thumbMode === "excluded") return -1;
+            return idx;
         }
-        readonly property var previewTab: root.tabs.length > 0 ? root.tabs[previewTabIdx] : null
-        readonly property bool previewLive: Plasmoid.configuration.compactPreviewEnabled
-                                            && previewTab
+        readonly property var previewTab: previewTabIdx >= 0 ? root.tabs[previewTabIdx] : null
+        // Render-path branches. Only one is true at a time. `liveThumbWanted`
+        // gates the WebEngineView Loader so text/icon modes pay no Chromium
+        // subprocess cost; the icon-fallback Item shows when none are wanted.
+        readonly property string previewThumbMode: previewTab ? (previewTab.thumbMode || "chartOnly") : ""
+        readonly property bool liveThumbWanted: Plasmoid.configuration.compactPreviewEnabled
+                                                && previewTab
+                                                && previewThumbMode !== "text"
+                                                && previewThumbMode !== "icon"
+                                                && previewThumbMode !== "excluded"
+        readonly property bool textThumbWanted: Plasmoid.configuration.compactPreviewEnabled
+                                                && previewTab
+                                                && previewThumbMode === "text"
+        readonly property bool iconThumbWanted: Plasmoid.configuration.compactPreviewEnabled
+                                                && previewTab
+                                                && previewThumbMode === "icon"
+        // Legacy alias: kept as `previewLive` because miniActive/miniLoader
+        // downstream still reference it. Now means "live web view wanted".
+        readonly property bool previewLive: liveThumbWanted
 
         // The thumbnail is "active" — live, rendering, polling — when the
         // panel slot is observable (not screen-locked, panel on screen). It
@@ -1368,14 +1450,69 @@ PlasmoidItem {
         }
 
         // --- Icon fallback --------------------------------------------------
-        // Shows whenever the live thumbnail isn't: feature disabled, no tab,
-        // screen locked, or panel slot off-screen.
+        // Shows the standard plasmoid icon whenever no other render branch
+        // is active: live preview off, no tab, current tab excluded, screen
+        // locked, panel slot off-screen, OR text/icon-thumb modes (which
+        // own their own visuals via the items below).
         Kirigami.Icon {
             anchors.centerIn: parent
             width: Math.min(parent.width, parent.height) - Kirigami.Units.smallSpacing
             height: width
             visible: !compact.miniActive
+                  && !compact.textThumbWanted
+                  && !compact.iconThumbWanted
             source: Plasmoid.icon || "applications-internet"
+            z: 0
+        }
+
+        // --- Text-label thumbnail ------------------------------------------
+        // Renders previewTab.thumbText centered with theme background. No
+        // WebEngineView (no renderer process). Falls back to the tab's
+        // label field when thumbText is empty, so a user can switch a tab
+        // to "Text label" and immediately see its name without an extra
+        // config step.
+        Rectangle {
+            anchors.fill: parent
+            visible: compact.textThumbWanted
+            color: Kirigami.Theme.backgroundColor
+            z: 0
+            QQC.Label {
+                anchors.fill: parent
+                anchors.margins: Kirigami.Units.smallSpacing
+                text: {
+                    const t = compact.previewTab;
+                    if (!t) return "";
+                    const explicit = t.thumbText || "";
+                    return explicit.length > 0 ? explicit : (t.label || "");
+                }
+                color: Kirigami.Theme.textColor
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                wrapMode: Text.Wrap
+                elide: Text.ElideRight
+                // Slot-relative font size: scale with whichever axis is
+                // smaller so the text fits both fat and thin panels. Cap so
+                // single-character labels don't balloon on huge desktops.
+                font.pixelSize: Math.max(8, Math.min(48,
+                    Math.round(Math.min(parent.width, parent.height) * 0.32)))
+                font.family: Theme.fontHeader
+            }
+        }
+
+        // --- Icon thumbnail ------------------------------------------------
+        // Renders previewTab.thumbIconName (KDE theme icon) centered.
+        // Falls back to the standard plasmoid icon when the name is empty
+        // so a half-configured "Icon" mode still looks intentional.
+        Kirigami.Icon {
+            anchors.centerIn: parent
+            width: Math.min(parent.width, parent.height) - Kirigami.Units.smallSpacing
+            height: width
+            visible: compact.iconThumbWanted
+            source: {
+                const t = compact.previewTab;
+                const name = (t && t.thumbIconName) || "";
+                return name.length > 0 ? name : (Plasmoid.icon || "applications-internet");
+            }
             z: 0
         }
 
