@@ -707,15 +707,24 @@ PlasmoidItem {
             // picker save a no-op (the urlsJson write below never
             // even ran). Confirmed in journal as `save error:
             // repeater is not defined`.
+            const fr = root.fullRepresentationItem;
             if (scope === "popup" || scope === "both") {
                 const newPopupSel = (entry.popupMode === "custom")
                                   ? (entry.popupSelector || "") : "";
-                const fr = root.fullRepresentationItem;
                 if (fr && typeof fr.applyPopupSelectorAt === "function") {
                     const ok = fr.applyPopupSelectorAt(tabIdx, newPopupSel);
                     if (!ok) console.warn("iframe-plasma[picker] no live WebTab at idx=" + tabIdx);
                 } else {
                     console.warn("iframe-plasma[picker] fullRepresentationItem unavailable");
+                }
+            } else {
+                // Thumb-only save: popup was not touched, but the picker's
+                // _PICKER_START_BODY teardown stripped popup isolation before
+                // the dialog opened. The dialog's onClosed Cancel branch
+                // would have restored it, but _saved=true skips that path.
+                // Re-engage the existing popupSelector here.
+                if (fr && typeof fr.restorePopupSelectorAt === "function") {
+                    fr.restorePopupSelectorAt(tabIdx);
                 }
             }
 
