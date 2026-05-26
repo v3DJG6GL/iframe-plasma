@@ -583,8 +583,14 @@ PlasmoidItem {
         const profilesInUse = {};   // id -> { profile, hosts: [] }
         for (const t of root.tabs) {
             if (!t.authProfileId || !t.url) continue;
+            // Resolve ${theme} (and any future placeholders) before parsing:
+            // `new URL("https://${theme}.example.com/")` throws because
+            // `$`/`{`/`}` are invalid in a WHATWG host, and the inner catch
+            // would silently `continue` — the tab would never get its host
+            // added to profilesInUse, so applyProfile would not register
+            // a header for it and the tab would land unauthenticated.
             let host;
-            try { host = new URL(t.url).host; } catch (e) { continue; }
+            try { host = new URL(root.resolveUrl(t)).host; } catch (e) { continue; }
             const p = root.profileById(t.authProfileId);
             if (!p) continue;
             if (!profilesInUse[p.id]) profilesInUse[p.id] = { profile: p, hosts: [] };
