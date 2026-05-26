@@ -252,17 +252,23 @@ Rectangle {
             Layout.preferredWidth: width
             Layout.preferredHeight: height
             hoverEnabled: true
-            checkable: true
-            checked: tb.pinned
-            onToggled: tb.pinToggled()
-            QQC.ToolTip.text: checked ? i18n("Keep open — popup stays when another window is activated (click to unpin)")
-                                      : i18n("Keep open — pin so the popup stays when another window is activated")
+            // NOT `checkable: true` — QQC2's checkable button toggles
+            // `checked` imperatively on click, which BREAKS any
+            // declarative `checked: tb.pinned` binding for the rest of
+            // the button's lifetime. After the first click the glyph
+            // could drift from the actual popupPinned config. Source
+            // the visual state from tb.pinned directly and forward
+            // clicks through pinToggled (the config write feeds back
+            // into tb.pinned via the existing binding).
+            onClicked: tb.pinToggled()
+            QQC.ToolTip.text: tb.pinned ? i18n("Keep open — popup stays when another window is activated (click to unpin)")
+                                        : i18n("Keep open — pin so the popup stays when another window is activated")
             QQC.ToolTip.visible: hovered
             QQC.ToolTip.delay: 600
             contentItem: Rectangle {
-                color: pinBtn.checked ? Theme.surfaceHi
+                color: tb.pinned ? Theme.surfaceHi
                      : pinBtn.hovered ? Theme.surfaceHi : Theme.surface
-                border.color: pinBtn.checked ? Theme.accent : Theme.fgMute
+                border.color: tb.pinned ? Theme.accent : Theme.fgMute
                 border.width: 1
                 radius: 2
                 // `window-pin` is the canonical Breeze action icon for
@@ -273,7 +279,7 @@ Rectangle {
                     anchors.centerIn: parent
                     width: 14; height: 14
                     source: "window-pin"
-                    color: pinBtn.checked ? Theme.accent : Theme.fgMute
+                    color: tb.pinned ? Theme.accent : Theme.fgMute
                     isMask: true
                 }
             }
