@@ -153,9 +153,18 @@ void BasicAuthInterceptor::interceptRequest(QWebEngineUrlRequestInfo &info)
     const bool isDefaultPort = (rawPort == -1)
         || (scheme == QLatin1String("https") && rawPort == 443)
         || (scheme == QLatin1String("http")  && rawPort == 80);
+    // QUrl::host() strips brackets from IPv6 literals (returns `::1` for
+    // `https://[::1]/`), while WHATWG `URL.host` on the QML registration
+    // side keeps them (`[::1]`, or `[::1]:9100` for non-default port).
+    // Re-add brackets here so IPv6-literal hosts actually match — the
+    // colon-in-rawHost is the IPv6 sigil since QUrl already separated the
+    // port into rawPort.
+    const QString bracketedHost = rawHost.contains(QLatin1Char(':'))
+        ? QLatin1Char('[') + rawHost + QLatin1Char(']')
+        : rawHost;
     const QString host = isDefaultPort
-        ? rawHost
-        : rawHost + QLatin1Char(':') + QString::number(rawPort);
+        ? bracketedHost
+        : bracketedHost + QLatin1Char(':') + QString::number(rawPort);
     QByteArray header;
     bool hadAny = false;
     {
