@@ -169,21 +169,6 @@ PlasmoidItem {
     readonly property string activeTabSessionRange:
         (activeTab && activeTab.currentTimeRange) || ""
 
-    // Diagnostic — logs when QML's binding tracker actually fires the
-    // root.activeTabSessionRangeChanged signal. If this is silent when the
-    // user picks a new range in the popup, the binding isn't reactive (QML
-    // didn't track the inner activeTab.currentTimeRange dependency) and the
-    // per-delegate Connections downstream can't fire either.
-    onActiveTabSessionRangeChanged: {
-        console.info("iframe-plasma[root-range] activeTabSessionRange="
-            + JSON.stringify(activeTabSessionRange)
-            + " activeTab=" + (activeTab ? "tab" : "null"));
-    }
-    onActiveTabChanged: {
-        console.info("iframe-plasma[root-range] activeTab changed; range now="
-            + JSON.stringify(activeTabSessionRange));
-    }
-
     // Per-thumbnail URL resolver. `thumbTimeRange` semantics:
     //   - "" or "auto"     → use the URL's own from/to (no rewrite). When
     //                         the popup's currently-active tab is THIS tab
@@ -1338,50 +1323,49 @@ PlasmoidItem {
                 readonly property string ownSelector: root.thumbSelectorFor(ownTab)
 
                 // Per-delegate auto-follow override. Defaults to "" (use
-                // tab's static thumbTimeRange / URL-own range). Only the
-                // Connections handler below writes to this — it bumps the
-                // value when the user picks a NEW time range in the popup
-                // toolbar (i.e. activeTabSessionRange changed without
-                // activeTab changing). On tab switches / auto-rotate, the
-                // override stays put → URL stays put → no reload.
+                // tab's static thumbTimeRange / URL-own range). The
+                // Connections handler below bumps this when the user picks
+                // a new time range in the popup toolbar AND this delegate
+                // is the popup's currently-active tab. On tab switches /
+                // auto-rotate, the override stays put → URL stays put →
+                // no reload.
                 property string sessionRangeOverride: ""
-                property var _lastSeenActiveTab: null
+                // Track currentTabIndex changes to disambiguate "tab switched"
+                // from "user picked a new range on the same tab". Both fire
+                // onActiveTabSessionRangeChanged, but only the latter should
+                // propagate to the thumb. Reference comparison on tab
+                // objects was unreliable — modelData captured at delegate
+                // creation can drift from root.tabs[i] after rebuild
+                // patterns — so use the integer index instead.
+                property int _lastSeenActiveIndex: -1
 
                 profile: root.profileForAuthId(ownTab ? ownTab.authProfileId : "")
                 url: root.resolveThumbUrlWith(ownTab, sessionRangeOverride)
 
-                Component.onCompleted: _lastSeenActiveTab = root.activeTab
+                Component.onCompleted: _lastSeenActiveIndex = root.currentTabIndex
 
                 Connections {
                     target: root
                     function onActiveTabSessionRangeChanged() {
-                        // Disambiguate two reasons activeTabSessionRange
-                        // changed: (a) the active tab itself swapped (tab
-                        // switch in popup or auto-rotate tick) — DON'T
-                        // touch our override, the thumb keeps showing
-                        // whatever it last showed → no reload; or (b) the
-                        // same active tab's currentTimeRange was updated
-                        // (user picked a new preset from the popup toolbar)
-                        // — propagate to our override IF we are the popup-
-                        // active tab and we opted into auto-follow.
                         const newRange = root.activeTabSessionRange;
-                        const sameActive = (root.activeTab === miniView._lastSeenActiveTab);
-                        console.info("iframe-plasma[mini-range] idx=" + miniView.ownIndex
-                            + " signal range=" + JSON.stringify(newRange)
-                            + " sameActive=" + sameActive
-                            + " ownTabIsActive=" + (root.tabs[root.currentTabIndex] === miniView.ownTab)
-                            + " thumbTimeRange=" + JSON.stringify(miniView.ownTab ? miniView.ownTab.thumbTimeRange : null));
-                        if (!sameActive) {
-                            miniView._lastSeenActiveTab = root.activeTab;
+                        const currentIdx = root.currentTabIndex;
+                        const sameTab = (currentIdx === miniView._lastSeenActiveIndex);
+                        if (!sameTab) {
+                            // Tab switch in popup / auto-rotate tick. Don't
+                            // propagate — thumb keeps its last-shown view.
+                            miniView._lastSeenActiveIndex = currentIdx;
                             return;
                         }
+                        // Same active tab, range actually changed (user
+                        // picked a new preset). Propagate ONLY if THIS
+                        // delegate is the popup's active tab AND its tab
+                        // opted into auto-follow ("" or "auto" thumbTimeRange).
+                        if (miniView.ownIndex !== currentIdx) return;
                         const t = miniView.ownTab;
                         if (!t || (t.thumbTimeRange || "auto") !== "auto") return;
-                        if (root.tabs[root.currentTabIndex] === t) {
-                            console.info("iframe-plasma[mini-range] idx=" + miniView.ownIndex
-                                + " applying override=" + JSON.stringify(newRange));
-                            miniView.sessionRangeOverride = newRange;
-                        }
+                        console.info("iframe-plasma[mini-range] idx=" + miniView.ownIndex
+                            + " applying override=" + JSON.stringify(newRange));
+                        miniView.sessionRangeOverride = newRange;
                     }
                 }
 
