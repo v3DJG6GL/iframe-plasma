@@ -39,8 +39,18 @@ PlasmoidItem {
     // background" available for users who want one.
     Plasmoid.backgroundHints: PlasmaCore.Types.NoBackground | PlasmaCore.Types.ConfigurableBackground
 
-    // Parsed tab list, refreshed whenever config changes
-    property var tabs: parseTabs(Plasmoid.configuration.urlsJson)
+    // Parsed tab list, refreshed whenever config changes.
+    //
+    // CRITICAL: this MUST NOT be a binding on Plasmoid.configuration.urlsJson.
+    // A binding re-evaluates whenever urlsJson changes and reassigns root.tabs
+    // to a NEW array — that fires Repeater rebuild, destroying every WebTab
+    // delegate AND the embedded WebEngineView. If an async runJavaScript
+    // callback was in flight at that moment (e.g. from savePickedSelector's
+    // applyImmediately), it fires on the destroyed webview and crashes
+    // plasmashell with SIGSEGV in QJSEngine::create / didRunJavaScript.
+    // The Connections handler below is the ONLY writer of root.tabs and
+    // honours the _suppressTabsRebuildOnce guard.
+    property var tabs: []
     property int currentTabIndex: Math.max(0, Math.min(Plasmoid.configuration.currentTabIndex, tabs.length - 1))
     // One-shot guard: when savePickedSelector writes urlsJson, set
     // this to true so onUrlsJsonChanged skips the tabs[] reassignment
@@ -238,6 +248,11 @@ PlasmoidItem {
     }
 
     Component.onCompleted: {
+        // Seed root.tabs from the current urlsJson. The `property var
+        // tabs: []` declaration above intentionally has NO binding —
+        // see the comment there.
+        root.tabs = root.parseTabs(Plasmoid.configuration.urlsJson);
+
         // Run the one-shot legacy-auth migration BEFORE priming the
         // interceptor — converts per-URL basicAuthUser/rawAuthHeader to
         // named auth profiles, writes secrets to KWallet under
