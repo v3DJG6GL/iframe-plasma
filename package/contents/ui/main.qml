@@ -469,6 +469,21 @@ PlasmoidItem {
         return name;
     }
 
+    // Per-tab thumbnail CSS selector. Lifted out of the compact rep so the
+    // new N-parallel architecture lets each per-tab WebEngineView compute
+    // its own selector instead of all sharing one tied to the popup's
+    // active tab. Presets target Grafana's uPlot DOM; .u-wrap > canvas is
+    // the painted bitmap, guaranteed non-transparent.
+    function thumbSelectorFor(tab) {
+        if (!tab) return "";
+        switch (tab.thumbMode || "chartOnly") {
+        case "chartOnly":     return ".u-wrap > canvas";
+        case "chartWithAxes": return ".u-wrap";
+        case "custom":        return tab.thumbSelector || "";
+        default:              return "";   // fullPanel / text / icon / excluded
+        }
+    }
+
     // Attach/detach the interceptor whenever the toggle or plugin availability changes.
     // Signal fired from root-level events; WebTab listens and reloads its view.
     // Cleaner than reaching into fullRepresentation's StackLayout from outside.
@@ -1092,32 +1107,13 @@ PlasmoidItem {
             return idx;
         }
         readonly property var previewTab: previewTabIdx >= 0 ? root.tabs[previewTabIdx] : null
-        // Render-path branches. Only one is true at a time. `liveThumbWanted`
-        // gates the WebEngineView Loader so text/icon modes pay no Chromium
-        // subprocess cost; the icon-fallback Item shows when none are wanted.
-        readonly property string previewThumbMode: previewTab ? (previewTab.thumbMode || "chartOnly") : ""
-        readonly property bool liveThumbWanted: Plasmoid.configuration.compactPreviewEnabled
-                                                && previewTab
-                                                && previewThumbMode !== "text"
-                                                && previewThumbMode !== "icon"
-                                                && previewThumbMode !== "excluded"
-        readonly property bool textThumbWanted: Plasmoid.configuration.compactPreviewEnabled
-                                                && previewTab
-                                                && previewThumbMode === "text"
-        readonly property bool iconThumbWanted: Plasmoid.configuration.compactPreviewEnabled
-                                                && previewTab
-                                                && previewThumbMode === "icon"
-        // Legacy alias: kept as `previewLive` because miniActive/miniLoader
-        // downstream still reference it. Now means "live web view wanted".
-        readonly property bool previewLive: liveThumbWanted
 
-        // The thumbnail is "active" — live, rendering, polling — when the
-        // panel slot is observable (not screen-locked, panel on screen). It
-        // stays live while the popup is open. When false the miniView is
-        // hidden (so QtWebEngine permits a non-Active lifecycleState) and
-        // frozen, and the icon fallback takes the slot.
-        readonly property bool miniActive: previewLive
-                                           && root.compactObservable
+        // Whether the slot has any live-rendering work to show. Used by the
+        // fallback icon's visibility predicate. Replaces the older
+        // miniActive / previewLive / *ThumbWanted properties — per-tab
+        // gating now happens inside each StackLayout delegate.
+        readonly property bool slotShowsContent: previewTabIdx >= 0
+                                              && Plasmoid.configuration.compactPreviewEnabled
 
         // The panel window's own visibility — false when the panel's Activity
         // is not the current one. `Window.window` is null before the slot is
@@ -1130,64 +1126,6 @@ PlasmoidItem {
             target: root
             property: "compactWindowVisible"
             value: compact.panelWindowVisible
-        }
-
-        // Thumbnail mode → CSS selector. Presets target Grafana TimeSeries
-        // (uPlot) panels; .u-wrap > canvas is the painted bitmap and is
-        // guaranteed non-transparent (the .u-over / .u-under bug we hit
-        // earlier). `custom` re-exposes the user's free-text selector.
-        readonly property string thumbMode: (previewTab && previewTab.thumbMode) || "chartOnly"
-        readonly property string thumbSelector: {
-            const m = thumbMode;
-            const custom = (previewTab && previewTab.thumbSelector) || "";
-            switch (m) {
-            case "chartOnly":     return ".u-wrap > canvas";
-            case "chartWithAxes": return ".u-wrap";
-            case "fullPanel":     return "";
-            case "custom":        return custom;
-            default:              return "";
-            }
-        }
-
-        // Force a full reload when the mode changes, so applyThumbCrop is
-        // triggered fresh via onLoadingChanged (the page is otherwise stable
-        // and won't re-fire LoadSucceededStatus). Also covers the case where
-        // the previous selector's MutationObserver was already torn down.
-        onThumbSelectorChanged: {
-            console.info("iframe-plasma[compact] thumbMode=" + thumbMode
-                + " → selector=" + JSON.stringify(thumbSelector)
-                + "; reloading miniView");
-            if (miniLoader.item) miniLoader.item.reload();
-        }
-
-        // Direct trigger from savePickedSelector when the picker save
-        // touched a thumb-scope selector. The compact's thumbSelector
-        // binding can't see a JS-object property mutation on
-        // root.tabs[i], so the onThumbSelectorChanged handler above
-        // won't fire automatically — this signal route forces the
-        // apply with the EXPLICIT new selector (passed through the
-        // signal payload). A full reload would re-fetch the URL
-        // unnecessarily AND re-apply via the still-cached binding
-        // value, so we call applyThumbCrop directly.
-        Connections {
-            target: root
-            function on_ThumbSelectorSaved(tabIdx, newSelector) {
-                if (tabIdx !== compact.previewTabIdx) return;
-                if (!miniLoader.item) return;
-                if (newSelector && newSelector.length > 0
-                    && typeof miniLoader.item.applyThumbCrop === "function") {
-                    console.info("iframe-plasma[compact] thumb-save apply idx=" + tabIdx
-                        + " sel=" + JSON.stringify(newSelector));
-                    miniLoader.item.applyThumbCrop(newSelector);
-                } else {
-                    // fullPanel / empty selector — fall back to a
-                    // reload (no clear-attribute path on the mini
-                    // view today; reload returns the page to its
-                    // natural un-cropped state).
-                    console.info("iframe-plasma[compact] thumb-save reload idx=" + tabIdx);
-                    miniLoader.item.reload();
-                }
-            }
         }
 
         // Panel-slot sizing. The canonical Plasma 6 rule (mirroring
@@ -1238,292 +1176,324 @@ PlasmoidItem {
 
         clip: true
 
-        // --- Live preview ---------------------------------------------------
-        // Gate the WebEngineView behind a Loader so we don't pay Chromium
-        // init cost (subprocess, GPU context, profile attach) when the user
-        // has disabled the live preview or has no tabs configured.  The
-        // fallback icon (below) takes over when `previewLive === false`.
-        Loader {
-            id: miniLoader
-            width:  compact.internalWidth
-            height: compact.internalHeight
-            anchors.top:  parent.top
-            anchors.left: parent.left
-            z: 0   // below the hover-shield MouseArea so hover doesn't reach Chromium
-            // `active` keeps the WebEngineView instantiated whenever the
-            // preview feature is on, so freeze/thaw is instant; `visible`
-            // narrows to miniActive so the view goes invisible (freezable)
-            // when the slot isn't observed.
-            active:  compact.previewLive
-            visible: compact.miniActive
-            sourceComponent: miniViewComp
+        // --- Per-tab render stack ------------------------------------------
+        // One delegate per configured tab, picked by StackLayout.currentIndex
+        // = compact.previewTabIdx. Each delegate carries its own renderer
+        // (WebEngineView for live modes, Rectangle for text, Kirigami.Icon
+        // for icon, empty Item for excluded) and its own WebViewLifecycle
+        // so freeze/discard delays now apply per-thumb — switching tabs in
+        // the popup reveals an already-rendered thumbnail instead of a
+        // navigation-reload spinner. Mirrors the popup's WebTab Repeater
+        // pattern (`fullRepresentation` further down) verbatim.
+        //
+        // Hidden entirely (→ fallback icon takes the slot) when:
+        //   • compactPreviewEnabled is off,
+        //   • previewTabIdx is -1 (no tabs, or current tab is "excluded").
+        StackLayout {
+            id: thumbStack
+            anchors.fill: parent
+            z: 0
+            visible: compact.slotShowsContent
+            currentIndex: Math.max(0, compact.previewTabIdx)
+
+            Repeater {
+                model: root.tabs
+                delegate: Item {
+                    id: thumbSlot
+                    required property int index
+                    required property var modelData
+
+                    // Cache the mode + per-tab predicates so the per-delegate
+                    // Loader, lifecycle, and visibility bindings stay readable.
+                    readonly property string slotMode: (modelData && modelData.thumbMode) || "chartOnly"
+                    readonly property bool isCurrent: thumbSlot.index === compact.previewTabIdx
+                                                   && compact.previewTabIdx >= 0
+                    readonly property bool wantLive: Plasmoid.configuration.compactPreviewEnabled
+                                                  && slotMode !== "text"
+                                                  && slotMode !== "icon"
+                                                  && slotMode !== "excluded"
+
+                    // --- Live web preview (per tab) -----------------------
+                    // Loader-gated so excluded / text / icon tabs pay zero
+                    // Chromium-renderer cost. When `active` flips false the
+                    // WebEngineView is destroyed; flipping it true re-loads
+                    // from scratch (matches today's URL-change reload, just
+                    // localized to one tab).
+                    Loader {
+                        id: webLoader
+                        anchors.top: parent.top
+                        anchors.left: parent.left
+                        width: compact.internalWidth
+                        height: compact.internalHeight
+                        active: thumbSlot.wantLive
+                        sourceComponent: webThumbComp
+
+                        // Per-instance data plumbed via Loader properties —
+                        // Components are templates with no constructor args,
+                        // so the loaded item reads its own context via
+                        // `parent.<prop>` (parent of the loaded item is this
+                        // Loader).
+                        property var ownTab: thumbSlot.modelData
+                        property int ownIndex: thumbSlot.index
+                        property bool ownIsCurrent: thumbSlot.isCurrent
+                    }
+
+                    // --- Text mode ----------------------------------------
+                    Rectangle {
+                        anchors.fill: parent
+                        visible: thumbSlot.slotMode === "text"
+                                 && Plasmoid.configuration.compactPreviewEnabled
+                        color: Kirigami.Theme.backgroundColor
+                        QQC.Label {
+                            anchors.fill: parent
+                            anchors.margins: Kirigami.Units.smallSpacing
+                            text: {
+                                const t = thumbSlot.modelData;
+                                if (!t) return "";
+                                const explicit = t.thumbText || "";
+                                return explicit.length > 0 ? explicit : (t.label || "");
+                            }
+                            color: Kirigami.Theme.textColor
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                            wrapMode: Text.Wrap
+                            elide: Text.ElideRight
+                            font.pixelSize: Math.max(8, Math.min(48,
+                                Math.round(Math.min(parent.width, parent.height) * 0.32)))
+                            font.family: Theme.fontHeader
+                        }
+                    }
+
+                    // --- Icon mode ----------------------------------------
+                    Kirigami.Icon {
+                        anchors.centerIn: parent
+                        width: Math.min(parent.width, parent.height) - Kirigami.Units.smallSpacing
+                        height: width
+                        visible: thumbSlot.slotMode === "icon"
+                                 && Plasmoid.configuration.compactPreviewEnabled
+                        color: Kirigami.Theme.textColor
+                        source: root.resolveIconSource(thumbSlot.modelData ? thumbSlot.modelData.thumbIconName : "")
+                    }
+
+                    // `excluded` mode: leave the delegate blank. The
+                    // currentIndex pointer never lands here (previewTabIdx
+                    // returns -1 for the excluded case, the StackLayout
+                    // itself goes invisible, fallback icon takes over).
+                }
+            }
         }
 
+        // Per-tab live-preview WebEngineView. Replicated once per Repeater
+        // delegate, with per-instance config sourced from the parent Loader's
+        // ownTab / ownIndex / ownIsCurrent properties. Behaviour pinning
+        // (settings, permission/dialog rejects, console-log capture, crop-
+        // engine apply, reflow timer, lifecycle) mirrors the old miniView
+        // verbatim; the only changes are (a) source the active tab from
+        // the Loader instead of compact.previewTab, and (b) self-filter the
+        // _thumbSelectorSaved signal by ownIndex.
         Component {
-            id: miniViewComp
+            id: webThumbComp
 
             WebEngineView {
                 id: miniView
                 anchors.fill: parent
-                profile: root.profileForAuthId(compact.previewTab ? compact.previewTab.authProfileId : "")
-                url: compact.previewTab ? root.resolveThumbUrl(compact.previewTab) : "about:blank"
+
+                readonly property var ownTab: parent.ownTab
+                readonly property int ownIndex: parent.ownIndex
+                readonly property bool ownIsCurrent: parent.ownIsCurrent
+                readonly property string ownSelector: root.thumbSelectorFor(ownTab)
+
+                profile: root.profileForAuthId(ownTab ? ownTab.authProfileId : "")
+                url: ownTab ? root.resolveThumbUrl(ownTab) : "about:blank"
 
                 settings.javascriptEnabled: true
-            settings.showScrollBars: false
-            settings.localStorageEnabled: true
-            settings.pluginsEnabled: false
-            settings.javascriptCanPaste: false
-            // Defense-in-depth: thumbnail is passive (enabled:false) — no
-            // interaction needed, so clamp every capability that could be
-            // abused by a hostile page sneaking through a configured URL.
-            settings.localContentCanAccessFileUrls: false
-            settings.localContentCanAccessRemoteUrls: false
-            settings.javascriptCanOpenWindows: false
-            settings.javascriptCanAccessClipboard: false
-            settings.allowRunningInsecureContent: false
-            settings.pdfViewerEnabled: false
-            settings.webRTCPublicInterfacesOnly: true
-            backgroundColor: "transparent"
-            zoomFactor: 1.0
-            enabled: false   // pass clicks through to the MouseArea above
-            smooth: true
+                settings.showScrollBars: false
+                settings.localStorageEnabled: true
+                settings.pluginsEnabled: false
+                settings.javascriptCanPaste: false
+                settings.localContentCanAccessFileUrls: false
+                settings.localContentCanAccessRemoteUrls: false
+                settings.javascriptCanOpenWindows: false
+                settings.javascriptCanAccessClipboard: false
+                settings.allowRunningInsecureContent: false
+                settings.pdfViewerEnabled: false
+                settings.webRTCPublicInterfacesOnly: true
+                backgroundColor: "transparent"
+                zoomFactor: 1.0
+                enabled: false
+                smooth: true
 
-            // Mirror WebTab.qml policy pins on the thumbnail; `enabled:false`
-            // only suppresses input, not Chromium-side capability defaults, so
-            // the miniView still needs explicit denies in case a configured
-            // URL or downstream redirect triggers any of these requests during
-            // the thumb's render window.
-            onFeaturePermissionRequested: function(securityOrigin, feature) {
-                console.warn("iframe-plasma[mini-perm] denied feature=" + feature
-                    + " origin=" + securityOrigin);
-                miniView.grantFeaturePermission(securityOrigin, feature, false);
-            }
-            onPermissionRequested: function(perm) {
-                console.warn("iframe-plasma[mini-perm] denied permission=" + perm.permissionType
-                    + " origin=" + perm.origin);
-                perm.deny();
-            }
-            onFullScreenRequested: function(request) {
-                console.warn("iframe-plasma[mini-fs] rejected fullScreen request");
-                request.reject();
-            }
-            onRegisterProtocolHandlerRequested: function(request) {
-                console.warn("iframe-plasma[mini-proto] rejected scheme=" + request.scheme);
-                request.reject();
-            }
-            onFileDialogRequested: function(request) {
-                console.warn("iframe-plasma[mini-file] rejected dialog mode=" + request.mode);
-                request.dialogReject();
-            }
-            // Mirror WebTab pins: suppress default context menu, reject
-            // client-cert auto-select, cancel WebAuthn ceremonies. `enabled:false`
-            // suppresses input but not Chromium-side capability defaults, so
-            // a configured URL hitting any of these during the thumb's render
-            // window must still be denied.
-            onContextMenuRequested: function(request) {
-                console.info("iframe-plasma[mini-ctx] suppressed menu pos=" + request.position);
-                request.accepted = true;
-            }
-            onSelectClientCertificate: function(selection) {
-                console.warn("iframe-plasma[mini-cert] rejected client-cert request host="
-                    + selection.host + " count=" + selection.certificates.length);
-                selection.selectNone();
-            }
-            onWebAuthUxRequested: function(request) {
-                console.warn("iframe-plasma[mini-webauth] cancelled state=" + request.state);
-                request.cancel();
-            }
-            // Parity with WebTab.qml's tooltipRequested suppression — Qt's
-            // default tooltip is a top-level platform widget that escapes the
-            // miniView's clip rect, so a hostile page can paint arbitrary
-            // text next to the panel slot. The thumb is `enabled:false` so
-            // pointer hover doesn't reach Chromium normally, but the request
-            // can still fire from JS-injected `dispatchEvent` paths or
-            // touch-equivalent inputs depending on Qt build flags.
-            onTooltipRequested: function(request) {
-                request.accepted = true;
-            }
-            onColorDialogRequested: function(request) {
-                console.warn("iframe-plasma[mini-color] rejected color dialog");
-                request.dialogReject();
-            }
-            onDesktopMediaRequested: function(request) {
-                console.warn("iframe-plasma[mini-dispmedia] cancelled screen-capture request");
-                request.cancel();
-            }
-            onFileSystemAccessRequested: function(request) {
-                console.warn("iframe-plasma[mini-fs-access] rejected origin=" + request.origin
-                    + " handleType=" + request.handleType);
-                request.reject();
-            }
-            onQuotaRequested: function(request) {
-                console.warn("iframe-plasma[mini-quota] rejected origin=" + request.origin
-                    + " requestedSize=" + request.requestedSize);
-                request.reject();
-            }
-            // Reject every page-driven HTTP-auth dialog on the thumb. Without
-            // this, a 401 from a configured or redirect-chain URL pops Qt's
-            // system Basic-auth dialog over the panel slot — the thumb is
-            // passive (enabled:false) but the modal credential prompt is a
-            // separate top-level widget that still appears, prompting an
-            // unattended user with no widget interaction. WebTab.qml routes
-            // 401s through the controlled overlay flow; the thumb has no UX
-            // path for that, so deny outright.
-            onAuthenticationDialogRequested: function(request) {
-                console.warn("iframe-plasma[mini-auth] rejected dialog type=" + request.type
-                    + " url=" + request.url);
-                request.dialogReject();
-                request.accepted = true;
-            }
-            // Log-only on the thumb (no auto-reload): the thumb is a passive
-            // render of an unattended URL. A crash-loop here would keep
-            // hammering Chromium with no UI feedback to the user. Surface the
-            // event to the journal so plasmashell-restart hooks have a trail.
-            onRenderProcessTerminated: function(status, exitCode) {
-                console.warn("iframe-plasma[mini-render] terminated status=" + status
-                    + " exitCode=" + exitCode);
-            }
-
-            transform: Scale {
-                origin.x: 0; origin.y: 0
-                xScale: compact.renderScale
-                yScale: compact.renderScale
-            }
-
-            onLoadingChanged: function(info) {
-                console.info("iframe-plasma[mini] loadingChanged status=" + info.status
-                    + " url=" + info.url + " thumbSelector=" + JSON.stringify(compact.thumbSelector));
-                if (info.status === WebEngineView.LoadSucceededStatus
-                    && compact.thumbSelector.length > 0)
-                {
-                    applyThumbCrop(compact.thumbSelector);
+                onFeaturePermissionRequested: function(securityOrigin, feature) {
+                    console.warn("iframe-plasma[mini-perm] denied feature=" + feature
+                        + " origin=" + securityOrigin);
+                    miniView.grantFeaturePermission(securityOrigin, feature, false);
                 }
-            }
-
-            // Forward console.info / console.warn from in-page JS (our shim's
-            // observer callback, apply() returns, etc.) to QML console so it
-            // shows up in journalctl. Filter to only [ifp-thumb] tagged lines.
-            //
-            // `message` originates from JS running in an attacker-controlled
-            // page (compromised Grafana panel, hostile redirect target). Strip
-            // C0 / DEL bytes — a crafted `console.log("[ifp-thumb] \x1b[2J…")`
-            // injects ANSI escapes that terminal-bound journalctl viewers
-            // interpret (clear-screen, fake prompt, log-spoofed lines). Cap at
-            // 512 chars so a single megabyte log line can't blow up the
-            // journal buffer.
-            onJavaScriptConsoleMessage: function(level, message, lineNumber, sourceID) {
-                if (message && message.indexOf('[ifp-thumb]') !== -1) {
-                    const safe = String(message).replace(/[\x00-\x1f\x7f]/g, '?').slice(0, 512);
-                    console.info("iframe-plasma" + safe);
+                onPermissionRequested: function(perm) {
+                    console.warn("iframe-plasma[mini-perm] denied permission=" + perm.permissionType
+                        + " origin=" + perm.origin);
+                    perm.deny();
                 }
-            }
+                onFullScreenRequested: function(request) {
+                    console.warn("iframe-plasma[mini-fs] rejected fullScreen request");
+                    request.reject();
+                }
+                onRegisterProtocolHandlerRequested: function(request) {
+                    console.warn("iframe-plasma[mini-proto] rejected scheme=" + request.scheme);
+                    request.reject();
+                }
+                onFileDialogRequested: function(request) {
+                    console.warn("iframe-plasma[mini-file] rejected dialog mode=" + request.mode);
+                    request.dialogReject();
+                }
+                onContextMenuRequested: function(request) {
+                    console.info("iframe-plasma[mini-ctx] suppressed menu pos=" + request.position);
+                    request.accepted = true;
+                }
+                onSelectClientCertificate: function(selection) {
+                    console.warn("iframe-plasma[mini-cert] rejected client-cert request host="
+                        + selection.host + " count=" + selection.certificates.length);
+                    selection.selectNone();
+                }
+                onWebAuthUxRequested: function(request) {
+                    console.warn("iframe-plasma[mini-webauth] cancelled state=" + request.state);
+                    request.cancel();
+                }
+                onTooltipRequested: function(request) {
+                    request.accepted = true;
+                }
+                onColorDialogRequested: function(request) {
+                    console.warn("iframe-plasma[mini-color] rejected color dialog");
+                    request.dialogReject();
+                }
+                onDesktopMediaRequested: function(request) {
+                    console.warn("iframe-plasma[mini-dispmedia] cancelled screen-capture request");
+                    request.cancel();
+                }
+                onFileSystemAccessRequested: function(request) {
+                    console.warn("iframe-plasma[mini-fs-access] rejected origin=" + request.origin
+                        + " handleType=" + request.handleType);
+                    request.reject();
+                }
+                onQuotaRequested: function(request) {
+                    console.warn("iframe-plasma[mini-quota] rejected origin=" + request.origin
+                        + " requestedSize=" + request.requestedSize);
+                    request.reject();
+                }
+                onAuthenticationDialogRequested: function(request) {
+                    console.warn("iframe-plasma[mini-auth] rejected dialog type=" + request.type
+                        + " url=" + request.url);
+                    request.dialogReject();
+                    request.accepted = true;
+                }
+                onRenderProcessTerminated: function(status, exitCode) {
+                    console.warn("iframe-plasma[mini-render] terminated status=" + status
+                        + " exitCode=" + exitCode + " idx=" + miniView.ownIndex);
+                }
 
-            // Crop IIFE source comes from CropEngine.js — shared with the
-            // popup view in WebTab.qml. apply() dispatches on element tag:
-            // <canvas> → uPlot pixel-blit (Grafana presets); anything else
-            // → generic element-isolation (hide siblings, position target
-            // fixed at viewport — Streamystats, Jellyfin etc.).
-            function applyThumbCrop(selector) {
-                console.info("iframe-plasma[thumb] applyThumbCrop ENTRY selector=" + JSON.stringify(selector)
-                    + " loading=" + miniView.loading + " url=" + miniView.url);
-                runJavaScript(CropEngine.buildApplyJs(selector), function(r) {
-                    console.info("iframe-plasma[thumb] applyThumbCrop("
-                        + JSON.stringify(selector) + ") = " + r);
-                });
-            }
+                transform: Scale {
+                    origin.x: 0; origin.y: 0
+                    xScale: compact.renderScale
+                    yScale: compact.renderScale
+                }
 
-            // When the slot itself resizes (user dragged panel size, changed
-            // Preview-size config), re-fire window.resize so uPlot re-renders
-            // at the new viewport. Debounced 200ms so dragging is smooth.
-            onWidthChanged:  miniViewReflowTimer.restart()
-            onHeightChanged: miniViewReflowTimer.restart()
-            Timer {
-                id: miniViewReflowTimer
-                interval: 200
-                onTriggered: {
-                    if (compact.thumbSelector.length > 0) {
-                        miniView.runJavaScript("window.dispatchEvent(new Event('resize'));");
+                onLoadingChanged: function(info) {
+                    console.info("iframe-plasma[mini] loadingChanged status=" + info.status
+                        + " idx=" + miniView.ownIndex
+                        + " url=" + info.url
+                        + " thumbSelector=" + JSON.stringify(miniView.ownSelector));
+                    if (info.status === WebEngineView.LoadSucceededStatus
+                        && miniView.ownSelector.length > 0)
+                    {
+                        applyThumbCrop(miniView.ownSelector);
                     }
                 }
-            }
 
-            // Freeze the thumbnail (suspends its Grafana JS, the in-page
-            // refresh and the 3 s crop poll) when the slot isn't observed —
-            // screen locked or panel off-screen. stalenessSec is the auto-
-            // cycle interval: a thumbnail frozen longer than one rotation
-            // reloads on resume, so the rotating preview is never stale.
-            WebViewLifecycle {
-                target: miniView
-                desiredActive: compact.miniActive
-                freezeDelaySec: Plasmoid.configuration.webViewFreezeDelaySec
-                discardDelaySec: Plasmoid.configuration.webViewDiscardDelaySec
-                stalenessSec: Math.max(5, Plasmoid.configuration.autoCycleIntervalSec)
-            }
+                onJavaScriptConsoleMessage: function(level, message, lineNumber, sourceID) {
+                    if (message && message.indexOf('[ifp-thumb]') !== -1) {
+                        const safe = String(message).replace(/[\x00-\x1f\x7f]/g, '?').slice(0, 512);
+                        console.info("iframe-plasma" + safe);
+                    }
+                }
 
+                function applyThumbCrop(selector) {
+                    console.info("iframe-plasma[thumb] applyThumbCrop ENTRY selector=" + JSON.stringify(selector)
+                        + " idx=" + miniView.ownIndex
+                        + " loading=" + miniView.loading + " url=" + miniView.url);
+                    runJavaScript(CropEngine.buildApplyJs(selector), function(r) {
+                        console.info("iframe-plasma[thumb] applyThumbCrop("
+                            + JSON.stringify(selector) + ") = " + r);
+                    });
+                }
+
+                // When the mode/selector changes for this specific tab,
+                // reload so applyThumbCrop fires fresh via LoadSucceeded.
+                onOwnSelectorChanged: {
+                    console.info("iframe-plasma[compact] selector changed for idx=" + miniView.ownIndex
+                        + " → " + JSON.stringify(miniView.ownSelector) + "; reloading");
+                    miniView.reload();
+                }
+
+                onWidthChanged:  miniViewReflowTimer.restart()
+                onHeightChanged: miniViewReflowTimer.restart()
+                Timer {
+                    id: miniViewReflowTimer
+                    interval: 200
+                    onTriggered: {
+                        if (miniView.ownSelector.length > 0) {
+                            miniView.runJavaScript("window.dispatchEvent(new Event('resize'));");
+                        }
+                    }
+                }
+
+                // Picker-save fast path: when the user saves a new selector
+                // via the popup picker for THIS tab, applyThumbCrop directly
+                // (skip a full URL reload — the cached binding value would
+                // have re-applied the OLD selector). Filter the broadcast
+                // signal by ownIndex.
+                Connections {
+                    target: root
+                    function on_ThumbSelectorSaved(tabIdx, newSelector) {
+                        if (tabIdx !== miniView.ownIndex) return;
+                        if (newSelector && newSelector.length > 0) {
+                            console.info("iframe-plasma[compact] thumb-save apply idx=" + tabIdx
+                                + " sel=" + JSON.stringify(newSelector));
+                            miniView.applyThumbCrop(newSelector);
+                        } else {
+                            console.info("iframe-plasma[compact] thumb-save reload idx=" + tabIdx);
+                            miniView.reload();
+                        }
+                    }
+                }
+
+                // Per-thumb lifecycle. desiredActive is true ONLY for the
+                // tab the user is currently previewing (popup or auto-cycle
+                // selection) AND when the slot is observable. Non-current
+                // thumbs freeze after freezeDelaySec → discard after
+                // discardDelaySec. Switching back reveals the existing
+                // renderer instantly (no spinner flash) when within
+                // stalenessSec, or reloads on resume after that.
+                WebViewLifecycle {
+                    target: miniView
+                    desiredActive: miniView.ownIsCurrent && root.compactObservable
+                    freezeDelaySec: Plasmoid.configuration.webViewFreezeDelaySec
+                    discardDelaySec: Plasmoid.configuration.webViewDiscardDelaySec
+                    stalenessSec: Math.max(5, Plasmoid.configuration.autoCycleIntervalSec)
+                }
             }
         }
 
         // --- Icon fallback --------------------------------------------------
-        // Shows the standard plasmoid icon whenever no other render branch
-        // is active: live preview off, no tab, current tab excluded, screen
-        // locked, panel slot off-screen, OR text/icon-thumb modes (which
-        // own their own visuals via the items below).
+        // Standard plasmoid icon when the StackLayout has nothing to show:
+        // compactPreviewEnabled off, no tabs configured, or the popup's
+        // currently-active tab is `excluded`. The text/icon thumbnail modes
+        // are rendered INSIDE the StackLayout's delegates, so they do not
+        // gate this fallback — only the slot-has-no-content case does.
         Kirigami.Icon {
             anchors.centerIn: parent
             width: Math.min(parent.width, parent.height) - Kirigami.Units.smallSpacing
             height: width
-            visible: !compact.miniActive
-                  && !compact.textThumbWanted
-                  && !compact.iconThumbWanted
+            visible: !compact.slotShowsContent
             source: Plasmoid.icon || "applications-internet"
-            z: 0
-        }
-
-        // --- Text-label thumbnail ------------------------------------------
-        // Renders previewTab.thumbText centered with theme background. No
-        // WebEngineView (no renderer process). Falls back to the tab's
-        // label field when thumbText is empty, so a user can switch a tab
-        // to "Text label" and immediately see its name without an extra
-        // config step.
-        Rectangle {
-            anchors.fill: parent
-            visible: compact.textThumbWanted
-            color: Kirigami.Theme.backgroundColor
-            z: 0
-            QQC.Label {
-                anchors.fill: parent
-                anchors.margins: Kirigami.Units.smallSpacing
-                text: {
-                    const t = compact.previewTab;
-                    if (!t) return "";
-                    const explicit = t.thumbText || "";
-                    return explicit.length > 0 ? explicit : (t.label || "");
-                }
-                color: Kirigami.Theme.textColor
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-                wrapMode: Text.Wrap
-                elide: Text.ElideRight
-                // Slot-relative font size: scale with whichever axis is
-                // smaller so the text fits both fat and thin panels. Cap so
-                // single-character labels don't balloon on huge desktops.
-                font.pixelSize: Math.max(8, Math.min(48,
-                    Math.round(Math.min(parent.width, parent.height) * 0.32)))
-                font.family: Theme.fontHeader
-            }
-        }
-
-        // --- Icon thumbnail ------------------------------------------------
-        // Renders previewTab.thumbIconName centered. Source dispatch
-        // (theme / bundled / file://) lives in root.resolveIconSource so
-        // the picker and the slot share one resolver.
-        Kirigami.Icon {
-            anchors.centerIn: parent
-            width: Math.min(parent.width, parent.height) - Kirigami.Units.smallSpacing
-            height: width
-            visible: compact.iconThumbWanted
-            color: Kirigami.Theme.textColor
-            source: root.resolveIconSource(compact.previewTab ? compact.previewTab.thumbIconName : "")
             z: 0
         }
 
