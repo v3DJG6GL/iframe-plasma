@@ -69,6 +69,20 @@ QQC.SpinBox {
 
     contentItem: T.TextField {
         id: edit
+        // Width hint: longest possible formatted text, measured at the
+        // SpinBox's font. Matches the org.kde.desktop style's pattern at
+        // /usr/lib/x86_64-linux-gnu/qt6/qml/org/kde/desktop/SpinBox.qml
+        // lines 47-54 — without this implicitWidth the field collapses to
+        // its minimum, showing only the suffix.
+        readonly property TextMetrics _textMetrics: TextMetrics {
+            text: root.textFromValue(root.to, root.locale)
+            font: root.font
+        }
+        implicitWidth: Math.max(_textMetrics.width + 2, Math.round(contentWidth))
+                       + leftPadding + rightPadding
+        implicitHeight: Math.round(contentHeight) + topPadding + bottomPadding
+        z: 2
+
         // One-shot init + re-sync on programmatic value changes (arrow
         // buttons, wheel, external binding). We deliberately do NOT bind
         // `text:` to displayText — that would clobber the buffer on every
@@ -84,16 +98,25 @@ QQC.SpinBox {
         }
 
         font: root.font
+        // `palette: root.palette` adopts the SpinBox's palette wholesale so
+        // text/highlight colours track Kirigami.Theme correctly under both
+        // light and dark schemes.
+        palette: root.palette
         color: palette.text
         selectionColor: palette.highlight
         selectedTextColor: palette.highlightedText
         horizontalAlignment: Qt.AlignHCenter
         verticalAlignment: Qt.AlignVCenter
         selectByMouse: true
-        hoverEnabled: false
+        hoverEnabled: false  // let hover events propagate to SpinBox background
         readOnly: !root.editable
         // No `validator:` — we accept any keystroke and sanitize at commit.
         inputMethodHints: root.inputMethodHints
+
+        // Screen-reader: forward SpinBox's a11y attributes (the contentItem
+        // gets focus, so it's what readers query).
+        Accessible.name: root.Accessible.name
+        Accessible.description: root.Accessible.description
 
         // Commit on focus loss. When focus returns to a clean state, re-render
         // the canonical formatted text (so "30abc" → "30 seconds").

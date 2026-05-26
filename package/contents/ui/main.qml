@@ -169,6 +169,21 @@ PlasmoidItem {
     readonly property string activeTabSessionRange:
         (activeTab && activeTab.currentTimeRange) || ""
 
+    // Diagnostic — logs when QML's binding tracker actually fires the
+    // root.activeTabSessionRangeChanged signal. If this is silent when the
+    // user picks a new range in the popup, the binding isn't reactive (QML
+    // didn't track the inner activeTab.currentTimeRange dependency) and the
+    // per-delegate Connections downstream can't fire either.
+    onActiveTabSessionRangeChanged: {
+        console.info("iframe-plasma[root-range] activeTabSessionRange="
+            + JSON.stringify(activeTabSessionRange)
+            + " activeTab=" + (activeTab ? "tab" : "null"));
+    }
+    onActiveTabChanged: {
+        console.info("iframe-plasma[root-range] activeTab changed; range now="
+            + JSON.stringify(activeTabSessionRange));
+    }
+
     // Per-thumbnail URL resolver. `thumbTimeRange` semantics:
     //   - "" or "auto"     → use the URL's own from/to (no rewrite). When
     //                         the popup's currently-active tab is THIS tab
@@ -1349,14 +1364,23 @@ PlasmoidItem {
                         // (user picked a new preset from the popup toolbar)
                         // — propagate to our override IF we are the popup-
                         // active tab and we opted into auto-follow.
-                        if (root.activeTab !== miniView._lastSeenActiveTab) {
+                        const newRange = root.activeTabSessionRange;
+                        const sameActive = (root.activeTab === miniView._lastSeenActiveTab);
+                        console.info("iframe-plasma[mini-range] idx=" + miniView.ownIndex
+                            + " signal range=" + JSON.stringify(newRange)
+                            + " sameActive=" + sameActive
+                            + " ownTabIsActive=" + (root.tabs[root.currentTabIndex] === miniView.ownTab)
+                            + " thumbTimeRange=" + JSON.stringify(miniView.ownTab ? miniView.ownTab.thumbTimeRange : null));
+                        if (!sameActive) {
                             miniView._lastSeenActiveTab = root.activeTab;
                             return;
                         }
                         const t = miniView.ownTab;
                         if (!t || (t.thumbTimeRange || "auto") !== "auto") return;
                         if (root.tabs[root.currentTabIndex] === t) {
-                            miniView.sessionRangeOverride = root.activeTabSessionRange;
+                            console.info("iframe-plasma[mini-range] idx=" + miniView.ownIndex
+                                + " applying override=" + JSON.stringify(newRange));
+                            miniView.sessionRangeOverride = newRange;
                         }
                     }
                 }
