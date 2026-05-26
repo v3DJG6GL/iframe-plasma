@@ -266,6 +266,22 @@ PlasmoidItem {
         }
     }
 
+    // Cancel any active selector picker when the popup hides. Without
+    // this, the per-tab pickerTimer keeps polling __ifpPicked for up
+    // to 2 minutes after the popup is gone (the timer lives in the
+    // WebTab body, not the popup), and a successful pick lands in
+    // handlePickedSelector with fullRepresentationItem==null → the
+    // selector is silently dropped with only a warn log. Up to 2
+    // minutes of pick effort silently lost on every unpinned popup
+    // auto-close mid-pick.
+    onExpandedChanged: {
+        if (!expanded && fullRepresentationItem
+            && typeof fullRepresentationItem.cancelAllPickers === "function")
+        {
+            fullRepresentationItem.cancelAllPickers();
+        }
+    }
+
     Component.onCompleted: {
         // Seed root.tabs from the current urlsJson. The `property var
         // tabs: []` declaration above intentionally has NO binding —
@@ -1815,6 +1831,25 @@ PlasmoidItem {
         Layout.preferredWidth:  800
         Layout.preferredHeight: 500
         spacing: 0
+
+        // Cancel any active picker across all WebTab delegates. Called
+        // from root.onExpandedChanged when the popup is collapsing —
+        // otherwise pickerTimer keeps polling __ifpPicked for up to 2
+        // minutes after the popup is gone, and a successful pick lands
+        // in handlePickedSelector with fullRepresentationItem==null
+        // (the popup auto-close tore it down) → the selector is silently
+        // dropped with only a warn log. Cancelling here releases the
+        // page-side listeners cleanly so the next popup-open starts
+        // from a clean state.
+        function cancelAllPickers() {
+            for (let i = 0; i < repeater.count; ++i) {
+                const wt = repeater.itemAt(i);
+                if (wt && wt.pickerActive && typeof wt.cancelPicker === "function") {
+                    console.info("iframe-plasma[picker] auto-cancel on popup hide idx=" + i);
+                    wt.cancelPicker();
+                }
+            }
+        }
 
         // Bridge for root.savePickedSelector — it can't reach the
         // Repeater's `id: repeater` directly because QML Components
