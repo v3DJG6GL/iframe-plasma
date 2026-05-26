@@ -202,6 +202,29 @@ Rectangle {
         }
     }
 
+    // Wheel overlay — maps any wheel direction (incl. the normal vertical
+    // mouse wheel) to horizontal motion on the tab strip. Sits on top of
+    // tabList via z, declines all buttons so tab-click MouseAreas underneath
+    // still get clicks, and accepts the wheel so Flickable's own native
+    // handling doesn't double-shift contentX past the bounds. We delegate
+    // bounds clamping to Flickable.returnToBounds() — manually clamping by
+    // contentWidth-width over-shoots when the ListView is still realising
+    // delegates at the far edge.
+    MouseArea {
+        anchors.fill: tabList
+        acceptedButtons: Qt.NoButton
+        z: tabList.z + 1
+        onWheel: (wheel) => {
+            const dx = wheel.pixelDelta.x !== 0 ? wheel.pixelDelta.x
+                     : wheel.pixelDelta.y !== 0 ? wheel.pixelDelta.y
+                     : (wheel.angleDelta.x !== 0 ? wheel.angleDelta.x
+                                                 : wheel.angleDelta.y) / 8
+            tabList.contentX -= dx
+            tabList.returnToBounds()
+            wheel.accepted = true
+        }
+    }
+
     // Edge-fade affordances — hint that the strip scrolls past the visible
     // edge. A bare Rectangle accepts no pointer input, so clicks/drags fall
     // through to the tab + ListView beneath. `bottomMargin` keeps the 1px

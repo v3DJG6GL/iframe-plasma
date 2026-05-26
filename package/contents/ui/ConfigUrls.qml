@@ -15,6 +15,59 @@ KCM.SimpleKCM {
     property alias cfg_urlsJson: store.json
     property alias cfg_currentTabIndex: store.currentIndex
 
+    // Wheel forwarder for open ComboBox popups. By default, a wheel landing
+    // on an expanded dropdown goes to the popup's internal ListView; if the
+    // option list isn't long enough to scroll, the wheel is eaten and the
+    // page beneath refuses to move. This Component is instantiated as a
+    // WheelHandler inside each ComboBox's popup contentItem on first
+    // open: it lets the popup keep scrolling when it actually overflows,
+    // but otherwise closes the popup and forwards the wheel to the URL
+    // list's surrounding scroller.
+    Component {
+        id: popupWheelForwarder
+        WheelHandler {
+            property QtObject combo
+            property Item scrollTarget
+            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+            onWheel: (event) => {
+                const dy = event.pixelDelta.y !== 0 ? event.pixelDelta.y
+                                                    : event.angleDelta.y / 8
+                const list = parent
+                if (list && list.contentHeight !== undefined
+                         && list.height !== undefined
+                         && list.contentHeight > list.height) {
+                    // Popup itself is scrollable — scroll its ListView
+                    // directly. We cannot rely on `event.accepted = false`
+                    // to propagate to the underlying Flickable: WheelHandler
+                    // runs at the post-delivery handler layer, so the
+                    // sibling/parent Flickable does not re-process the
+                    // event. Move contentY ourselves.
+                    list.contentY = Math.max(0,
+                        Math.min(list.contentHeight - list.height,
+                                 list.contentY - dy))
+                    event.accepted = true
+                    return
+                }
+                if (combo && combo.popup) combo.popup.close()
+                let p = scrollTarget
+                while (p) {
+                    if (typeof p.returnToBounds === "function"
+                        && p.contentY !== undefined
+                        && p.contentHeight !== undefined
+                        && p.height !== undefined
+                        && p.contentHeight > p.height) {
+                        p.contentY = Math.max(0,
+                            Math.min(p.contentHeight - p.height,
+                                     p.contentY - dy))
+                        break
+                    }
+                    p = p.parent
+                }
+                event.accepted = true
+            }
+        }
+    }
+
     QtObject {
         id: store
         property string json: "[]"
@@ -169,6 +222,39 @@ KCM.SimpleKCM {
             id: urlList
             model: listModel
             spacing: Kirigami.Units.smallSpacing
+
+            // Forward any wheel landing anywhere inside the list — over a
+            // card, over the gap between cards, over empty trailing space —
+            // up to the outer scroller (the wrapper Flickable that
+            // QQC.ScrollView puts around this ListView and gives full
+            // content height to). Attaching a WheelHandler at the ListView
+            // catches the whole subtree; a per-delegate handler would miss
+            // the spacing gaps and any unfilled tail. The walk skips this
+            // ListView (its contentH == h, since the ScrollView expanded it
+            // to fit) and lands on the actual scrolling Flickable.
+            WheelHandler {
+                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                onWheel: (event) => {
+                    const dy = event.pixelDelta.y !== 0 ? event.pixelDelta.y
+                             : event.angleDelta.y / 8
+                    let p = parent
+                    while (p) {
+                        if (typeof p.returnToBounds === "function"
+                            && p.contentY !== undefined
+                            && p.contentHeight !== undefined
+                            && p.height !== undefined
+                            && p.contentHeight > p.height) {
+                            p.contentY = Math.max(0,
+                                Math.min(p.contentHeight - p.height,
+                                         p.contentY - dy))
+                            break
+                        }
+                        p = p.parent
+                    }
+                    event.accepted = true
+                }
+            }
+
             delegate: Kirigami.AbstractCard {
                 required property int index
                 required property string label
@@ -276,6 +362,17 @@ KCM.SimpleKCM {
                                 QQC.ToolTip.delay: 400
                                 QQC.ToolTip.text: i18n("Create auth profiles on the Authentication tab, then pick one here.")
                                 NoWheel {}
+                                property bool _popupWheelHooked: false
+                                Connections {
+                                    target: profileCombo.popup
+                                    function onOpened() {
+                                        if (profileCombo._popupWheelHooked) return
+                                        popupWheelForwarder.createObject(
+                                            profileCombo.popup.contentItem,
+                                            { combo: profileCombo, scrollTarget: urlList })
+                                        profileCombo._popupWheelHooked = true
+                                    }
+                                }
                             }
                             // currentIndex via Binding so it survives the
                             // ComboBox's internal write on user click —
@@ -375,6 +472,17 @@ KCM.SimpleKCM {
                                       + "  • Icon            — a KDE theme icon. Cheap.\n"
                                       + "  • Hide            — never show this tab in the slot; skipped during rotation.")
                                 NoWheel {}
+                                property bool _popupWheelHooked: false
+                                Connections {
+                                    target: thumbModeCombo.popup
+                                    function onOpened() {
+                                        if (thumbModeCombo._popupWheelHooked) return
+                                        popupWheelForwarder.createObject(
+                                            thumbModeCombo.popup.contentItem,
+                                            { combo: thumbModeCombo, scrollTarget: urlList })
+                                        thumbModeCombo._popupWheelHooked = true
+                                    }
+                                }
                             }
                         }
                         QQC.TextField {
@@ -500,6 +608,17 @@ KCM.SimpleKCM {
                                   + "                       (e.g. one card from a SaaS dashboard).\n\n"
                                   + "Survives SPA re-renders and works on any tag, not just Grafana canvases.")
                                 NoWheel {}
+                                property bool _popupWheelHooked: false
+                                Connections {
+                                    target: popupModeCombo.popup
+                                    function onOpened() {
+                                        if (popupModeCombo._popupWheelHooked) return
+                                        popupWheelForwarder.createObject(
+                                            popupModeCombo.popup.contentItem,
+                                            { combo: popupModeCombo, scrollTarget: urlList })
+                                        popupModeCombo._popupWheelHooked = true
+                                    }
+                                }
                             }
                         }
                         QQC.TextField {

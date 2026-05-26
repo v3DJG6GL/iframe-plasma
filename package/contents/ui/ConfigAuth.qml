@@ -216,6 +216,31 @@ KCM.SimpleKCM {
             model: listModel
             spacing: Kirigami.Units.smallSpacing
 
+            // See ConfigUrls.qml — wheel over any widget / gap / empty space
+            // must scroll the surrounding ScrollView's wrapper Flickable.
+            WheelHandler {
+                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                onWheel: (event) => {
+                    const dy = event.pixelDelta.y !== 0 ? event.pixelDelta.y
+                             : event.angleDelta.y / 8
+                    let p = parent
+                    while (p) {
+                        if (typeof p.returnToBounds === "function"
+                            && p.contentY !== undefined
+                            && p.contentHeight !== undefined
+                            && p.height !== undefined
+                            && p.contentHeight > p.height) {
+                            p.contentY = Math.max(0,
+                                Math.min(p.contentHeight - p.height,
+                                         p.contentY - dy))
+                            break
+                        }
+                        p = p.parent
+                    }
+                    event.accepted = true
+                }
+            }
+
             delegate: Kirigami.AbstractCard {
                 id: card
                 required property int index
