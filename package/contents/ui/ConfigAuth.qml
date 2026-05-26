@@ -128,7 +128,7 @@ KCM.SimpleKCM {
         spacing: Kirigami.Units.smallSpacing
         QQC.Label {
             Layout.fillWidth: true
-            text: i18n("Define named authentication profiles here, then pick one per URL on the URLs tab. Multiple URLs can share a profile — rotate a password once, all tabs update.")
+            text: i18n("Define named authentication profiles here, then pick one per URL on the URLs tab. Multiple URLs can share a profile — rotate a password once, all tabs update. Choose type \"None\" for pages that handle their own login (form-based, cookies, OAuth).")
             wrapMode: Text.WordWrap
             color: Kirigami.Theme.disabledTextColor
         }
@@ -159,7 +159,15 @@ KCM.SimpleKCM {
         }
     }
 
+    // `none` is a named passthrough profile: no Authorization header is
+    // injected. Use it for pages that handle their own login (form-based
+    // auth, cookies/sessions, OAuth interactive, browser 401 dialog).
+    // Keeps the profile in the assignment dropdown so multiple URLs can
+    // share it semantically (e.g. all SSO-fronted pages → "Authelia SSO"
+    // profile) without needing a stored secret.
     readonly property var authTypePresets: [
+        { value: "none",   display: i18n("None (page handles its own login — no header injected)"),
+          secretLabel: "",                    fieldName: "",            hasUsername: false },
         { value: "basic",  display: i18n("HTTP Basic (username + password)"),
           secretLabel: i18n("Password:"),     fieldName: "password",    hasUsername: true  },
         { value: "bearer", display: i18n("Bearer token (e.g. JWT)"),
@@ -260,15 +268,13 @@ KCM.SimpleKCM {
                         }
                     }
 
-                    // Secret field — label depends on authType.
-                    // After typing and tabbing away, the masked dots STAY
-                    // visible (so the user sees their input was registered)
-                    // AND a transient green "✓ Saved" pill fades in/out as
-                    // confirmation. On dialog REOPEN the field is empty
-                    // with the "(stored)" placeholder — we never read the
-                    // secret back from KWallet (security).
+                    // Secret field — label depends on authType. Hidden
+                    // entirely for `none` (passthrough profile has no
+                    // credential to capture; `fieldName` is "" and the
+                    // KWallet write below would be a no-op).
                     RowLayout {
                         Layout.fillWidth: true
+                        visible: page.authSpec(card.authType).fieldName.length > 0
                         QQC.Label {
                             text: page.authSpec(card.authType).secretLabel
                             Layout.preferredWidth: Kirigami.Units.gridUnit * 8
@@ -391,6 +397,11 @@ KCM.SimpleKCM {
 
                     RowLayout {
                         Layout.fillWidth: true
+                        // Authelia re-auth overlay only makes sense when the
+                        // profile carries credentials worth re-presenting on
+                        // a redirect. `none` profiles let the page handle
+                        // its own login end-to-end.
+                        visible: card.authType !== "none"
                         QQC.Label { text: i18n("Authelia host:"); Layout.preferredWidth: Kirigami.Units.gridUnit * 8 }
                         QQC.TextField {
                             Layout.fillWidth: true

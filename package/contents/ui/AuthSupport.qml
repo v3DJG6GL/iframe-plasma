@@ -42,6 +42,7 @@ QtObject {
     //   { password: "..." }       (authType=basic)
     //   { bearerToken: "..." }    (authType=bearer)
     //   { rawHeader: "..." }      (authType=raw)
+    //   no wallet entry written   (authType=none — passthrough profile)
     function profileKey(id)      { return "profile:" + id }
     function getMap(key)         { return IframePlasma.SecretsBridge.getMap(key) }
     function setMap(key, fields) { return IframePlasma.SecretsBridge.setMap(key, fields) }

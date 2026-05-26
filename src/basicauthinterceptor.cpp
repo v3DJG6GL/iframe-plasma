@@ -29,6 +29,13 @@ void BasicAuthInterceptor::applyProfile(const QString &profileId,
                                        const QString &secret,
                                        const QStringList &hosts)
 {
+    // `none` is a named passthrough profile — page handles its own login
+    // (form-based, cookies, OAuth, 401 dialog). Skip silently before the
+    // empty-secret gate so the journal isn't polluted with a misleading
+    // "empty secret" warning every prime cycle.
+    if (authType == QLatin1String("none")) {
+        return;
+    }
     if (profileId.isEmpty() || hosts.isEmpty() || secret.isEmpty()) {
         qCInfo(lcIframeAuth) << "applyProfile: skipping (empty profileId/hosts/secret)"
                              << "id=" << profileId << "hostsCount=" << hosts.size()

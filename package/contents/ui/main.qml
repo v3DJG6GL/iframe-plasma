@@ -520,6 +520,12 @@ PlasmoidItem {
         // constructed its Repeater.
         for (const id in profilesInUse) {
             const { profile, hosts } = profilesInUse[id];
+            // `none` profiles inject no header — page handles its own login.
+            // Skip the KWallet read entirely so unlock prompts don't fire
+            // for profiles that semantically don't need a secret.
+            if ((profile.authType || "basic") === "none") {
+                continue;
+            }
             const secrets = root.authSupport.getMap(root.authSupport.profileKey(id)) || {};
             const secret = secrets.password || secrets.bearerToken || secrets.rawHeader || "";
             if (secret.length === 0) {
