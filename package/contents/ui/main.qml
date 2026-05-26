@@ -1580,6 +1580,7 @@ PlasmoidItem {
                         && miniView._pendingHardReload)
                     {
                         miniView._pendingHardReload = false;
+                        hardReloadFallback.stop();
                         console.info("iframe-plasma[compact] tab-reload hard (post-discard) idx=" + miniView.ownIndex);
                         miniView.stop();
                         miniView.triggerWebAction(WebEngineView.ReloadAndBypassCache);
@@ -1589,6 +1590,30 @@ PlasmoidItem {
                         && miniView.ownSelector.length > 0)
                     {
                         applyThumbCrop(miniView.ownSelector);
+                    }
+                }
+
+                // Fallback for the "Discarded->Active promotion does NOT
+                // emit LoadStartedStatus" case (Qt BFCache restore, or
+                // rare paths where lifecycleState=Active reuses a cached
+                // snapshot without re-loading). Without this, the
+                // _pendingHardReload flag would stay armed indefinitely
+                // and the next URL-driven LoadStartedStatus (e.g. user
+                // picks a new time range → sessionRangeOverride updates
+                // → url binding re-evaluates) would consume the stale
+                // arming, calling stop() + bypass-cache on the brand-new
+                // navigation and racing it on Chromium's IO thread.
+                Timer {
+                    id: hardReloadFallback
+                    interval: 1500
+                    repeat: false
+                    onTriggered: {
+                        if (!miniView._pendingHardReload) return;
+                        miniView._pendingHardReload = false;
+                        console.info("iframe-plasma[compact] hard-reload fallback (no LoadStarted) idx="
+                            + miniView.ownIndex);
+                        miniView.stop();
+                        miniView.triggerWebAction(WebEngineView.ReloadAndBypassCache);
                     }
                 }
 
@@ -1663,7 +1688,10 @@ PlasmoidItem {
                         // Chromium's IO thread and lose the bypass intent.
                         const isDiscarded = miniView.lifecycleState === WebEngineView.LifecycleState.Discarded;
                         if (isDiscarded) {
-                            if (kind === "hard") miniView._pendingHardReload = true;
+                            if (kind === "hard") {
+                                miniView._pendingHardReload = true;
+                                hardReloadFallback.restart();
+                            }
                             miniView.lifecycleState = WebEngineView.LifecycleState.Active;
                             return;
                         }
