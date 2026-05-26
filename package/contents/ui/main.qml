@@ -1800,16 +1800,31 @@ PlasmoidItem {
         function applyPopupSelectorAt(tabIdx, sel) {
             const wt = repeater.itemAt(tabIdx);
             if (wt && typeof wt.applyImmediately === "function") {
-                wt.applyImmediately(sel);
-                // Sync the property too — the WebTab.popupSelector binding
-                // is on `modelData.popupSelector`, and modelData is a plain
-                // JS object whose in-place field mutation (savePickedSelector
-                // does this to avoid the Repeater rebuild) does NOT fire
-                // NOTIFY. Without this imperative write the binding's
-                // cached result stays stale, and the next
-                // LoadSucceededStatus → _applyPopupSelector re-applies the
-                // OLD value, silently reverting the just-saved crop.
-                wt.popupSelector = sel;
+                // The previous shape called applyImmediately AND wrote the
+                // property — but the property write fires
+                // onPopupSelectorChanged → _applyPopupSelector →
+                // applyImmediately, which runs the CropEngine apply a
+                // SECOND time. Observable flicker on heavy Grafana pages,
+                // and explicitly counter to the "bypass the binding race"
+                // intent doc'd at WebTab.qml's applyImmediately comment.
+                //
+                // Split on value-equality:
+                //  - Value changes (the common case — binding's cached
+                //    modelData.popupSelector is stale because in-place
+                //    mutation doesn't fire NOTIFY): property write fires
+                //    the change handler which runs ONE apply, and the
+                //    imperative write also severs the binding (05e5590
+                //    pin pattern).
+                //  - Same value (re-save of an already-saved selector
+                //    after picker-time teardown stripped the crop CSS):
+                //    property write would be a no-op NOTIFY → handler
+                //    skipped → crop NOT re-applied. Apply directly;
+                //    pinning is moot since the value matches.
+                if (wt.popupSelector === sel) {
+                    wt.applyImmediately(sel);
+                } else {
+                    wt.popupSelector = sel;
+                }
                 return true;
             }
             return false;
