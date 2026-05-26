@@ -64,8 +64,56 @@ Item {
     // Fired when the click-to-pick overlay returns. Empty string = cancelled.
     signal selectorPicked(string selector)
 
-    function reload() { webview.reload() }
-    function hardReload() { webview.triggerWebAction(WebEngineView.ReloadAndBypassCache) }
+    // Discarded views have no live renderer; calling webview.reload() /
+    // triggerWebAction directly on one is silently dropped by Qt. Mirror
+    // the compact-rep miniView pattern (search main.qml for
+    // _pendingHardReload): promote lifecycleState to Active and let
+    // WebEngine's automatic post-promotion reload do the work. For
+    // hardReload we arm _pendingHardReload so the LoadStartedStatus
+    // consumer below stops the auto-reload and re-issues bypass-cache.
+    function reload() {
+        if (webview.lifecycleState === WebEngineView.LifecycleState.Discarded) {
+            webview.lifecycleState = WebEngineView.LifecycleState.Active;
+            return;
+        }
+        webview.reload();
+    }
+    function hardReload() {
+        if (webview.lifecycleState === WebEngineView.LifecycleState.Discarded) {
+            _pendingHardReload = true;
+            hardReloadFallback.restart();
+            webview.lifecycleState = WebEngineView.LifecycleState.Active;
+            return;
+        }
+        webview.triggerWebAction(WebEngineView.ReloadAndBypassCache);
+    }
+
+    // Armed by hardReload() when the view is Discarded; consumed by
+    // webview.onLoadingChanged on the next LoadStartedStatus, which
+    // aborts the engine's cache-honoring auto-reload and re-issues
+    // bypass-cache. Without this hand-off the bypass-cache intent
+    // races the auto-reload on Chromium's IO thread and is typically
+    // lost.
+    property bool _pendingHardReload: false
+
+    // Fallback for the "Discarded->Active promotion doesn't fire
+    // LoadStartedStatus" case (Qt BFCache restore, or rare paths where
+    // Active reuses a cached snapshot). Without this the flag would
+    // stay armed indefinitely and the next URL-driven LoadStartedStatus
+    // (e.g. user-initiated nav) would consume the stale arming, calling
+    // stop() + bypass-cache on the brand-new load and racing it.
+    Timer {
+        id: hardReloadFallback
+        interval: 1500
+        repeat: false
+        onTriggered: {
+            if (!tab._pendingHardReload) return;
+            tab._pendingHardReload = false;
+            console.info("iframe-plasma[popup] hard-reload fallback (no LoadStarted)");
+            webview.stop();
+            webview.triggerWebAction(WebEngineView.ReloadAndBypassCache);
+        }
+    }
 
     // Click-to-pick element selector. The picker IIFE itself tears down
     // any active CropEngine isolation BEFORE attaching listeners (a fold
@@ -515,6 +563,18 @@ Item {
                 tab.loadStatus = "loading";
                 tab.lastCertError = false;
                 if (!tab.loginInProgress) statusOverlay.showLoading();
+                // Consume a Discarded-armed hardReload: abort the engine's
+                // cache-honoring auto-reload from the lifecycle promotion
+                // and re-issue as bypass-cache. Mirror of the miniView
+                // pattern in main.qml's webThumbComp.
+                if (tab._pendingHardReload) {
+                    tab._pendingHardReload = false;
+                    hardReloadFallback.stop();
+                    console.info("iframe-plasma[popup] hard-reload (post-discard)");
+                    webview.stop();
+                    webview.triggerWebAction(WebEngineView.ReloadAndBypassCache);
+                    return;
+                }
             } else if (info.status === WebEngineView.LoadSucceededStatus) {
                 const finalUrl = String(webview.url);
                 const onAuthelia = tab.onAutheliaHost(finalUrl);
