@@ -455,6 +455,20 @@ PlasmoidItem {
         return ua.length > 0 ? ua.replace(/[\r\n\0]/g, "") : "";
     }
 
+    // Per-URL `thumbIconName` is a tagged string with three forms:
+    //   plain name           → KDE theme icon ("applications-internet")
+    //   "bundled:<name>"     → ./icons/bundled/<name>.svg
+    //   "file:///path"       → straight file URL (Kirigami.Icon accepts it)
+    // Empty / undefined falls back to the plasmoid icon so a half-
+    // configured `icon` mode still looks intentional. ConfigUrls.qml has
+    // its own copy (resolveIconPreview) for the per-card preview.
+    function resolveIconSource(name) {
+        if (!name) return Plasmoid.icon || "applications-internet";
+        if (String(name).startsWith("bundled:"))
+            return Qt.resolvedUrl("../icons/bundled/" + String(name).substring(8) + ".svg");
+        return name;
+    }
+
     // Attach/detach the interceptor whenever the toggle or plugin availability changes.
     // Signal fired from root-level events; WebTab listens and reloads its view.
     // Cleaner than reaching into fullRepresentation's StackLayout from outside.
@@ -1500,19 +1514,16 @@ PlasmoidItem {
         }
 
         // --- Icon thumbnail ------------------------------------------------
-        // Renders previewTab.thumbIconName (KDE theme icon) centered.
-        // Falls back to the standard plasmoid icon when the name is empty
-        // so a half-configured "Icon" mode still looks intentional.
+        // Renders previewTab.thumbIconName centered. Source dispatch
+        // (theme / bundled / file://) lives in root.resolveIconSource so
+        // the picker and the slot share one resolver.
         Kirigami.Icon {
             anchors.centerIn: parent
             width: Math.min(parent.width, parent.height) - Kirigami.Units.smallSpacing
             height: width
             visible: compact.iconThumbWanted
-            source: {
-                const t = compact.previewTab;
-                const name = (t && t.thumbIconName) || "";
-                return name.length > 0 ? name : (Plasmoid.icon || "applications-internet");
-            }
+            color: Kirigami.Theme.textColor
+            source: root.resolveIconSource(compact.previewTab ? compact.previewTab.thumbIconName : "")
             z: 0
         }
 

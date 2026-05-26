@@ -272,6 +272,14 @@ sqlite3 ~/.local/share/iframe-plasma/<plasmoidId>/Cookies \
 kwalletmanager6  # browse → folder "iframe-plasma"
 ```
 
+## Acknowledgements
+
+The bundled "Icon" thumbnail set under
+[`package/contents/icons/bundled/`](package/contents/icons/bundled) ships
+~30 hand-picked monitoring/dashboard glyphs from
+[Phosphor Icons](https://phosphoricons.com) (MIT-licensed; see
+[`package/contents/icons/bundled/LICENSE`](package/contents/icons/bundled/LICENSE)).
+
 ## License
 
 AGPL-3.0-or-later. See [LICENSE](LICENSE).

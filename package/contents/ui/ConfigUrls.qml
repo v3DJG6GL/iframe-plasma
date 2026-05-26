@@ -8,7 +8,6 @@ import QtQuick.Layouts
 import QtQuick.Dialogs
 import org.kde.kcmutils as KCM
 import org.kde.kirigami as Kirigami
-import org.kde.iconthemes as KIconThemes
 
 KCM.SimpleKCM {
     id: page
@@ -51,6 +50,18 @@ KCM.SimpleKCM {
     function isGrafanaEmbed(u) {
         if (!u) return false;
         return /\/d(-solo)?\/[A-Za-z0-9_-]+\//.test(u);
+    }
+
+    // Mirror of main.qml's resolveIconSource for the per-card preview.
+    // Kept local to the config page so the picker preview renders the
+    // right source without requiring a round-trip through Plasmoid.
+    // Plain name → theme icon; "bundled:foo" → shipped SVG; "file://..."
+    // → straight file URL.
+    function resolveIconPreview(name) {
+        if (!name) return "image-missing";
+        if (String(name).startsWith("bundled:"))
+            return Qt.resolvedUrl("../icons/bundled/" + String(name).substring(8) + ".svg");
+        return name;
     }
 
     // Read-only mirror of the Auth tab's profile list. KCM auto-binds
@@ -389,16 +400,21 @@ KCM.SimpleKCM {
                             onEditingFinished: { listModel.setProperty(index, "thumbText", text); store.serialize() }
                         }
 
-                        // `icon` mode follow-up: button opens KDE's icon
-                        // theme picker; the picked name (e.g.
-                        // "applications-internet") is rendered as a
-                        // Kirigami.Icon centered in the slot.
+                        // `icon` mode follow-up: button opens our tabbed
+                        // picker (Theme / Bundled monitoring SVGs / From
+                        // file). thumbIconName uses prefixes:
+                        //   plain name → KDE theme icon
+                        //   "bundled:<name>" → shipped Phosphor SVG
+                        //   "file:///..." → user-picked file
+                        // main.qml's resolveIconSource() dispatches at the
+                        // render site.
                         RowLayout {
                             Layout.fillWidth: true
                             visible: thumbMode === "icon"
                             spacing: Kirigami.Units.smallSpacing
                             Kirigami.Icon {
-                                source: thumbIconName.length > 0 ? thumbIconName : "image-missing"
+                                source: page.resolveIconPreview(thumbIconName)
+                                color: Kirigami.Theme.textColor
                                 implicitWidth:  Kirigami.Units.iconSizes.medium
                                 implicitHeight: Kirigami.Units.iconSizes.medium
                             }
@@ -413,14 +429,11 @@ KCM.SimpleKCM {
                             QQC.Button {
                                 text: thumbIconName.length > 0 ? i18n("Change…") : i18n("Pick icon…")
                                 icon.name: "preferences-desktop-icons"
-                                onClicked: iconDialog.open()
+                                onClicked: iconPicker.open()
                             }
-                            KIconThemes.IconDialog {
-                                id: iconDialog
+                            IconPickerDialog {
+                                id: iconPicker
                                 onIconNameChanged: (picked) => {
-                                    // Picker emits an empty string when the
-                                    // user cancels — leave the existing
-                                    // value untouched in that case.
                                     if (picked && picked.length > 0) {
                                         listModel.setProperty(index, "thumbIconName", picked);
                                         store.serialize();
