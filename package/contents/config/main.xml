@@ -79,7 +79,18 @@
         <entry name="autheliaHost" type="String">
             <default></default>
         </entry>
+        <!-- DEPRECATED in 0.5.0: pre-emption is now per-profile, stored as
+             `preempt` in each authProfilesJson entry. Kept read-only for the
+             one-shot migration in main.qml (Component.onCompleted). Remove
+             in 0.6.0. -->
         <entry name="useBasicAuthInjection" type="Bool">
+            <default>false</default>
+        </entry>
+        <!-- One-shot flag for the per-profile `preempt` migration. Set true
+             after main.qml's migration block has rewritten authProfilesJson
+             with sensible per-type defaults (basic=false, bearer/raw=true
+             when the old global was OFF; all=true when it was ON). -->
+        <entry name="authProfilesPreemptMigrated" type="Bool">
             <default>false</default>
         </entry>
     </group>

@@ -13,7 +13,6 @@ KCM.SimpleKCM {
     id: page
 
     property alias cfg_authProfilesJson: store.json
-    property alias cfg_useBasicAuthInjection: injectionSwitch.checked
     // Mirror of cfg_urlsJson — read for the delete-confirm preview, and
     // written back on profile delete to unlink orphan `authProfileId`
     // references. The write covers the case where ConfigUrls hasn't been
@@ -44,7 +43,8 @@ KCM.SimpleKCM {
                     name: row.name,
                     authType: row.authType,
                     username: row.username || "",
-                    autheliaHost: row.autheliaHost || ""
+                    autheliaHost: row.autheliaHost || "",
+                    preempt: row.preempt === true
                 });
             }
             json = JSON.stringify(arr);
@@ -88,10 +88,23 @@ KCM.SimpleKCM {
             for (const entry of arr) {
                 let id = entry.id;
                 if (!id) { id = newUuid(); synthesized = true; }
+                const authType = entry.authType || "basic";
+                // Default `preempt` per type when the field is missing on
+                // existing entries (pre-0.5.0 config). Bearer/raw MUST
+                // pre-empt — Qt's 401 dialog can only collect user+password,
+                // so a token mismatch under non-preempt is unrecoverable
+                // (main.qml handleBasicAuth early-returns for those types).
+                let preempt;
+                if (typeof entry.preempt === "boolean") {
+                    preempt = entry.preempt;
+                } else {
+                    preempt = (authType === "bearer" || authType === "raw");
+                    synthesized = true;
+                }
                 listModel.append({
                     id: id,
                     name: entry.name || "",
-                    authType: entry.authType || "basic",
+                    authType: authType,
                     username: entry.username || "",
                     // Sanitise on load too — the on-edit + on-persist sanitisers
                     // (3224e0e) close the in-session input path, but legacy JSON
@@ -99,7 +112,8 @@ KCM.SimpleKCM {
                     // unsanitised value through `store.serialize()` verbatim and
                     // would bypass the WebTab overlay-host comparison until the
                     // user manually re-edits the field.
-                    autheliaHost: sanitizeAutheliaHost(entry.autheliaHost)
+                    autheliaHost: sanitizeAutheliaHost(entry.autheliaHost),
+                    preempt: preempt
                 });
             }
             // Persist synthesized UUIDs immediately — otherwise the next load
@@ -144,18 +158,10 @@ KCM.SimpleKCM {
             visible: page.kwalletAvailable
             text: i18n("Secrets stored in KDE Wallet under folder \"iframe-plasma\". Open kwalletmanager6 to inspect.")
         }
-        RowLayout {
-            QQC.Button {
-                text: i18n("Add profile")
-                icon.name: "list-add"
-                onClicked: page.createNewProfile()
-            }
-            Item { Layout.fillWidth: true }
-            QQC.CheckBox {
-                id: injectionSwitch
-                text: i18n("Inject Authorization header pre-emptively (no 401 round-trip)")
-                enabled: page.kwalletAvailable
-            }
+        QQC.Button {
+            text: i18n("Add profile")
+            icon.name: "list-add"
+            onClicked: page.createNewProfile()
         }
     }
 
@@ -186,12 +192,16 @@ KCM.SimpleKCM {
 
     function createNewProfile() {
         const id = newUuid();
+        // Default authType is "basic" → preempt=false (the safe-default).
+        // If the user switches to bearer/raw via the combo, the
+        // onActivated handler below promotes preempt to true.
         listModel.append({
             id: id,
             name: i18n("New profile"),
             authType: "basic",
             username: "",
-            autheliaHost: ""
+            autheliaHost: "",
+            preempt: false
         });
         store.serialize();
         profileList.currentIndex = listModel.count - 1;
@@ -214,6 +224,7 @@ KCM.SimpleKCM {
                 required property string authType
                 required property string username
                 required property string autheliaHost
+                required property bool preempt
 
                 width: ListView.view.width
 
@@ -250,7 +261,18 @@ KCM.SimpleKCM {
                                 const idx = page.authTypePresets.findIndex(x => x.value === card.authType);
                                 return idx >= 0 ? idx : 0;
                             }
-                            onActivated: _ => page.setField(card.index, "authType", page.authTypePresets[currentIndex].value)
+                            onActivated: _ => {
+                                const newType = page.authTypePresets[currentIndex].value;
+                                page.setField(card.index, "authType", newType);
+                                // Bearer / Raw cannot fall back on Qt's basic-auth
+                                // dialog (it can only collect user+password, not a
+                                // token). Force preempt=true when switching to those
+                                // types so the C++ URL-interceptor sends the header
+                                // on the first request. Leave basic/none alone.
+                                if (newType === "bearer" || newType === "raw") {
+                                    if (card.preempt !== true) page.setField(card.index, "preempt", true);
+                                }
+                            }
                             NoWheel {}
                         }
                     }
@@ -392,6 +414,32 @@ KCM.SimpleKCM {
                                 color: Kirigami.Theme.negativeTextColor
                                 font.italic: true
                             }
+                        }
+                    }
+
+                    // Pre-emption flag. Default per type: basic=off (the 401
+                    // dialog auto-fill in main.qml handleBasicAuth still works
+                    // and avoids leaking the header to cross-origin sub-
+                    // requests); bearer/raw=on and locked (Qt's dialog can't
+                    // collect a token, so the only working path is pre-emption).
+                    RowLayout {
+                        Layout.fillWidth: true
+                        visible: card.authType !== "none"
+                        QQC.Label { text: ""; Layout.preferredWidth: Kirigami.Units.gridUnit * 8 }
+                        QQC.CheckBox {
+                            id: preemptBox
+                            Layout.fillWidth: true
+                            text: i18n("Send credentials with the first request")
+                            checked: card.preempt
+                            enabled: page.kwalletAvailable
+                                  && card.authType !== "bearer"
+                                  && card.authType !== "raw"
+                            onToggled: page.setField(card.index, "preempt", checked)
+                            QQC.ToolTip.visible: hovered
+                            QQC.ToolTip.delay: 600
+                            QQC.ToolTip.text: (card.authType === "bearer" || card.authType === "raw")
+                                ? i18n("Required for this profile type — the server's challenge dialog cannot accept a token.")
+                                : i18n("Otherwise the server is asked first, then credentials are sent on the retry. Leave off to avoid sending the header to cross-origin sub-requests.")
                         }
                     }
 

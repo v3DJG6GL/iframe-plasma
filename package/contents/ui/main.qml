@@ -233,12 +233,11 @@ PlasmoidItem {
         }
         function onAuthProfilesJsonChanged() {
             root.authProfiles = root.parseAuthProfiles(Plasmoid.configuration.authProfilesJson);
-            root.primeAuthProfiles();
-            root.reloadAll();
-        }
-        function onUseBasicAuthInjectionChanged() {
+            // Per-profile preempt flags may have flipped — resync interceptor
+            // attach/detach BEFORE priming so applyProfile writes hit only
+            // profiles that are actually attached.
             root.syncInterceptor();
-            if (Plasmoid.configuration.useBasicAuthInjection) root.primeAuthProfiles();
+            root.primeAuthProfiles();
             root.reloadAll();
         }
         // userAgentOverride used to live as a binding on WebEngineProfile,
@@ -266,6 +265,15 @@ PlasmoidItem {
         // `profile:<uuid>`, and clears the legacy fields from urlsJson.
         Qt.callLater(function() {
             root.migrateLegacyAuth();
+            // Per-profile preempt migration: runs once per install. Reads
+            // the old global useBasicAuthInjection to decide defaults, then
+            // marks itself done via authProfilesPreemptMigrated.
+            root.migratePreemptFlag();
+            // Re-read authProfiles after the migration may have rewritten
+            // authProfilesJson — the Connections onAuthProfilesJsonChanged
+            // handler also re-parses, but the migration writes before that
+            // signal lands, so refresh defensively.
+            root.authProfiles = root.parseAuthProfiles(Plasmoid.configuration.authProfilesJson);
             const anyAuth = root.tabs.some(t => (t.authProfileId && t.authProfileId.length > 0));
             if (anyAuth) root.primeAuthProfiles();
             root.syncInterceptor();
@@ -405,7 +413,13 @@ PlasmoidItem {
             console.info("iframe-plasma[profile] created ephemeral profile");
             return profile;
         }
-        if (root.authSupport && Plasmoid.configuration.useBasicAuthInjection) {
+        // Per-profile preempt gate. Only attach the URL-interceptor when this
+        // specific profile wants pre-emption — bearer/raw default true,
+        // basic defaults false (the 401-dialog fallback in handleBasicAuth
+        // handles those without leaking the header to cross-origin requests).
+        const profileEntry = root.profileById(key);
+        const wantsPreempt = profileEntry && profileEntry.preempt === true;
+        if (root.authSupport && wantsPreempt) {
             const interceptor = root.authSupport.createInterceptor();
             if (interceptor && interceptor.attachTo(profile)) {
                 root._interceptors[key] = interceptor;
@@ -414,7 +428,7 @@ PlasmoidItem {
                 console.warn("iframe-plasma[profile] failed to create/attach interceptor for id=" + key);
             }
         } else {
-            console.info("iframe-plasma[profile] created named profile id=" + key + " (injection disabled, no interceptor)");
+            console.info("iframe-plasma[profile] created named profile id=" + key + " (preempt=false, no interceptor)");
         }
         return profile;
     }
@@ -453,17 +467,20 @@ PlasmoidItem {
     signal _thumbSelectorSaved(int tabIdx, string newSelector)
 
     function syncInterceptor() {
-        const enabled = Plasmoid.configuration.useBasicAuthInjection;
-        console.info("iframe-plasma[sync] authSupport=" + (root.authSupport ? "available" : "null")
-            + " useBasicAuthInjection=" + enabled);
+        console.info("iframe-plasma[sync] authSupport=" + (root.authSupport ? "available" : "null"));
         if (!root.authSupport) return;
-        // Walk every named profile (the ephemeral profile is intentionally
-        // skipped — auth=None tabs never get an Authorization header).
+        // Per-profile attach/detach. Walk every named profile (the ephemeral
+        // profile is intentionally skipped — auth=None tabs never get an
+        // Authorization header). The gate is `preempt` on the matching
+        // authProfilesJson entry; profiles whose entry was removed get
+        // detached defensively.
         for (const key in root._profiles) {
             if (key.length === 0) continue;
             const profile = root._profiles[key];
+            const entry = root.profileById(key);
+            const wantsPreempt = entry && entry.preempt === true;
             let interceptor = root._interceptors[key];
-            if (enabled) {
+            if (wantsPreempt) {
                 if (!interceptor) {
                     interceptor = root.authSupport.createInterceptor();
                     if (!interceptor) continue;
@@ -792,6 +809,45 @@ PlasmoidItem {
             Plasmoid.configuration.urlsJson = JSON.stringify(tabsRaw);
             console.info("iframe-plasma[migrate] persisted: " + profiles.length + " profile(s), " + tabsRaw.length + " tab(s)");
         }
+    }
+
+    // One-shot 0.5.0 migration: the global `useBasicAuthInjection` toggle is
+    // gone; pre-emption is now a per-profile `preempt` bool. Walks every
+    // existing profile and sets `preempt` per type, with the old global as a
+    // hint. Bearer/raw always get true — Qt's 401 dialog can't collect a
+    // token, so any pre-existing bearer/raw profile that had the global OFF
+    // was silently broken and is now repaired. Basic respects the old global.
+    function migratePreemptFlag() {
+        if (Plasmoid.configuration.authProfilesPreemptMigrated) return;
+        const globalWasOn = Plasmoid.configuration.useBasicAuthInjection === true;
+        let profiles;
+        try {
+            profiles = JSON.parse(Plasmoid.configuration.authProfilesJson || "[]");
+            if (!Array.isArray(profiles)) profiles = [];
+        } catch (e) {
+            console.warn("iframe-plasma[preempt-migrate] parse error:", e.message);
+            Plasmoid.configuration.authProfilesPreemptMigrated = true;
+            return;
+        }
+        let mutated = false;
+        for (const p of profiles) {
+            if (typeof p.preempt === "boolean") continue;   // already set by ConfigAuth.qml load
+            const t = p.authType || "basic";
+            if (t === "bearer" || t === "raw") {
+                p.preempt = true;
+            } else if (t === "basic") {
+                p.preempt = globalWasOn;
+            } else {
+                p.preempt = false;   // "none" passthrough or unknown
+            }
+            mutated = true;
+        }
+        if (mutated) {
+            Plasmoid.configuration.authProfilesJson = JSON.stringify(profiles);
+        }
+        Plasmoid.configuration.authProfilesPreemptMigrated = true;
+        console.info("iframe-plasma[preempt-migrate] done; globalWasOn=" + globalWasOn
+            + " profilesUpdated=" + (mutated ? "yes" : "no"));
     }
 
     // Simple v4 UUID (sufficient for profile identity — not security-critical).
