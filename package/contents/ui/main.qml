@@ -609,7 +609,19 @@ PlasmoidItem {
                 continue;
             }
             const secrets = root.authSupport.getMap(root.authSupport.profileKey(id)) || {};
-            const secret = secrets.password || secrets.bearerToken || secrets.rawHeader || "";
+            // Pick the secret keyed by authType. The previous positional
+            // `||` chain returned secrets.password first — so a basic→bearer
+            // type switch on a profile whose wallet still held the old
+            // password silently fed that password into applyProfile, which
+            // synthesises `Authorization: Bearer <plaintext-password>` and
+            // emits it on every preempted request. Mismatched type now
+            // resolves to "" → skipped below.
+            const authType = profile.authType || "basic";
+            const secret =
+                  authType === "basic"  ? (secrets.password    || "")
+                : authType === "bearer" ? (secrets.bearerToken || "")
+                : authType === "raw"    ? (secrets.rawHeader   || "")
+                                        : "";
             if (secret.length === 0) {
                 console.info("iframe-plasma[auth] profile " + id + " has no stored secret — skipping");
                 continue;
@@ -620,7 +632,7 @@ PlasmoidItem {
                 console.info("iframe-plasma[auth] no interceptor for profile id=" + id + " (injection disabled?)");
                 continue;
             }
-            interceptor.applyProfile(id, profile.authType || "basic",
+            interceptor.applyProfile(id, authType,
                 profile.username || "", secret, hosts);
         }
     }
