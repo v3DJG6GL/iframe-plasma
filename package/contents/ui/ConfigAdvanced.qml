@@ -33,8 +33,10 @@ KCM.SimpleKCM {
         }
         QQC.Label {
             Layout.fillWidth: true
+            Layout.maximumWidth: Kirigami.Units.gridUnit * 22
             wrapMode: Text.WordWrap
             color: Kirigami.Theme.disabledTextColor
+            font.pixelSize: Kirigami.Theme.defaultFont.pixelSize - 1
             text: i18n("Set a non-zero port (e.g. 9222) and start plasmashell with QTWEBENGINE_REMOTE_DEBUGGING=&lt;port&gt;. Then open http://localhost:&lt;port&gt; in any browser to inspect the embedded view.")
         }
 
@@ -56,8 +58,10 @@ KCM.SimpleKCM {
         }
         QQC.Label {
             Layout.fillWidth: true
+            Layout.maximumWidth: Kirigami.Units.gridUnit * 22
             wrapMode: Text.WordWrap
             color: Kirigami.Theme.disabledTextColor
+            font.pixelSize: Kirigami.Theme.defaultFont.pixelSize - 1
             text: i18n("A tab you are not looking at is frozen (its JavaScript and auto-refresh suspended) after the first delay, then discarded (its renderer process shut down to reclaim memory; it reloads when shown again) after the second. Set the discard delay very high to only ever freeze.")
         }
     }
