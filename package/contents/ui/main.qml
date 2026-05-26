@@ -159,35 +159,48 @@ PlasmoidItem {
 
     // Live session time-range from the popup's active WebTab — updates when
     // the user picks a different preset in the toolbar's time-range
-    // dropdown. Used by resolveThumbUrl when thumbTimeRange === "auto" so
-    // the panel-slot thumbnail follows the popup. Empty string when no
-    // active tab or no session override.
+    // dropdown. Surfaced for per-thumbnail Connections handlers in the
+    // compact rep, which pass it as the `overrideRange` argument to
+    // resolveThumbUrlWith — but ONLY when this delegate's tab is the
+    // popup-active one AND the user explicitly changed the range (i.e. the
+    // active tab itself didn't just swap). See the compact rep's per-
+    // delegate handler for the gating logic that distinguishes user-
+    // edited range changes from tab-switch / auto-rotate side effects.
     readonly property string activeTabSessionRange:
         (activeTab && activeTab.currentTimeRange) || ""
 
-    // Like resolveUrl but additionally rewrites `from=`/`to=` query params
-    // when the tab has a `thumbTimeRange` preset (e.g. "24h"). Used by the
-    // panel-slot thumbnail only — the popup keeps using resolveUrl() so its
-    // time range is whatever the URL itself specifies.
-    //
-    // `thumbTimeRange` semantics:
-    //   - "" or "auto"     → follow the popup (use activeTabSessionRange
-    //                         if this tab is the active one)
+    // Per-thumbnail URL resolver. `thumbTimeRange` semantics:
+    //   - "" or "auto"     → use the URL's own from/to (no rewrite). When
+    //                         the popup's currently-active tab is THIS tab
+    //                         and the user picked a range in the popup
+    //                         toolbar, the per-delegate handler bumps
+    //                         `sessionRangeOverride` and that range comes
+    //                         in here via `overrideRange`.
     //   - "5m"/"24h"/"7d"  → hard-override the URL's from/to for the
-    //                         thumbnail; popup unaffected
-    function resolveThumbUrl(tab) {
+    //                         thumbnail; popup unaffected.
+    //
+    // Static URL for a single per-tab thumbnail. Reads ONLY per-tab data
+    // (tab.url, tab.thumbTimeRange) plus the optional `overrideRange`
+    // parameter the caller passes — does NOT read root.currentTabIndex or
+    // root.activeTabSessionRange. That decoupling is what stops a popup tab
+    // switch (or auto-rotate tick) from cascade-reloading every per-tab
+    // WebEngineView in the compact rep: each delegate's url binding now
+    // re-evaluates only when its own tab object's fields change or when its
+    // own `sessionRangeOverride` updates (controlled by the per-delegate
+    // Connections handler down in compactRepresentation).
+    //
+    // `thumbTimeRange === "auto"` is now opaque to the URL: callers that
+    // want the auto-follow-popup-time-range behaviour pass the popup's
+    // current session range as `overrideRange` (handled per-delegate; see
+    // the compact-rep WebEngineView's Connections handler).
+    function resolveThumbUrlWith(tab, overrideRange) {
         if (!tab || !tab.url) return "about:blank";
         let url = String(tab.url);
-        let range = tab.thumbTimeRange || "auto";
-        // "auto" + previewTab matches the popup's active tab → use the
-        // popup's live session range. Otherwise leave URL's own range alone.
-        if (range === "auto") {
-            const idx = root.currentTabIndex;
-            if (root.tabs[idx] === tab && root.activeTabSessionRange.length > 0) {
-                range = root.activeTabSessionRange;
-            } else {
-                range = ""; // keep URL's own from/to
-            }
+        let range = "";
+        if (overrideRange && overrideRange.length > 0) {
+            range = overrideRange;
+        } else if (tab.thumbTimeRange && tab.thumbTimeRange !== "auto") {
+            range = tab.thumbTimeRange;
         }
         // Validate `range` before splicing into the query string. The popup
         // path (WebTab.currentTimeRange) regex-validates to /^now-(\d+[smhdwMy])$/
@@ -1271,6 +1284,12 @@ PlasmoidItem {
                         height: width
                         visible: thumbSlot.slotMode === "icon"
                                  && Plasmoid.configuration.compactPreviewEnabled
+                        // isMask only for bundled SVGs — theme icons and
+                        // user-picked file:// paths render full-color.
+                        isMask: {
+                            const n = String(thumbSlot.modelData ? thumbSlot.modelData.thumbIconName : "");
+                            return n.startsWith("bundled:");
+                        }
                         color: Kirigami.Theme.textColor
                         source: root.resolveIconSource(thumbSlot.modelData ? thumbSlot.modelData.thumbIconName : "")
                     }
@@ -1303,8 +1322,44 @@ PlasmoidItem {
                 readonly property bool ownIsCurrent: parent.ownIsCurrent
                 readonly property string ownSelector: root.thumbSelectorFor(ownTab)
 
+                // Per-delegate auto-follow override. Defaults to "" (use
+                // tab's static thumbTimeRange / URL-own range). Only the
+                // Connections handler below writes to this — it bumps the
+                // value when the user picks a NEW time range in the popup
+                // toolbar (i.e. activeTabSessionRange changed without
+                // activeTab changing). On tab switches / auto-rotate, the
+                // override stays put → URL stays put → no reload.
+                property string sessionRangeOverride: ""
+                property var _lastSeenActiveTab: null
+
                 profile: root.profileForAuthId(ownTab ? ownTab.authProfileId : "")
-                url: ownTab ? root.resolveThumbUrl(ownTab) : "about:blank"
+                url: root.resolveThumbUrlWith(ownTab, sessionRangeOverride)
+
+                Component.onCompleted: _lastSeenActiveTab = root.activeTab
+
+                Connections {
+                    target: root
+                    function onActiveTabSessionRangeChanged() {
+                        // Disambiguate two reasons activeTabSessionRange
+                        // changed: (a) the active tab itself swapped (tab
+                        // switch in popup or auto-rotate tick) — DON'T
+                        // touch our override, the thumb keeps showing
+                        // whatever it last showed → no reload; or (b) the
+                        // same active tab's currentTimeRange was updated
+                        // (user picked a new preset from the popup toolbar)
+                        // — propagate to our override IF we are the popup-
+                        // active tab and we opted into auto-follow.
+                        if (root.activeTab !== miniView._lastSeenActiveTab) {
+                            miniView._lastSeenActiveTab = root.activeTab;
+                            return;
+                        }
+                        const t = miniView.ownTab;
+                        if (!t || (t.thumbTimeRange || "auto") !== "auto") return;
+                        if (root.tabs[root.currentTabIndex] === t) {
+                            miniView.sessionRangeOverride = root.activeTabSessionRange;
+                        }
+                    }
+                }
 
                 settings.javascriptEnabled: true
                 settings.showScrollBars: false
@@ -1423,14 +1478,6 @@ PlasmoidItem {
                         console.info("iframe-plasma[thumb] applyThumbCrop("
                             + JSON.stringify(selector) + ") = " + r);
                     });
-                }
-
-                // When the mode/selector changes for this specific tab,
-                // reload so applyThumbCrop fires fresh via LoadSucceeded.
-                onOwnSelectorChanged: {
-                    console.info("iframe-plasma[compact] selector changed for idx=" + miniView.ownIndex
-                        + " → " + JSON.stringify(miniView.ownSelector) + "; reloading");
-                    miniView.reload();
                 }
 
                 onWidthChanged:  miniViewReflowTimer.restart()

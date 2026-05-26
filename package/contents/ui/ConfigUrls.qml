@@ -414,6 +414,10 @@ KCM.SimpleKCM {
                             spacing: Kirigami.Units.smallSpacing
                             Kirigami.Icon {
                                 source: page.resolveIconPreview(thumbIconName)
+                                // isMask only for bundled SVGs (currentColor
+                                // fill needs Kirigami's tint pass); theme
+                                // icons and user-picked files stay full-color.
+                                isMask: String(thumbIconName).startsWith("bundled:")
                                 color: Kirigami.Theme.textColor
                                 implicitWidth:  Kirigami.Units.iconSizes.medium
                                 implicitHeight: Kirigami.Units.iconSizes.medium

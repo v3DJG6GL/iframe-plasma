@@ -104,6 +104,12 @@ Kirigami.Dialog {
                             Layout.preferredWidth: Kirigami.Units.iconSizes.large
                             Layout.preferredHeight: Kirigami.Units.iconSizes.large
                             source: Qt.resolvedUrl("../icons/bundled/" + parent.modelData + ".svg")
+                            // Bundled Phosphor SVGs use fill="currentColor" which
+                            // QSvgRenderer resolves to black (no CSS context). The
+                            // `color:` tint only fires when isMask:true triggers
+                            // Kirigami's QPainter::CompositionMode_SourceIn pass.
+                            // Bundled-only context here — unconditional isMask.
+                            isMask: true
                             color: Kirigami.Theme.textColor
                         }
                         QQC.Label {
