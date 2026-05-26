@@ -32,6 +32,14 @@ public:
     Q_INVOKABLE bool setMap(const QString &key, const QVariantMap &fields);
     Q_INVOKABLE bool removeKey(const QString &key);
 
+    // Side-effect-free: did the most recent open succeed? primeAuthProfiles
+    // uses this AFTER getMap to distinguish "wallet locked / disabled /
+    // user-cancelled unlock" (returns false here) from "wallet open, entry
+    // simply not stored" (returns true). Without this distinction every
+    // failure mode logged the same generic 'no stored secret — skipping',
+    // hiding the much more actionable autostart-with-locked-wallet case.
+    Q_INVOKABLE bool isWalletReady() const;
+
 Q_SIGNALS:
     void error(const QString &message);
 

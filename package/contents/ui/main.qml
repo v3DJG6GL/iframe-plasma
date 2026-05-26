@@ -645,7 +645,24 @@ PlasmoidItem {
                 : authType === "raw"    ? (secrets.rawHeader   || "")
                                         : "";
             if (secret.length === 0) {
-                console.info("iframe-plasma[auth] profile " + id + " has no stored secret — skipping");
+                // Distinguish wallet-unavailable (locked / disabled /
+                // user-cancelled unlock at autostart) from wallet-open-
+                // but-entry-missing. Both surface as empty QVariantMap,
+                // but operator triage is very different: the first means
+                // "the wallet is locked at primeAuthProfiles time —
+                // probably plasmashell autostart firing before KWallet
+                // daemon, retry on first unlock", the second means
+                // "profile configured in KCM but secret never written —
+                // operator needs to re-enter it". Without this split,
+                // every Authelia-flash-at-autostart looked identical to
+                // a real config error.
+                if (root.authSupport.isWalletReady()) {
+                    console.info("iframe-plasma[auth] profile " + id
+                        + " has no stored secret (wallet open, entry missing) — skipping");
+                } else {
+                    console.warn("iframe-plasma[auth] profile " + id
+                        + " skipped — wallet not available (locked, disabled, or unlock cancelled)");
+                }
                 continue;
             }
             root.profileForAuthId(id);   // ensure profile + interceptor exist

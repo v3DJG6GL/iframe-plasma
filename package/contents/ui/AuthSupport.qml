@@ -47,4 +47,5 @@ QtObject {
     function getMap(key)         { return IframePlasma.SecretsBridge.getMap(key) }
     function setMap(key, fields) { return IframePlasma.SecretsBridge.setMap(key, fields) }
     function removeKey(key)      { return IframePlasma.SecretsBridge.removeKey(key) }
+    function isWalletReady()     { return IframePlasma.SecretsBridge.isWalletReady() }
 }

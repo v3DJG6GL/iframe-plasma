@@ -106,3 +106,8 @@ bool SecretsBridge::removeKey(const QString &key)
     }
     return m_wallet->removeEntry(key) == 0;
 }
+
+bool SecretsBridge::isWalletReady() const
+{
+    return m_wallet && m_wallet->isOpen();
+}
