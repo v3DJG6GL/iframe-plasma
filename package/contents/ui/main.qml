@@ -513,6 +513,17 @@ PlasmoidItem {
     // re-applied the OLD cached binding value.
     signal _thumbSelectorSaved(int tabIdx, string newSelector)
 
+    // Per-tab reload broadcast. Both the popup WebTab and the compact-rep
+    // miniView delegate subscribe and filter by their own index — so a
+    // single toolbar click / keyboard shortcut reloads both the popup tab
+    // AND its matching panel-slot thumbnail. `kind`:
+    //   "soft" → reload() on each
+    //   "hard" → triggerWebAction(ReloadAndBypassCache) — bypasses HTTP cache
+    // The cache-clear path (clearCacheAndReload) emits "soft" once the
+    // profile-wide clearHttpCache completes; cache-clear is profile-scoped
+    // so both views observe the cleared cache on their next fetch.
+    signal _tabReloadRequested(int tabIdx, string kind)
+
     function syncInterceptor() {
         console.info("iframe-plasma[sync] authSupport=" + (root.authSupport ? "available" : "null"));
         if (!root.authSupport) return;
@@ -1001,17 +1012,18 @@ PlasmoidItem {
     function clearCacheAndReload() {
         const tab = root.activeTab;
         if (!tab) return;
+        const idx = root.currentTabIndex;
         const profile = tab.profile;
-        if (!profile) { tab.reload(); return; }
+        if (!profile) { root._tabReloadRequested(idx, "soft"); return; }
         let fired = false;
         function onCompleted() {
             if (fired) return;
             fired = true;
             try { profile.clearHttpCacheCompleted.disconnect(onCompleted); } catch (e) { /* profile gone */ }
             console.info("iframe-plasma: HTTP cache cleared, reloading");
-            try { tab.reload(); } catch (e) {
-                console.warn("iframe-plasma: reload after cache-clear failed:", e.message);
-            }
+            // Soft reload BOTH the popup tab and its matching panel-slot
+            // thumbnail. Cache is profile-scoped so both observe the wipe.
+            root._tabReloadRequested(idx, "soft");
         }
         profile.clearHttpCacheCompleted.connect(onCompleted);
         profile.clearHttpCache();
@@ -1043,15 +1055,18 @@ PlasmoidItem {
     property var activeTab: null
 
     // --- Keyboard shortcuts (scoped to popup-open so panel use isn't grabby) ---
+    // Ctrl+R is the browser muscle-memory chord; StandardKey.Refresh is F5
+    // on Linux/KDE (the platform-conventional reload key). Both bound here
+    // so either works.
     Shortcut {
-        sequences: [StandardKey.Refresh]
+        sequences: ["Ctrl+R", StandardKey.Refresh]
         enabled: root.expanded
-        onActivated: root.activeTab?.reload()
+        onActivated: root._tabReloadRequested(root.currentTabIndex, "soft")
     }
     Shortcut {
         sequence: "Ctrl+Shift+R"
         enabled: root.expanded
-        onActivated: root.activeTab?.hardReload()
+        onActivated: root._tabReloadRequested(root.currentTabIndex, "hard")
     }
     Shortcut {
         sequence: "Ctrl+W"
@@ -1518,6 +1533,31 @@ PlasmoidItem {
                             miniView.reload();
                         }
                     }
+
+                    // Broadcast reload from the popup toolbar / shortcuts /
+                    // cache-clear. Fire on the matching thumbnail too so a
+                    // single Ctrl+R refreshes both the popup tab AND its
+                    // panel-slot view.
+                    function on_TabReloadRequested(tabIdx, kind) {
+                        if (tabIdx !== miniView.ownIndex) return;
+                        // Discarded views have no live renderer; promoting
+                        // lifecycleState to Active auto-reloads (per the
+                        // WebViewLifecycle controller). For soft reload, that
+                        // is enough on its own. For hard reload, promote
+                        // first so triggerWebAction has a renderer to drive.
+                        const isDiscarded = miniView.lifecycleState === WebEngineView.LifecycleState.Discarded;
+                        if (isDiscarded) {
+                            miniView.lifecycleState = WebEngineView.LifecycleState.Active;
+                            if (kind === "soft") return;   // promotion auto-reloads
+                        }
+                        if (kind === "hard") {
+                            console.info("iframe-plasma[compact] tab-reload hard idx=" + tabIdx);
+                            miniView.triggerWebAction(WebEngineView.ReloadAndBypassCache);
+                        } else {
+                            console.info("iframe-plasma[compact] tab-reload soft idx=" + tabIdx);
+                            miniView.reload();
+                        }
+                    }
                 }
 
                 // Per-thumb lifecycle. desiredActive is true ONLY for the
@@ -1760,8 +1800,8 @@ PlasmoidItem {
             isGrafana:       root.activeTab ? root.isGrafanaEmbed(root.activeTab.webView.url) : false
             pinned:          Plasmoid.configuration.popupPinned
             onPinToggled:    Plasmoid.configuration.popupPinned = !Plasmoid.configuration.popupPinned
-            onReloadClicked:        root.activeTab?.reload()
-            onHardReloadClicked:    root.activeTab?.hardReload()
+            onReloadClicked:        root._tabReloadRequested(root.currentTabIndex, "soft")
+            onHardReloadClicked:    root._tabReloadRequested(root.currentTabIndex, "hard")
             onOpenExternalClicked:  root.activeTab?.openExternal()
             onClearCookiesClicked:  root.clearCacheAndReload()
             onSelectTimeRange:        range    => root.activeTab?.setTimeRange(range)
@@ -1785,10 +1825,9 @@ PlasmoidItem {
             statuses: root.tabStatuses
             popupExpanded: root.expanded
             onTabSelected: idx => root.setCurrentTab(idx)
-            onReloadRequested: idx => {
-                const view = webStack.itemAt(idx);
-                if (view) view.reload();
-            }
+            // Route through the broadcast signal so the panel-slot
+            // thumbnail for the same tab also reloads.
+            onReloadRequested: idx => root._tabReloadRequested(idx, "soft")
         }
 
         StackLayout {
@@ -1857,6 +1896,19 @@ PlasmoidItem {
                     onAuthRequired: () => root.expanded = true
                     onLoadStatusChanged: root.setTabStatus(index, loadStatus)
                     onSelectorPicked: sel => root.handlePickedSelector(index, sel)
+
+                    // Broadcast reload from the popup toolbar / shortcuts /
+                    // cache-clear. Soft and hard both filter to THIS tab's
+                    // index; the matching compact-rep delegate has its own
+                    // listener (search webThumbComp for on_TabReloadRequested).
+                    Connections {
+                        target: root
+                        function on_TabReloadRequested(tabIdx, kind) {
+                            if (tabIdx !== index) return;
+                            if (kind === "hard") hardReload();
+                            else                 reload();
+                        }
+                    }
                 }
             }
         }
