@@ -198,12 +198,20 @@ PlasmoidItem {
             range = "";
         }
         if (range.length > 0) {
-            // Strip existing from/to (handles ?from= , &from= , ?to= , &to=).
-            url = url.replace(/[?&]from=[^&]*/g, function(m) { return m.charAt(0) === '?' ? '?' : ''; });
-            url = url.replace(/[?&]to=[^&]*/g,   function(m) { return m.charAt(0) === '?' ? '?' : ''; });
-            url = url.replace(/\?&/, '?').replace(/[?&]$/, '');
-            const sep = url.indexOf('?') === -1 ? '?' : '&';
-            url = url + sep + 'from=now-' + range + '&to=now';
+            // Split off the fragment first: the from/to strip char class `[^&]*`
+            // does not terminate on `#`, so a tab URL with a trailing fragment
+            // (e.g. Grafana's `Share → Direct link` appends `#viewPanel-N`) would
+            // have the second strip greedily eat through the fragment, and the
+            // append would land params after `#`, silently absorbed by Grafana
+            // as fragment text. Same regex-terminator class as Runs #4/#9.
+            const hashIdx = url.indexOf('#');
+            let path = hashIdx === -1 ? url : url.slice(0, hashIdx);
+            const frag = hashIdx === -1 ? "" : url.slice(hashIdx);
+            path = path.replace(/[?&]from=[^&]*/g, function(m) { return m.charAt(0) === '?' ? '?' : ''; });
+            path = path.replace(/[?&]to=[^&]*/g,   function(m) { return m.charAt(0) === '?' ? '?' : ''; });
+            path = path.replace(/\?&/, '?').replace(/[?&]$/, '');
+            const sep = path.indexOf('?') === -1 ? '?' : '&';
+            url = path + sep + 'from=now-' + range + '&to=now' + frag;
         }
         return url.replace(/\$\{theme\}/g, resolveTheme());
     }
