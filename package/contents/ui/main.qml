@@ -761,10 +761,8 @@ PlasmoidItem {
             // even ran). Confirmed in journal as `save error:
             // repeater is not defined`.
             if (scope === "popup" || scope === "both") {
-                const newPopupSel = (entry.popupMode === "custom")
-                                  ? (entry.popupSelector || "") : "";
                 if (fr && typeof fr.applyPopupSelectorAt === "function") {
-                    const ok = fr.applyPopupSelectorAt(tabIdx, newPopupSel);
+                    const ok = fr.applyPopupSelectorAt(tabIdx, entry.popupSelector || "");
                     if (!ok) console.warn("iframe-plasma[picker] no live WebTab at idx=" + tabIdx);
                 } else {
                     console.warn("iframe-plasma[picker] fullRepresentationItem unavailable");
@@ -787,12 +785,7 @@ PlasmoidItem {
             // preset→selector mapping the compact's `thumbSelector`
             // binding uses (chartOnly→.u-wrap>canvas etc.).
             if (scope === "thumb" || scope === "both") {
-                const newThumbSel =
-                      entry.thumbMode === "chartOnly"     ? ".u-wrap > canvas"
-                    : entry.thumbMode === "chartWithAxes" ? ".u-wrap"
-                    : entry.thumbMode === "custom"        ? (entry.thumbSelector || "")
-                    : "";   // fullPanel / unknown
-                root._thumbSelectorSaved(tabIdx, newThumbSel);
+                root._thumbSelectorSaved(tabIdx, entry.thumbSelector || "");
             }
 
             // Persist to urlsJson — guarded so onUrlsJsonChanged
