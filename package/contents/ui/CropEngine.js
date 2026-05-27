@@ -294,32 +294,48 @@ const _APPLY_BODY = `(function(sel){
   return first === 'matched' ? 'matched-and-observing' : 'observing';
 })`;
 
+// Shared teardown sequence inlined verbatim by _CLEAR_BODY (sole job:
+// tear down) and the picker-start IIFE below (which then sets up the
+// picker overlay on a clean page). Per-line try/catch on observer
+// disconnects so a stale-ref failure doesn't abort the rest of the
+// teardown. `var` (not `let`/`const`) so each enclosing IIFE can
+// redeclare these names without TDZ surprises in nested scopes.
+const _TEARDOWN_BODY = `
+    if (window.__ifpThumbObserver)     try { window.__ifpThumbObserver.disconnect(); }     catch(e) {}
+    if (window.__ifpThumbWrapObserver) try { window.__ifpThumbWrapObserver.disconnect(); } catch(e) {}
+    if (window.__ifpThumbResize)       try { window.__ifpThumbResize.disconnect(); }       catch(e) {}
+    if (window.__ifpThumbInterval)     clearInterval(window.__ifpThumbInterval);
+    // Cancel any rAF queued by schedule() — disconnecting the observer
+    // that scheduled it does NOT cancel an already-queued frame. Without
+    // this, the queued callback fires AFTER teardown, calls apply(), and
+    // re-sets data-ifp-isolate ("page flashes full then snaps back").
+    if (window.__ifpThumbRaf) { try { cancelAnimationFrame(window.__ifpThumbRaf); } catch(e) {} }
+    window.__ifpThumbObserver = null;
+    window.__ifpThumbWrapObserver = null;
+    window.__ifpThumbResize = null;
+    window.__ifpThumbInterval = null;
+    window.__ifpThumbRaf = 0;
+    window.__ifpThumbSchedule = null;
+    document.documentElement.removeAttribute('data-ifp-thumb');
+    document.documentElement.removeAttribute('data-ifp-isolate');
+    var _ifpKeeps = document.querySelectorAll('[data-ifp-keep="1"]');
+    for (var _ifpKI = 0; _ifpKI < _ifpKeeps.length; _ifpKI++) _ifpKeeps[_ifpKI].removeAttribute('data-ifp-keep');
+    var _ifpTargets = document.querySelectorAll('[data-ifp-target="1"]');
+    for (var _ifpTI = 0; _ifpTI < _ifpTargets.length; _ifpTI++) _ifpTargets[_ifpTI].removeAttribute('data-ifp-target');
+    var _ifpDisp = document.getElementById('ifp-thumb-display');
+    if (_ifpDisp && _ifpDisp.parentNode) _ifpDisp.parentNode.removeChild(_ifpDisp);
+    var _ifpStyle = document.getElementById('ifp-thumb-style');
+    if (_ifpStyle && _ifpStyle.parentNode) _ifpStyle.parentNode.removeChild(_ifpStyle);
+    var _ifpMiss = document.getElementById('ifp-miss-banner');
+    if (_ifpMiss && _ifpMiss.parentNode) _ifpMiss.parentNode.removeChild(_ifpMiss);
+`;
+
 // Tears down all crop state (data attributes, observers, timers,
 // the overlay display canvas). Used when the popup-view selector
 // is cleared to restore the original page without a reload.
 const _CLEAR_BODY = `(function(){
   try {
-    if (window.__ifpThumbObserver) window.__ifpThumbObserver.disconnect();
-    if (window.__ifpThumbWrapObserver) window.__ifpThumbWrapObserver.disconnect();
-    if (window.__ifpThumbResize) window.__ifpThumbResize.disconnect();
-    if (window.__ifpThumbInterval) clearInterval(window.__ifpThumbInterval);
-    window.__ifpThumbObserver = null;
-    window.__ifpThumbWrapObserver = null;
-    window.__ifpThumbResize = null;
-    window.__ifpThumbInterval = null;
-    window.__ifpThumbSchedule = null;
-    document.documentElement.removeAttribute('data-ifp-thumb');
-    document.documentElement.removeAttribute('data-ifp-isolate');
-    const keeps = document.querySelectorAll('[data-ifp-keep="1"]');
-    for (let i = 0; i < keeps.length; i++) keeps[i].removeAttribute('data-ifp-keep');
-    const targets = document.querySelectorAll('[data-ifp-target="1"]');
-    for (let j = 0; j < targets.length; j++) targets[j].removeAttribute('data-ifp-target');
-    const disp = document.getElementById('ifp-thumb-display');
-    if (disp && disp.parentNode) disp.parentNode.removeChild(disp);
-    const style = document.getElementById('ifp-thumb-style');
-    if (style && style.parentNode) style.parentNode.removeChild(style);
-    const banner = document.getElementById('ifp-miss-banner');
-    if (banner && banner.parentNode) banner.parentNode.removeChild(banner);
+${_TEARDOWN_BODY}
     return 'cleared';
   } catch (e) { return 'clear-error: ' + e.message; }
 })()`;
@@ -350,34 +366,7 @@ const _PICKER_START_BODY = `(function(){
   // for elementFromPoint to return descendants of the previously-
   // isolated card; folding here + a synchronous reflow guarantees
   // a fresh layout before the picker's first listener fires.
-  if (window.__ifpThumbObserver)     try { window.__ifpThumbObserver.disconnect();     } catch(e) {}
-  if (window.__ifpThumbWrapObserver) try { window.__ifpThumbWrapObserver.disconnect(); } catch(e) {}
-  if (window.__ifpThumbResize)       try { window.__ifpThumbResize.disconnect();       } catch(e) {}
-  if (window.__ifpThumbInterval)     clearInterval(window.__ifpThumbInterval);
-  // Cancel any pending rAF queued by schedule() before our teardown —
-  // disconnecting the observer that scheduled the rAF does NOT cancel
-  // the already-queued frame. Without this, the queued callback fires
-  // AFTER our teardown, calls apply(), re-sets data-ifp-isolate, and
-  // the user sees the page "flash full then snap back to isolated".
-  if (window.__ifpThumbRaf) { try { cancelAnimationFrame(window.__ifpThumbRaf); } catch(e) {} }
-  window.__ifpThumbObserver = null;
-  window.__ifpThumbWrapObserver = null;
-  window.__ifpThumbResize = null;
-  window.__ifpThumbInterval = null;
-  window.__ifpThumbRaf = 0;
-  window.__ifpThumbSchedule = null;
-  document.documentElement.removeAttribute('data-ifp-thumb');
-  document.documentElement.removeAttribute('data-ifp-isolate');
-  const _keeps = document.querySelectorAll('[data-ifp-keep="1"]');
-  for (let _i = 0; _i < _keeps.length; _i++) _keeps[_i].removeAttribute('data-ifp-keep');
-  const _targets = document.querySelectorAll('[data-ifp-target="1"]');
-  for (let _j = 0; _j < _targets.length; _j++) _targets[_j].removeAttribute('data-ifp-target');
-  const _st = document.getElementById('ifp-thumb-style');
-  if (_st && _st.parentNode) _st.parentNode.removeChild(_st);
-  const _dispOld = document.getElementById('ifp-thumb-display');
-  if (_dispOld && _dispOld.parentNode) _dispOld.parentNode.removeChild(_dispOld);
-  const _miss = document.getElementById('ifp-miss-banner');
-  if (_miss && _miss.parentNode) _miss.parentNode.removeChild(_miss);
+${_TEARDOWN_BODY}
   // Synchronous layout flush — reading offsetHeight forces Blink to
   // re-compute layout NOW, before the picker attaches listeners. Without
   // this, the first elementFromPoint() can return stale-layout hits.
