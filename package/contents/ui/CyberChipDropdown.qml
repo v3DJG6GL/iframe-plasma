@@ -27,6 +27,11 @@ Rectangle {
     // Slow opacity pulse on the icon — refresh-chip uses this as a quiet
     // "live" indicator when auto-refresh is on.
     property bool pulseEnabled: false
+    // True while the full popup representation is on screen. The pulse
+    // animation gates on this so it doesn't keep the QtQuick animation
+    // timer ticking when the popup is collapsed (the full rep is
+    // hidden, not destroyed). Forwarded from CyberToolbar.popupExpanded.
+    property bool popupExpanded: false
 
     Layout.preferredHeight: Theme.chipHeight + 2
     Layout.alignment: Qt.AlignVCenter
@@ -52,7 +57,7 @@ Rectangle {
             font.pixelSize: chip.iconPixelSize
             color: chip.iconColor
             SequentialAnimation on opacity {
-                running: chip.pulseEnabled
+                running: chip.pulseEnabled && chip.popupExpanded
                 loops: Animation.Infinite
                 NumberAnimation { from: 0.55; to: 1.0; duration: 1400; easing.type: Easing.InOutSine }
                 NumberAnimation { from: 1.0; to: 0.55; duration: 1400; easing.type: Easing.InOutSine }

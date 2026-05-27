@@ -49,6 +49,11 @@ Rectangle {
     // the checked state of the pin button below; we never write the
     // config from here (this component owns no state — see file header).
     property bool pinned: false
+    // True while the full popup representation is on screen. Infinite
+    // animations (reload spinner, chip-pulse) gate on this so they
+    // don't keep the QtQuick animation timer ticking while the popup
+    // is collapsed (the full rep is hidden, not destroyed).
+    property bool popupExpanded: false
 
     signal reloadClicked()
     signal hardReloadClicked()
@@ -114,7 +119,9 @@ Rectangle {
                         font.pixelSize: 13
                         font.bold: true
                         RotationAnimation on rotation {
-                            running: tb.loading
+                            // Gate on popupExpanded — see CyberToolbar header
+                            // and matching CyberTabBar accent-glow gate.
+                            running: tb.loading && tb.popupExpanded
                             loops: Animation.Infinite
                             from: 0; to: 360; duration: 900
                             // "Animation on property" retains its last
@@ -237,6 +244,7 @@ Rectangle {
             emptyText: "—"
             tooltipText: i18n("Time range — overrides URL's from/to (session only)")
             menu: timeMenu
+            popupExpanded: tb.popupExpanded
         }
 
         CyberDropdown {
@@ -280,6 +288,7 @@ Rectangle {
             menu: refreshMenu
             // Pulse the icon while auto-refresh is on (and chip is shown).
             pulseEnabled: tb.host.length > 0 && tb.refreshInterval.length > 0
+            popupExpanded: tb.popupExpanded
         }
 
         CyberDropdown {

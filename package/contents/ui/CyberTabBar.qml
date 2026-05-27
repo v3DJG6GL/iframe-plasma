@@ -120,7 +120,12 @@ Rectangle {
                     color: tabDel.statusColor
                     // Pulsing dot when the tab is loading
                     SequentialAnimation on opacity {
-                        running: tabDel.status === "loading"
+                        // Same popup-gating as the accent-glow MultiEffect
+                        // below — without it the infinite pulse keeps the
+                        // QtQuick animation timer ticking when the popup
+                        // is collapsed (the full rep is hidden, not
+                        // destroyed).
+                        running: tabDel.status === "loading" && bar.popupExpanded
                         loops: Animation.Infinite
                         NumberAnimation { from: 0.3; to: 1.0; duration: 700; easing.type: Easing.InOutSine }
                         NumberAnimation { from: 1.0; to: 0.3; duration: 700; easing.type: Easing.InOutSine }

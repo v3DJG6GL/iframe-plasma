@@ -1980,6 +1980,7 @@ PlasmoidItem {
             id: toolbar
             Layout.fillWidth: true
             visible: root.tabs.length > 0
+            popupExpanded:   root.expanded
             host:            root.activeTab ? root.activeTab.currentHost           : ""
             tlsOk:           root.activeTab ? root.activeTab.tlsOk                 : false
             httpStatus:      root.activeTab ? root.activeTab.httpStatus            : 0
