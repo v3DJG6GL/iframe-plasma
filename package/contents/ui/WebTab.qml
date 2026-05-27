@@ -144,6 +144,10 @@ Item {
         webview.runJavaScript(CropEngine.buildPickerStartJs(), function(r) {
             console.info("iframe-plasma[picker] start=" + r);
         });
+        // Defensive: restart() doesn't zero user properties, so any
+        // path that left ticks > 0 (e.g. external stop()) would shorten
+        // the 2-minute cap for the new session. Reset before restarting.
+        pickerTimer.ticks = 0;
         pickerTimer.restart();
     }
 
