@@ -4,12 +4,36 @@
  */
 #pragma once
 
+#include <QByteArray>
 #include <QHash>
 #include <QReadWriteLock>
 #include <QString>
 #include <QStringList>
 #include <QWebEngineUrlRequestInterceptor>
+#include <optional>
 #include <qqmlregistration.h>
+
+namespace iframeplasma::auth {
+
+// Canonicalise a request host to the WHATWG `URL.host` form that the QML
+// registration side emits (`new URL(t.url).host`): bare host for default
+// scheme ports (http→80, https→443), `host:port` otherwise. IPv6 literals
+// get their brackets re-added since `QUrl::host()` strips them. Used by
+// both BasicAuthInterceptor::interceptRequest() and the unit tests.
+QString canonicalizeHost(const QString &rawHost, const QString &scheme, int port);
+
+// Build the Authorization header value for one profile. Returns nullopt on
+// validation failure and (if errorReason is non-null) fills it with one of:
+//   "empty-secret", "colon-in-basic-username", "control-in-username",
+//   "control-in-header", "unknown-authtype".
+// "none" is a passthrough profile and is the caller's responsibility to
+// short-circuit before calling this function.
+std::optional<QByteArray> buildAuthHeader(const QString &authType,
+                                          const QString &username,
+                                          const QString &secret,
+                                          QString *errorReason = nullptr);
+
+} // namespace iframeplasma::auth
 
 class BasicAuthInterceptor : public QWebEngineUrlRequestInterceptor
 {

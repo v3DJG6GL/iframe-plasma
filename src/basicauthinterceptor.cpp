@@ -6,11 +6,112 @@
 
 #include <QByteArray>
 #include <QDebug>
+#include <QLatin1Char>
+#include <QLatin1String>
 #include <QLoggingCategory>
 #include <QQuickWebEngineProfile>
 #include <QUrl>
 
 Q_LOGGING_CATEGORY(lcIframeAuth, "iframeplasma.auth")
+
+namespace iframeplasma::auth {
+
+QString canonicalizeHost(const QString &rawHost, const QString &scheme, int port)
+{
+    // QML side registers hosts using WHATWG `new URL().host` semantics:
+    // bare host for default scheme ports (http→80, https→443), `host:port`
+    // otherwise. QUrl::host() strips brackets from IPv6 literals (returns
+    // `::1` for `https://[::1]/`), and the colon-in-host then becomes the
+    // IPv6 sigil (port is already separated). Re-add brackets so the lookup
+    // key matches the QML-side registration. Lowercase for case-fold match.
+    const QString lower = rawHost.toLower();
+    const bool isDefaultPort = (port == -1)
+        || (scheme == QLatin1String("https") && port == 443)
+        || (scheme == QLatin1String("http")  && port == 80);
+    const QString bracketed = lower.contains(QLatin1Char(':'))
+        ? QLatin1Char('[') + lower + QLatin1Char(']')
+        : lower;
+    return isDefaultPort
+        ? bracketed
+        : bracketed + QLatin1Char(':') + QString::number(port);
+}
+
+std::optional<QByteArray> buildAuthHeader(const QString &authType,
+                                          const QString &username,
+                                          const QString &secret,
+                                          QString *errorReason)
+{
+    auto fail = [errorReason](const char *r) -> std::optional<QByteArray> {
+        if (errorReason) {
+            *errorReason = QString::fromLatin1(r);
+        }
+        return std::nullopt;
+    };
+
+    if (secret.isEmpty()) {
+        return fail("empty-secret");
+    }
+    // For basic auth the username is concatenated with `:` before base64; a `:`
+    // inside `username` would silently re-partition the decoded credential
+    // (e.g. user="u", pass="a:b" → server sees user="u", pass="a:b"). Also
+    // refuse C0 controls/DEL in username — base64 hides them from the
+    // post-encode control-byte check below.
+    if (authType == QLatin1String("basic")) {
+        for (QChar ch : username) {
+            const ushort u = ch.unicode();
+            if (ch == QLatin1Char(':')) {
+                return fail("colon-in-basic-username");
+            }
+            if ((u < 0x20 && u != 0x09) || u == 0x7F) {
+                return fail("control-in-username");
+            }
+        }
+    }
+    // Build the Authorization header value once.
+    QByteArray header;
+    if (authType == QLatin1String("basic")) {
+        const QByteArray creds = (username + QLatin1Char(':') + secret).toUtf8();
+        header = QByteArrayLiteral("Basic ") + creds.toBase64();
+    } else if (authType == QLatin1String("bearer")) {
+        // Trim surrounding whitespace — RFC 7235 §2.1 token68 forbids whitespace
+        // inside the credential, and an operator pasting a token from clipboard
+        // commonly drags a trailing space along. Fail-closed proxies (oauth2-
+        // proxy in strict mode, some auth-proxy implementations) reject the
+        // request with 401 and the operator sees an unauthenticated dashboard
+        // with no clear failure path — a paste-typo becomes an availability
+        // issue. Parity with the `raw` branch's hygiene.
+        header = QByteArrayLiteral("Bearer ") + secret.trimmed().toUtf8();
+    } else if (authType == QLatin1String("raw")) {
+        // Strip whitespace and surrounding quotes that users sometimes paste.
+        QString cleaned = secret.trimmed();
+        if ((cleaned.startsWith(QLatin1Char('"')) && cleaned.endsWith(QLatin1Char('"')))
+            || (cleaned.startsWith(QLatin1Char('\'')) && cleaned.endsWith(QLatin1Char('\'')))) {
+            cleaned = cleaned.mid(1, cleaned.size() - 2);
+        }
+        header = cleaned.toUtf8();
+    } else {
+        return fail("unknown-authtype");
+    }
+
+    // Defense against header injection: a bearer/raw secret containing CR/LF
+    // (or NUL) would smuggle additional HTTP headers into every outbound
+    // request. Base64 (basic) cannot produce these bytes; bearer/raw take
+    // the secret verbatim, so this check is the gate.
+    //
+    // RFC 7230 §3.2.6 restricts field-value to VCHAR / SP / HTAB / obs-text;
+    // other C0 controls and DEL are not transmissible. Chromium normally
+    // rejects them, but reject here too so a non-conformant downstream
+    // proxy never sees e.g. a vertical-tab as a line terminator.
+    for (char c : std::as_const(header)) {
+        const unsigned char b = static_cast<unsigned char>(c);
+        if ((b < 0x20 && b != '\t') || b == 0x7F) {
+            return fail("control-in-header");
+        }
+    }
+    return header;
+}
+
+} // namespace iframeplasma::auth
 
 BasicAuthInterceptor::BasicAuthInterceptor(QObject *parent)
     : QWebEngineUrlRequestInterceptor(parent)
@@ -42,63 +143,20 @@ void BasicAuthInterceptor::applyProfile(const QString &profileId,
                              << "secretLen=" << secret.size();
         return;
     }
-    // For basic auth the username is concatenated with `:` before base64; a `:`
-    // inside `username` would silently re-partition the decoded credential
-    // (e.g. user="u", pass="a:b" → server sees user="u", pass="a:b"). Also
-    // refuse C0 controls/DEL in username — base64 hides them from the
-    // post-encode control-byte check below.
-    if (authType == QLatin1String("basic")) {
-        for (QChar ch : username) {
-            const ushort u = ch.unicode();
-            if (ch == QLatin1Char(':') || (u < 0x20 && u != 0x09) || u == 0x7F) {
-                qCWarning(lcIframeAuth) << "applyProfile: refusing basic username with `:` or control char; id=" << profileId;
-                return;
-            }
+    QString errorReason;
+    const auto built = iframeplasma::auth::buildAuthHeader(authType, username, secret, &errorReason);
+    if (!built) {
+        if (errorReason == QLatin1String("colon-in-basic-username")
+            || errorReason == QLatin1String("control-in-username")) {
+            qCWarning(lcIframeAuth) << "applyProfile: refusing basic username with `:` or control char; id=" << profileId;
+        } else if (errorReason == QLatin1String("unknown-authtype")) {
+            qCWarning(lcIframeAuth) << "applyProfile: unknown authType=" << authType;
+        } else if (errorReason == QLatin1String("control-in-header")) {
+            qCWarning(lcIframeAuth) << "applyProfile: refusing header with control byte; id=" << profileId;
         }
-    }
-    // Build the Authorization header value once.
-    QByteArray header;
-    if (authType == QLatin1String("basic")) {
-        const QByteArray creds = (username + QLatin1Char(':') + secret).toUtf8();
-        header = QByteArrayLiteral("Basic ") + creds.toBase64();
-    } else if (authType == QLatin1String("bearer")) {
-        // Trim surrounding whitespace — RFC 7235 §2.1 token68 forbids whitespace
-        // inside the credential, and an operator pasting a token from clipboard
-        // commonly drags a trailing space along. Fail-closed proxies (oauth2-
-        // proxy in strict mode, some auth-proxy implementations) reject the
-        // request with 401 and the operator sees an unauthenticated dashboard
-        // with no clear failure path — a paste-typo becomes an availability
-        // issue. Parity with the `raw` branch's hygiene.
-        header = QByteArrayLiteral("Bearer ") + secret.trimmed().toUtf8();
-    } else if (authType == QLatin1String("raw")) {
-        // Strip whitespace and surrounding quotes that users sometimes paste.
-        QString cleaned = secret.trimmed();
-        if ((cleaned.startsWith(QLatin1Char('"')) && cleaned.endsWith(QLatin1Char('"')))
-            || (cleaned.startsWith(QLatin1Char('\'')) && cleaned.endsWith(QLatin1Char('\'')))) {
-            cleaned = cleaned.mid(1, cleaned.size() - 2);
-        }
-        header = cleaned.toUtf8();
-    } else {
-        qCWarning(lcIframeAuth) << "applyProfile: unknown authType=" << authType;
         return;
     }
-
-    // Defense against header injection: a bearer/raw secret containing CR/LF
-    // (or NUL) would smuggle additional HTTP headers into every outbound
-    // request. Base64 (basic) cannot produce these bytes; bearer/raw take
-    // the secret verbatim, so this check is the gate.
-    //
-    // RFC 7230 §3.2.6 restricts field-value to VCHAR / SP / HTAB / obs-text;
-    // other C0 controls and DEL are not transmissible. Chromium normally
-    // rejects them, but reject here too so a non-conformant downstream
-    // proxy never sees e.g. a vertical-tab as a line terminator.
-    for (char c : std::as_const(header)) {
-        const unsigned char b = static_cast<unsigned char>(c);
-        if ((b < 0x20 && b != '\t') || b == 0x7F) {
-            qCWarning(lcIframeAuth) << "applyProfile: refusing header with control byte; id=" << profileId;
-            return;
-        }
-    }
+    const QByteArray header = *built;
 
     {
         QWriteLocker locker(&m_headersLock);
@@ -136,35 +194,8 @@ void BasicAuthInterceptor::interceptRequest(QWebEngineUrlRequestInfo &info)
     if (scheme != QLatin1String("https") && scheme != QLatin1String("http")) {
         return;
     }
-    // Canonicalize the lookup key to WHATWG `URL.host` semantics — that's
-    // what the QML registration side (`new URL(t.url).host` in
-    // primeAuthProfiles) emits: bare host for default ports (http→80,
-    // https→443), `host:port` for non-default ports. Without this
-    // canonicalization two failure modes appear:
-    //  (a) Tab URL `https://h:9100/` registers key `h:9100`; QUrl::host()
-    //      here returns `h` (port stripped) → lookup misses → auth never
-    //      fires for non-default-port tabs.
-    //  (b) Tab URL `https://h/` registers key `h`; a same-tab fetch to
-    //      `https://h:9100/...` was previously matched as bare `h`
-    //      → Authorization header leaked to an unrelated port on the
-    //      same host (e.g. sidecar metrics endpoints).
-    const QString rawHost = info.requestUrl().host().toLower();
-    const int rawPort = info.requestUrl().port();
-    const bool isDefaultPort = (rawPort == -1)
-        || (scheme == QLatin1String("https") && rawPort == 443)
-        || (scheme == QLatin1String("http")  && rawPort == 80);
-    // QUrl::host() strips brackets from IPv6 literals (returns `::1` for
-    // `https://[::1]/`), while WHATWG `URL.host` on the QML registration
-    // side keeps them (`[::1]`, or `[::1]:9100` for non-default port).
-    // Re-add brackets here so IPv6-literal hosts actually match — the
-    // colon-in-rawHost is the IPv6 sigil since QUrl already separated the
-    // port into rawPort.
-    const QString bracketedHost = rawHost.contains(QLatin1Char(':'))
-        ? QLatin1Char('[') + rawHost + QLatin1Char(']')
-        : rawHost;
-    const QString host = isDefaultPort
-        ? bracketedHost
-        : bracketedHost + QLatin1Char(':') + QString::number(rawPort);
+    const QString host = iframeplasma::auth::canonicalizeHost(
+        info.requestUrl().host(), scheme, info.requestUrl().port());
     QByteArray header;
     bool hadAny = false;
     {
