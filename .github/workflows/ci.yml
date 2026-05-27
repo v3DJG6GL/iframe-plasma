@@ -82,6 +82,7 @@ jobs:
             libkf6i18n-dev libkf6package-dev libplasma-dev \
             qt6-webengine-dev qt6-webengine-dev-tools \
             nodejs npm \
+            python3-dbusmock python3-dbus \
             xvfb
 
       - name: Cache ccache

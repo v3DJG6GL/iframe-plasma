@@ -51,10 +51,17 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tst_secretsbridge.cpp")
         LIBS    Qt6::Qml KF6::Wallet KF6::I18n)
 endif()
 
-# 5. ScreenLockMonitor — state-machine half via QMetaObject::invokeMethod.
-#    DBus subscription is integration-tested by the live widget.
+# 5. ScreenLockMonitor — state-machine half via QMetaObject + DBus
+#    subscription via the dbusmock fixture (skips if python3-dbusmock
+#    isn't available on the runner).
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tst_screenlockmonitor.cpp")
     iframe_add_cpp_test(tst_screenlockmonitor
         SOURCES "${CMAKE_SOURCE_DIR}/src/screenlockmonitor.cpp"
         LIBS    Qt6::Qml Qt6::DBus)
+    # Append the dbusmock fixture path on top of whatever the helper
+    # already set (QT_QPA_PLATFORM=offscreen) — ENVIRONMENT_MODIFICATION
+    # merges per-entry, but we set it via the simpler ENVIRONMENT list.
+    set_tests_properties("iframe-cpp-tst_screenlockmonitor" PROPERTIES
+        ENVIRONMENT
+            "QT_QPA_PLATFORM=offscreen;IFRAME_DBUSMOCK_SCREENSAVER=${CMAKE_SOURCE_DIR}/tests/fixtures/dbusmock/screensaver.py")
 endif()

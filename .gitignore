@@ -59,3 +59,7 @@ NOTES.local.md
 TODO.local.md
 SIMPLIFY_NOTES.md
 SECURITY-REVIEW_NOTES.md
+
+# Python bytecode caches in test fixtures
+tests/fixtures/**/__pycache__/
+tests/fixtures/**/*.pyc
