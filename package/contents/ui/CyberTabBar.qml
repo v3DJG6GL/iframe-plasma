@@ -112,6 +112,7 @@ Rectangle {
 
                 // Status dot
                 QQC.Label {
+                    id: statusDot
                     anchors.verticalCenter: parent.verticalCenter
                     text: "●"   // ●
                     font.family: Theme.fontHeader
@@ -123,6 +124,12 @@ Rectangle {
                         loops: Animation.Infinite
                         NumberAnimation { from: 0.3; to: 1.0; duration: 700; easing.type: Easing.InOutSine }
                         NumberAnimation { from: 1.0; to: 0.3; duration: 700; easing.type: Easing.InOutSine }
+                        // "Animation on property" retains its last animated
+                        // frame when stopped; without this reset a load that
+                        // completes mid-cycle leaves the (now-green) "ok" dot
+                        // stuck at opacity 0.3-ish until the next loading
+                        // cycle starts.
+                        onRunningChanged: if (!running) statusDot.opacity = 1.0
                     }
                 }
 

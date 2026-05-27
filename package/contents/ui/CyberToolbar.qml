@@ -106,6 +106,7 @@ Rectangle {
                     border.width: 1
                     radius: 2
                     QQC.Label {
+                        id: reloadGlyph
                         anchors.centerIn: parent
                         text: tb.loading ? "◠" : "↻"
                         color: Theme.accent
@@ -116,6 +117,12 @@ Rectangle {
                             running: tb.loading
                             loops: Animation.Infinite
                             from: 0; to: 360; duration: 900
+                            // "Animation on property" retains its last
+                            // animated frame when stopped; without this
+                            // reset, loading-completed mid-spin leaves the
+                            // static "↻" glyph stuck tilted at an arbitrary
+                            // angle until the next reload.
+                            onRunningChanged: if (!running) reloadGlyph.rotation = 0
                         }
                     }
                 }
