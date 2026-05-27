@@ -1553,10 +1553,17 @@ PlasmoidItem {
                         miniView.triggerWebAction(WebEngineView.ReloadAndBypassCache);
                         return;
                     }
-                    if (info.status === WebEngineView.LoadSucceededStatus
-                        && miniView.ownSelector.length > 0)
-                    {
-                        applyThumbCrop(miniView.ownSelector);
+                    if (info.status === WebEngineView.LoadSucceededStatus) {
+                        // Each fresh successful load grants a new
+                        // renderer-crash retry budget; mirror of WebTab's
+                        // _renderRetried reset. Without this the one-shot
+                        // latch above stays armed for the popup lifetime
+                        // and a second crash hours later leaves the
+                        // thumbnail permanently blank.
+                        miniView._miniRenderRetried = false;
+                        if (miniView.ownSelector.length > 0) {
+                            applyThumbCrop(miniView.ownSelector);
+                        }
                     }
                 }
 

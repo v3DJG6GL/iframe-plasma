@@ -535,6 +535,14 @@ Item {
                 console.info("iframe-plasma[load] SUCCEEDED finalUrl=" + finalUrl
                     + " onAuthelia=" + onAuthelia + " title=\"" + webview.title + "\"");
 
+                // Each fresh successful load grants a new renderer-crash
+                // retry budget. Without this reset the one-shot latch above
+                // stays armed for the popup-session lifetime and a second
+                // independent crash (GPU process loss, OOM under memory
+                // pressure, IPC-broker loss) hours later leaves the view
+                // permanently blank until plasmashell restart.
+                _renderRetried = false;
+
                 if (onAuthelia) {
                     if (!tab.loginInProgress) {
                         tab.loadStatus = "auth";
