@@ -5,6 +5,7 @@
 import QtQuick
 import QtTest
 import "../../package/contents/ui/RowSchema.js" as Schema
+import "../../package/contents/ui/sanitize.js" as Sanitize
 
 TestCase {
     name: "SerializeAuthProfiles"
@@ -121,6 +122,41 @@ TestCase {
             { authType: "basic", preempt: false },
             function() { calls = calls + 1; return "x"; });
         compare(calls, 1);
+    }
+
+    // ===== sanitize-on-load mutation must trigger re-persist =========
+    //
+    // Pins the invariant the ConfigAuth.qml repopulate() loop relies on:
+    // for an autheliaHost carrying a ZWSP / bidi-format / C0 byte, the
+    // sanitize call mutates the value, and that mutation must drive the
+    // synthesized branch — otherwise the unsanitized JSON survives on
+    // disk while the listModel shows the sanitized form, and the next
+    // Apply rewrites the unsanitised value back, silently disabling the
+    // WebTab Authelia overlay.
+    function test_sanitizeOnLoad_autheliaHostZwsp_mutatesValue() {
+        const raw = "auth.example.com​";  // trailing ZWSP
+        const out = Schema.normaliseAuthProfileRow(
+            { id: "i", authType: "basic", preempt: false, autheliaHost: raw },
+            _gen);
+        const sanitized = Sanitize.strip(out.row.autheliaHost);
+        // The mutation: pre-sanitize value carries the ZWSP, post does not.
+        verify(out.row.autheliaHost !== sanitized);
+        compare(sanitized, "auth.example.com");
+        // RowSchema itself reports non-synthesized for a complete row;
+        // it is the sanitize-mutation gate in repopulate() that must
+        // upgrade the flag — guard the precondition that gate depends on.
+        verify(!out.synthesized);
+    }
+
+    function test_sanitizeOnLoad_autheliaHostClean_noMutation() {
+        // Symmetric: clean host must not flip the gate.
+        const raw = "auth.example.com";
+        const out = Schema.normaliseAuthProfileRow(
+            { id: "i", authType: "basic", preempt: false, autheliaHost: raw },
+            _gen);
+        const sanitized = Sanitize.strip(out.row.autheliaHost);
+        compare(out.row.autheliaHost, sanitized);
+        verify(!out.synthesized);
     }
 
     // ===== full JSON roundtrip with mix of synthesised + complete rows

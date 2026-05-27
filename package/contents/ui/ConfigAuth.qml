@@ -90,8 +90,16 @@ KCM.SimpleKCM {
             let synthesized = false;
             for (const entry of arr) {
                 const norm = RowSchema.normaliseAuthProfileRow(entry, newUuid);
-                norm.row.autheliaHost = sanitizeAutheliaHost(norm.row.autheliaHost);
-                if (norm.synthesized) synthesized = true;
+                // Re-persist when sanitize actually mutates a stored value,
+                // otherwise an on-disk autheliaHost carrying a ZWSP/bidi byte
+                // (legacy config, backup import, manual edit) is displayed
+                // sanitized in the KCM but kept unsanitized in cfg_*JSON;
+                // Apply rewrites the unsanitized form back to disk and the
+                // runtime literal comparison silently fails (see comment
+                // block on sanitizeAutheliaHost below).
+                const beforeAH = norm.row.autheliaHost;
+                norm.row.autheliaHost = sanitizeAutheliaHost(beforeAH);
+                if (norm.synthesized || beforeAH !== norm.row.autheliaHost) synthesized = true;
                 listModel.append(norm.row);
             }
             // Persist synthesized UUIDs immediately — otherwise the next
