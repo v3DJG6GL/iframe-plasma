@@ -251,15 +251,19 @@ PlasmoidItem {
 
     // After the user saves a fresh password (typical post-Backup-Import
     // case: profile metadata round-trips fine but the wallet entry is
-    // missing), re-prime so the interceptor picks up the new secret
-    // without requiring an unrelated profile-metadata edit. Pre-fix, the
-    // freshly-saved password landed in KWallet but the interceptor still
-    // had no Authorization header registered for the host.
+    // missing), re-prime AND reload so the interceptor picks up the new
+    // secret AND any tab currently sitting on a 401/Authelia page re-
+    // requests with the now-registered Authorization header. Mirrors
+    // the onAuthProfilesJsonChanged path. Pre-fix, the freshly-saved
+    // password reached KWallet and the interceptor, but the active
+    // WebTab kept showing its cached failed-auth render.
     Connections {
         target: root.authSupport
         enabled: !!root.authSupport
         function onSecretsChanged() {
+            console.info("iframe-plasma[auth] secretsChanged -> re-prime + reloadAll");
             root.primeAuthProfiles();
+            root.reloadAll();
         }
     }
 
