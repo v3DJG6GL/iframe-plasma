@@ -158,10 +158,13 @@ Item {
     // we only seeded __ifpPicked, which left the overlay visible until
     // the user clicked on the page (fires the page-side click handler
     // which calls finish itself).
-    function cancelPicker() {
-        if (!tab.pickerActive) return;
+    function _finishPickerInPage() {
         webview.runJavaScript(
             "if (typeof window.__ifpPickerFinish === 'function') window.__ifpPickerFinish('');");
+    }
+    function cancelPicker() {
+        if (!tab.pickerActive) return;
+        _finishPickerInPage();
     }
 
     // Esc cancels the picker. The page-side keydown handler does the
@@ -177,8 +180,7 @@ Item {
         context: Qt.WindowShortcut
         onActivated: {
             console.info("iframe-plasma[picker] Esc shortcut → cancel");
-            webview.runJavaScript(
-                "if (typeof window.__ifpPickerFinish === 'function') window.__ifpPickerFinish('');");
+            tab._finishPickerInPage();
         }
     }
 
@@ -204,8 +206,7 @@ Item {
                 // 'already-active' on the next startPicker(), so the
                 // picker is permanently broken on this tab until URL
                 // reload. Same call as the Esc shortcut.
-                webview.runJavaScript(
-                    "if (typeof window.__ifpPickerFinish === 'function') window.__ifpPickerFinish('');");
+                tab._finishPickerInPage();
                 tab._applyPopupSelector();   // restore isolation on timeout
                 return;
             }
