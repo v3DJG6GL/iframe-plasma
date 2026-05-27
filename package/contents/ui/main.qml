@@ -1507,9 +1507,24 @@ PlasmoidItem {
                     request.dialogReject();
                     request.accepted = true;
                 }
+                // Bounded one-shot reload on renderer crash, mirroring the
+                // popup WebTab handler. Without this a Chromium renderer
+                // termination in a thumbnail (OOM under memory pressure,
+                // GPU-process loss, hostile content force-crashing its own
+                // renderer) leaves the mini-view permanently blank until the
+                // user re-edits the tab URL or restarts plasmashell. Cap at
+                // one retry per session so a crash-loop can't hammer
+                // plasmashell into the ground.
+                property bool _miniRenderRetried: false
                 onRenderProcessTerminated: function(status, exitCode) {
                     console.warn("iframe-plasma[mini-render] terminated status=" + status
-                        + " exitCode=" + exitCode + " idx=" + miniView.ownIndex);
+                        + " exitCode=" + exitCode + " idx=" + miniView.ownIndex
+                        + " retried=" + miniView._miniRenderRetried);
+                    if (status !== WebEngineView.NormalTerminationStatus
+                        && !miniView._miniRenderRetried) {
+                        miniView._miniRenderRetried = true;
+                        miniView.reload();
+                    }
                 }
 
                 transform: Scale {
