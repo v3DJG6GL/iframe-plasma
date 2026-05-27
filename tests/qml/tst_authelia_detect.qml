@@ -95,4 +95,29 @@ TestCase {
     function test_dangerouslyShortHost_matchesEverything() {
         verify(Q.isAutheliaHost("https://anything.com/", "com"));
     }
+
+    // Defence-in-depth: ConfigAuth's load-time sanitize covers per-profile
+    // autheliaHost, but two paths still feed this comparison raw — the
+    // deprecated-global fallback in main.qml:2069 and
+    // Migrations.legacyAuthMigration copying the global verbatim into a
+    // synthesised profile. Stripping control bytes at the comparison site
+    // closes both leaks centrally.
+    function test_zeroWidthSpace_stillMatches() {
+        // U+200B between the dots — a literal `===` would silently fail.
+        verify(Q.isAutheliaHost("https://auth.example.com/",
+                                 "auth.example​.com"));
+    }
+    function test_rightToLeftOverride_stillMatches() {
+        // U+202E (RLO) leading byte (legacy unsanitised global).
+        verify(Q.isAutheliaHost("https://auth.example.com/",
+                                 "‮auth.example.com"));
+    }
+    function test_byteOrderMark_stillMatches() {
+        verify(Q.isAutheliaHost("https://auth.example.com/",
+                                 "auth.example.com﻿"));
+    }
+    function test_onlyControlBytes_returnsFalse() {
+        // Strip-to-empty must not match every host.
+        verify(!Q.isAutheliaHost("https://auth.example.com/", "​‮"));
+    }
 }
