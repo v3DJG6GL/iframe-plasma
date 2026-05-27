@@ -77,6 +77,24 @@ TestCase {
         const out = G.transform("https://g/d/abc/slug?orgId=1&viewPanel=panel-7&extra=keep", opts);
         compare(out, "https://g/d-solo/abc/slug?orgId=1&extra=keep&panelId=7");
     }
+    function test_dSolo_viewPanel_fragmentPreserved_noOrphan() {
+        // Fragment after viewPanel — strip regex's terminator must accept
+        // "#" so the orphan viewPanel doesn't survive alongside the
+        // appended panelId.
+        const opts = _off(); opts.convertDSolo = true;
+        const out = G.transform("https://g/d/abc/slug?viewPanel=panel-7#anchor", opts);
+        compare(out, "https://g/d-solo/abc/slug?panelId=7#anchor");
+    }
+    function test_dSolo_viewPanel_fragmentPreserved_withClone() {
+        const opts = _off(); opts.convertDSolo = true;
+        const out = G.transform("https://g/d/abc/slug?viewPanel=panel-7-clone2#anchor", opts);
+        compare(out, "https://g/d-solo/abc/slug?panelId=7#anchor");
+    }
+    function test_dSolo_viewPanel_fragmentPreserved_otherParamsBefore() {
+        const opts = _off(); opts.convertDSolo = true;
+        const out = G.transform("https://g/d/abc/slug?orgId=1&viewPanel=panel-7#anchor", opts);
+        compare(out, "https://g/d-solo/abc/slug?orgId=1&panelId=7#anchor");
+    }
 
     // ===== Time-range presets =========================================
     function test_timeRange_addsFromTo() {

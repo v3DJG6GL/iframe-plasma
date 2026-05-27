@@ -75,7 +75,14 @@ function transform(input, opts) {
     const viewPanelMatch = u.match(/[?&]viewPanel=panel-(\d+)(?:-clone\d+)?/);
     if (opts.convertDSolo && viewPanelMatch && u.indexOf("/d/") !== -1) {
         u = u.replace("/d/", "/d-solo/");
-        u = u.replace(/([?&])viewPanel=panel-\d+(-clone\d+)?(&|$)/, function(_, before, _clone, after) {
+        u = u.replace(/([?&])viewPanel=panel-\d+(-clone\d+)?(&|#|$)/, function(_, before, _clone, after) {
+            // "#" is a fragment terminator — without "#" in the alternation
+            // the regex silently fails to match for "?viewPanel=panel-7#frag"
+            // URLs (Grafana share links with anchor routes) and the orphan
+            // viewPanel survives alongside the appended panelId, producing
+            // dup params that Grafana resolves version-dependently. Preserve
+            // the "#" verbatim so the fragment doesn't disappear with it.
+            if (after === "#") return "#";
             return before === "?" && after === "" ? ""
                  : before === "?" ? "?"
                  : after === "" ? "" : "&";
