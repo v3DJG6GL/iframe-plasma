@@ -4,7 +4,6 @@
  */
 #include "screenlockmonitor.h"
 
-#include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
@@ -26,10 +25,21 @@ const QString kPath = QStringLiteral("/org/freedesktop/ScreenSaver");
 }
 
 ScreenLockMonitor::ScreenLockMonitor(QObject *parent)
+    : ScreenLockMonitor(QDBusConnection::sessionBus(), parent)
+{
+}
+
+ScreenLockMonitor::ScreenLockMonitor(const QDBusConnection &bus, QObject *parent)
     : QObject(parent)
 {
-    QDBusConnection bus = QDBusConnection::sessionBus();
+    subscribe(bus);
+}
 
+void ScreenLockMonitor::subscribe(const QDBusConnection &busIn)
+{
+    // QDBusConnection's connect() and asyncCall() are non-const but the
+    // class is a cheap handle around a refcounted pimpl, so copy locally.
+    QDBusConnection bus = busIn;
     // Subscribe to lock/unlock. An empty object path matches the signal
     // regardless of which path the service publishes it on.
     const bool connected = bus.connect(kService, QString(), kInterface,

@@ -4,6 +4,7 @@
  */
 #pragma once
 
+#include <QDBusConnection>
 #include <QObject>
 #include <qqmlregistration.h>
 
@@ -24,7 +25,13 @@ class ScreenLockMonitor : public QObject
     Q_PROPERTY(bool locked READ locked NOTIFY lockedChanged)
 
 public:
+    // Production: uses QDBusConnection::sessionBus().
     explicit ScreenLockMonitor(QObject *parent = nullptr);
+    // Tests: inject a dbusmock-backed connection (e.g. a per-test private bus
+    // name created with QDBusConnection::connectToBus). The bus reference is
+    // held only for setup — Qt's connection registry keeps the slot alive
+    // for the object's lifetime.
+    explicit ScreenLockMonitor(const QDBusConnection &bus, QObject *parent = nullptr);
 
     bool locked() const { return m_locked; }
 
@@ -35,6 +42,7 @@ private Q_SLOTS:
     void onActiveChanged(bool active);
 
 private:
+    void subscribe(const QDBusConnection &bus);
     void setLocked(bool locked);
 
     bool m_locked = false;
