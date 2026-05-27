@@ -58,7 +58,7 @@ KCM.SimpleKCM {
         QQC.CheckBox     { id: _showTabBar }
         QQC.CheckBox     { id: _compactEnabled }
         QQC.CheckBox     { id: _compactLabel }
-        QQC.SpinBox      { id: _compactAxis;    from: 32;    to: 1024 }
+        QQC.SpinBox      { id: _compactAxis;    from: 16;    to: 4000 }
         QQC.CheckBox     { id: _popupPinned }
         QQC.TextField    { id: _authProfiles }
         QQC.TextField    { id: _ua }
