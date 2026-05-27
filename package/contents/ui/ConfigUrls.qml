@@ -947,15 +947,19 @@ KCM.SimpleKCM {
             u = stripParam(u, "theme");
             u = stripParam(u, "hideLogo");
             u = stripParam(u, "_ifp_hidePanelMenu");
-            // `kiosk` is a valueless flag — stripParam targets `key=…`,
-            // so handle the bare-flag form separately (also covering
-            // legacy `kiosk=1` / `kiosk=tv` values just in case).
+            // `kiosk` is a valueless flag — stripParam targets `key=val`
+            // mandatorily, so handle here. Covers both bare `kiosk` and
+            // legacy `kiosk=1`/`kiosk=tv` shapes. Mirrors stripParam's
+            // leading-`?` rewrite so `?kiosk[=v]&other=…` collapses to
+            // `?other=…` instead of dropping the leading `?`.
             const [base, frag] = splitFragment(u);
             let b = base
-                .replace(/[?&]kiosk(?==[^&]*)(=[^&]*)?(?=&|$)/g, "")
-                .replace(/[?&]kiosk(?=&|$)/g, "");
-            // Normalize stray `?&` / trailing `?`/`&` from removals.
-            b = b.replace(/\?&/, "?").replace(/&&+/g, "&").replace(/[?&]$/, "");
+                .replace(/[?]kiosk(?:=[^&]*)?(?:&|$)/, function(m) {
+                    return m.endsWith("&") ? "?" : "";
+                })
+                .replace(/[&]kiosk(?:=[^&]*)?/g, "");
+            // Normalize stray trailing `?`/`&` or doubled `&`.
+            b = b.replace(/&&+/g, "&").replace(/[?&]$/, "");
             return b + frag;
         }
 
