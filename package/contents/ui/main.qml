@@ -845,7 +845,13 @@ PlasmoidItem {
             }
 
             const reqHost = new URL(String(request.url)).host;
-            const tabHost = new URL(tabConfig.url).host;
+            // Resolve ${theme} (and any future placeholder) before parsing —
+            // `new URL("https://${theme}.example.com/")` throws because $/{ /}
+            // are invalid host chars. primeAuthProfiles applies the same
+            // substitution; without it here, handleBasicAuth's outer catch
+            // swallows the parse error and Qt falls back to its default
+            // basic-auth prompt despite stored creds being present.
+            const tabHost = new URL(root.resolveUrl(tabConfig)).host;
             if (reqHost.toLowerCase() !== tabHost.toLowerCase()) {
                 console.info("iframe-plasma[auth] host mismatch -> letting Qt prompt");
                 return;
@@ -1644,6 +1650,15 @@ PlasmoidItem {
                             miniView.reload();
                         }
                     }
+
+                    // Broadcast reload from secretsChanged / KConfig
+                    // serial bumps. The popup StackLayout already handles
+                    // this via webStack.reloadAll(); the compact thumbnail
+                    // for the same tab was previously left displaying the
+                    // stale 401/Authelia render until the next nav.
+                    function onReloadAllRequested() {
+                        on_TabReloadRequested(miniView.ownIndex, "soft");
+                    }
                 }
 
                 // Per-thumb lifecycle. desiredActive is true ONLY for the
@@ -1996,9 +2011,14 @@ PlasmoidItem {
                 return item ? item.webView : null;
             }
             function reloadAll() {
+                // Go through the WebTab wrapper (NOT the raw webView) so the
+                // Discarded/Frozen-promotion path in WebTab.reload() runs —
+                // calling reload() directly on a Discarded WebEngineView is
+                // silently dropped by Qt and a background tab on a stale
+                // 401/Authelia render would stay stale after a wallet write.
                 for (let i = 0; i < repeater.count; i++) {
-                    const w = itemAt(i);
-                    if (w) w.reload();
+                    const tab = repeater.itemAt(i);
+                    if (tab) tab.reload();
                 }
             }
 
