@@ -163,6 +163,20 @@ void BasicAuthInterceptor::applyProfile(const QString &profileId,
         return;
     }
     const QByteArray header = *built;
+    // buildAuthHeader can legitimately return an empty QByteArray for raw
+    // secrets that collapse to nothing after quote-stripping (e.g. "''" or
+    // '""'), and that path is unit-tested as the intended buildAuthHeader
+    // contract. Registering an empty header to m_headers, however, leaves
+    // a phantom snapshot row that contradicts headersSnapshot's contract
+    // (operators inspecting state see "host X is wired up" while
+    // interceptRequest correctly skips injection via its !header.isEmpty()
+    // gate). Refuse to register so the snapshot and the on-the-wire
+    // behavior agree.
+    if (header.isEmpty()) {
+        qCWarning(lcIframeAuth) << "applyProfile: built header is empty after hygiene; id="
+                                << profileId << "type=" << authType;
+        return;
+    }
 
     {
         QWriteLocker locker(&m_headersLock);

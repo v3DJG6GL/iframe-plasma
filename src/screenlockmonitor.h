@@ -46,4 +46,10 @@ private:
     void setLocked(bool locked);
 
     bool m_locked = false;
+    // Set true on the first ActiveChanged signal arrival. The seed GetActive
+    // reply consults this before calling setLocked() so a stale-but-valid
+    // reply (the screen-state at the moment the daemon processed the call,
+    // before the user locked) can't clobber a real ActiveChanged(true) that
+    // landed first.
+    bool m_signalReceived = false;
 };

@@ -63,7 +63,13 @@ void ScreenLockMonitor::subscribe(const QDBusConnection &busIn)
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
             [this](QDBusPendingCallWatcher *w) {
                 const QDBusPendingReply<bool> reply = *w;
-                if (reply.isValid()) {
+                // Race: the user can lock between asyncCall dispatch and the
+                // reply landing. If an ActiveChanged(true) arrived first the
+                // seed's "false" (the state at the moment the daemon
+                // processed our call) would silently overwrite the correct
+                // true. Defer to the real signal when we've already heard
+                // from it.
+                if (reply.isValid() && !m_signalReceived) {
                     setLocked(reply.value());
                 }
                 w->deleteLater();
@@ -72,6 +78,7 @@ void ScreenLockMonitor::subscribe(const QDBusConnection &busIn)
 
 void ScreenLockMonitor::onActiveChanged(bool active)
 {
+    m_signalReceived = true;
     setLocked(active);
 }
 
