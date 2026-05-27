@@ -41,3 +41,11 @@ endif()
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tst_grafana_rewrite_e2e.cpp")
     iframe_add_e2e_test(tst_grafana_rewrite_e2e)
 endif()
+
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tst_lifecycle_e2e.cpp")
+    iframe_add_e2e_test(tst_lifecycle_e2e)
+endif()
+
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tst_cookies_persist.cpp")
+    iframe_add_e2e_test(tst_cookies_persist)
+endif()

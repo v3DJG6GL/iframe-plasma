@@ -46,6 +46,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 _LOCK = threading.Lock()
 _LAST_URL_RECEIVED: str = ""
 _LAST_AUTHORIZATION: str = ""
+_HEARTBEAT_COUNT: int = 0
+_COOKIE_HITS: int = 0
 
 
 class FixtureHandler(BaseHTTPRequestHandler):
@@ -77,12 +79,17 @@ class FixtureHandler(BaseHTTPRequestHandler):
 
     # ----- routes -------------------------------------------------------------
     def do_GET(self) -> None:  # noqa: N802 (BaseHTTPRequestHandler convention)
+        # Python's `global` declarations must precede first use of the
+        # name; hoisting them here lets every endpoint below assign freely.
+        global _LAST_URL_RECEIVED, _LAST_AUTHORIZATION
+        global _HEARTBEAT_COUNT, _COOKIE_HITS
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
-        # Skip self-recording for the read-only endpoints — otherwise
-        # /_report would overwrite lastUrl with "/_report" before the
-        # caller could inspect what the test page actually fetched.
-        if path not in ("/_report", "/_record"):
+        # Skip self-recording for the read-only / counter endpoints —
+        # otherwise /_report would overwrite lastUrl with "/_report"
+        # before the caller could inspect what the test page actually
+        # fetched. /_beat and /_record are similarly noisy.
+        if path not in ("/_report", "/_record", "/_reset", "/_beat"):
             self._record_url()
 
         if path == "/basic":
@@ -130,7 +137,6 @@ class FixtureHandler(BaseHTTPRequestHandler):
         if path == "/_record":
             # Internal: invoked by the /d-solo page's JS to record the
             # final navigated-to URL (after browser-side redirect handling).
-            global _LAST_URL_RECEIVED
             q = urllib.parse.parse_qs(parsed.query)
             if "u" in q:
                 with _LOCK:
@@ -143,9 +149,68 @@ class FixtureHandler(BaseHTTPRequestHandler):
                 payload = {
                     "lastUrl": _LAST_URL_RECEIVED,
                     "lastAuthorization": _LAST_AUTHORIZATION,
+                    "heartbeats": _HEARTBEAT_COUNT,
+                    "cookieHits": _COOKIE_HITS,
                 }
             self._send(200, json.dumps(payload).encode(),
                        content_type="application/json")
+            return
+
+        if path == "/_reset":
+            # Zero the counters so a single test process can run multiple
+            # phases without stale state contaminating later assertions.
+            with _LOCK:
+                _HEARTBEAT_COUNT = 0
+                _COOKIE_HITS = 0
+                _LAST_URL_RECEIVED = ""
+                _LAST_AUTHORIZATION = ""
+            self._send(200, b"reset")
+            return
+
+        if path == "/_beat":
+            # The page's setInterval JS pings here; we tally calls so
+            # the lifecycle E2E can verify Frozen actually pauses JS.
+            with _LOCK:
+                _HEARTBEAT_COUNT += 1
+            self._send(200, b"beat")
+            return
+
+        if path == "/beat-page":
+            body = (
+                "<html><head></head><body>"
+                "<div id='m'>beating</div>"
+                "<script>"
+                "setInterval(function() { "
+                "  fetch('/_beat'); "
+                "}, 100);"
+                "</script>"
+                "</body></html>"
+            ).encode()
+            self._send(200, body, content_type="text/html")
+            return
+
+        if path == "/cookie-set":
+            # First-hit endpoint: returns Set-Cookie. Subsequent hits to
+            # /cookie-check verify the cookie was retained — used by the
+            # tst_cookies_persist E2E to confirm cookies survive across
+            # lifecycle transitions.
+            body = (
+                "<html><body>cookie-set</body></html>"
+            ).encode()
+            self._send(200, body, content_type="text/html",
+                       extra_headers={"Set-Cookie": "iframeplasma_test=present; Path=/"})
+            return
+
+        if path == "/cookie-check":
+            cookie = self.headers.get("Cookie", "")
+            with _LOCK:
+                _COOKIE_HITS += 1
+            if "iframeplasma_test=present" in cookie:
+                self._send(200, b"<html><body>cookie-present</body></html>",
+                           content_type="text/html")
+            else:
+                self._send(401, b"<html><body>cookie-missing</body></html>",
+                           content_type="text/html")
             return
 
         if path == "/theme.html":
