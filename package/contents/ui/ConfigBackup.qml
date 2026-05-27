@@ -129,7 +129,7 @@ KCM.SimpleKCM {
                 if (warn) {
                     msg += " " + i18n("(Warning: %1)", warn);
                 }
-                page._showResult(msg, false);
+                page._showResult(msg, warn ? "warning" : false);
             } else {
                 page._showResult(i18n("Export failed: %1", err), true);
             }
@@ -164,7 +164,11 @@ KCM.SimpleKCM {
                     // Non-fatal: backup write failed but import proceeded.
                     msg += " " + i18n("(Warning: %1)", result.error);
                 }
-                page._showResult(msg, false);
+                // A snapshot-write failure leaves the user with no revert
+                // point; render as Warning rather than Positive so the
+                // severity isn't hidden behind a green banner.
+                const sev = (result.error || result.warning) ? "warning" : false;
+                page._showResult(msg, sev);
             } else {
                 page._showResult(i18n("Import failed: %1", result.error), true);
             }
@@ -180,10 +184,23 @@ KCM.SimpleKCM {
         try { return decodeURIComponent(s); } catch (e) { return s; }
     }
 
-    function _showResult(text, isError) {
+    // severity: false / "ok"        → Positive (green)
+    //           "warning"            → Warning  (yellow)
+    //           true  / "error"      → Error    (red)
+    // The 3-mode form lets the import/export "ok but with caveat"
+    // paths (snapshot-write failed, FAT/SMB perm restriction) render
+    // as Warning instead of Positive — a green banner with a
+    // parenthetical "(Warning: ...)" hides the severity from the
+    // operator's primary visual channel.
+    function _showResult(text, severity) {
         resultMsg.text = text;
-        resultMsg.type = isError ? Kirigami.MessageType.Error
-                                 : Kirigami.MessageType.Positive;
+        if (severity === true || severity === "error") {
+            resultMsg.type = Kirigami.MessageType.Error;
+        } else if (severity === "warning") {
+            resultMsg.type = Kirigami.MessageType.Warning;
+        } else {
+            resultMsg.type = Kirigami.MessageType.Positive;
+        }
         resultMsg.visible = true;
     }
 
