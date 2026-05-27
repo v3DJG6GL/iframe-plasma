@@ -57,13 +57,8 @@ KCM.SimpleKCM {
             text: i18n("Show tab bar when multiple URLs are configured")
             checked: true
         }
-        QQC.Label {
-            Layout.fillWidth: true
-            Layout.maximumWidth: Kirigami.Units.gridUnit * 22
+        FormHintLabel {
             text: i18n("Tip: drag the popup's edges to resize it. The size is remembered across sessions.")
-            wrapMode: Text.WordWrap
-            color: Kirigami.Theme.disabledTextColor
-            font.pixelSize: Kirigami.Theme.defaultFont.pixelSize - 1
         }
 
         Item { Kirigami.FormData.isSection: true }
@@ -110,22 +105,12 @@ KCM.SimpleKCM {
                 suffix: " s"
             }
         }
-        QQC.Label {
-            Layout.fillWidth: true
-            Layout.maximumWidth: Kirigami.Units.gridUnit * 22
+        FormHintLabel {
             text: i18n("Rotation only runs while the widget popup is closed — opening the popup pauses the cycle on whichever tab is currently shown. Requires at least two tabs.")
-            wrapMode: Text.WordWrap
-            color: Kirigami.Theme.disabledTextColor
-            font.pixelSize: Kirigami.Theme.defaultFont.pixelSize - 1
             visible: cycleBox.checked
         }
-        QQC.Label {
-            Layout.fillWidth: true
-            Layout.maximumWidth: Kirigami.Units.gridUnit * 22
+        FormHintLabel {
             text: i18n("The panel slot mirrors whichever tab is active in the popup. Per-URL settings on the URLs tab control how each tab is rendered in the slot (Grafana crop, custom CSS selector, plain text, an icon, or excluded from the slot entirely).")
-            wrapMode: Text.WordWrap
-            color: Kirigami.Theme.disabledTextColor
-            font.pixelSize: Kirigami.Theme.defaultFont.pixelSize - 1
         }
     }
 }
