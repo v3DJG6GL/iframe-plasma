@@ -30,6 +30,15 @@ public:
     bool open() override
     {
         // Synchronous open — kwallet prompts the user once if needed; subsequent calls reuse.
+        // Release any prior wallet handle before overwriting: ensureOpen
+        // calls open() whenever isOpen() flips false (wallet closed by
+        // kwalletd timeout, user-locked, …), and KWallet::openWallet
+        // returns a fresh QObject each time, so without this the prior
+        // instance leaks (and keeps its DBus subscription alive).
+        if (m_wallet) {
+            m_wallet->deleteLater();
+            m_wallet = nullptr;
+        }
         m_wallet = KWallet::Wallet::openWallet(
             KWallet::Wallet::NetworkWallet(), 0, KWallet::Wallet::Synchronous);
         return m_wallet && m_wallet->isOpen();
@@ -115,10 +124,18 @@ bool SecretsBridge::ensureOpen()
         Q_EMIT error(tr("Failed to open the network wallet."));
         return false;
     }
-    if (!m_wallet->hasFolder(kFolder)) {
-        m_wallet->createFolder(kFolder);
+    // Mirror the warm-path recovery: propagate setFolder failure. Without
+    // this, a kwalletd that has the folder but rejects setFolder (e.g.
+    // racing with kwalletmanager state) returns success here and every
+    // subsequent read/write silently targets whatever folder kwalletd
+    // settled on — the exact silent-failure that the warm-path fix
+    // eliminates.
+    if (!m_wallet->hasFolder(kFolder) && !m_wallet->createFolder(kFolder)) {
+        return false;
     }
-    m_wallet->setFolder(kFolder);
+    if (!m_wallet->setFolder(kFolder)) {
+        return false;
+    }
     return true;
 }
 
