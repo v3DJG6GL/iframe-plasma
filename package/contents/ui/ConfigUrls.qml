@@ -94,12 +94,43 @@ KCM.SimpleKCM {
         store.serialize();
     }
 
+    // Set by repopulate() while it's rebuilding listModel from store.json.
+    // Without this gate the per-row append would re-enter serialize() via
+    // any onChanged handler and clobber the JSON we're loading FROM.
+    property bool _reloading: false
+
+    // Rebuild listModel from store.json. Used both at startup (in
+    // Component.onCompleted) and when store.json changes underneath us —
+    // the Backup KCM page writes cfg_urlsJson directly (via a different
+    // page-local alias), and without this handler listModel would still
+    // carry the pre-import rows; any subsequent edit's serialize() would
+    // write the stale model back over the imported value.
+    function repopulate() {
+        _reloading = true;
+        try {
+            listModel.clear();
+            const arr = JSON.parse(store.json || "[]");
+            if (Array.isArray(arr)) {
+                for (const entry of arr) {
+                    listModel.append(RowSchema.normaliseTabRow(entry));
+                }
+            }
+        } catch (e) { console.warn("ConfigUrls: parse error", e.message); }
+        _reloading = false;
+    }
+
     QtObject {
         id: store
         property string json: "[]"
         property int currentIndex: 0
 
+        // Re-sync listModel when the underlying kcfg JSON changes from
+        // outside this page (Backup import on the sibling KCM page, or
+        // another applet instance writing the same key).
+        onJsonChanged: if (!page._reloading) page.repopulate()
+
         function serialize() {
+            if (page._reloading) return;
             const arr = [];
             for (let i = 0; i < listModel.count; i++) {
                 const row = listModel.get(i);
@@ -168,29 +199,22 @@ KCM.SimpleKCM {
     onAuthProfilesChanged: {
         const validIds = new Set();
         for (const p of authProfiles) if (p.id) validIds.add(p.id);
+        let changed = false;
         for (let i = 0; i < listModel.count; i++) {
             const apid = listModel.get(i).authProfileId;
             if (apid && !validIds.has(apid)) {
                 listModel.setProperty(i, "authProfileId", "");
+                changed = true;
             }
         }
+        // Flush so the unlinked id doesn't reappear if the user clicks
+        // Apply without touching another field on this page.
+        if (changed) store.serialize();
     }
 
     ListModel { id: listModel }
 
-    Component.onCompleted: {
-        try {
-            const arr = JSON.parse(store.json || "[]");
-            for (const entry of arr) {
-                // RowSchema.normaliseTabRow handles every field default +
-                // the thumbMode/popupMode legacy migration (selector
-                // present but mode missing → "custom"). Legacy auth
-                // fields (basicAuthUser etc.) are migrated upstream in
-                // main.qml; here we just read the resulting authProfileId.
-                listModel.append(RowSchema.normaliseTabRow(entry));
-            }
-        } catch (e) { console.warn("ConfigUrls: parse error", e.message); }
-    }
+    Component.onCompleted: page.repopulate()
 
     header: ColumnLayout {
         spacing: Kirigami.Units.smallSpacing
