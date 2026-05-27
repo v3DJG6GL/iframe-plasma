@@ -219,11 +219,16 @@ private Q_SLOTS:
     {
         // A subsequent successful export must clear any previously
         // set warning so the accessor always reflects the latest call.
+        // Seed via the test hook because setPermissions only fails on
+        // FAT/exFAT/SMB targets (not reproducible on tmpfs); without
+        // the seed, exportToFile()'s top-of-function clear() would be
+        // untested and a regression removing it would slip through.
         BackupBridge b;
-        const QString p1 = m_xdg.filePath(u"export_warn_reset1.json"_s);
-        const QString p2 = m_xdg.filePath(u"export_warn_reset2.json"_s);
-        QCOMPARE(b.exportToFile(p1, fullSchemaSeed()), QString{});
-        QCOMPARE(b.exportToFile(p2, fullSchemaSeed()), QString{});
+        b.setLastExportWarningForTest(
+            u"Wrote /old/path but could not restrict permissions to 0600."_s);
+        QCOMPARE(b.lastExportWarning().isEmpty(), false);
+        const QString p = m_xdg.filePath(u"export_warn_reset.json"_s);
+        QCOMPARE(b.exportToFile(p, fullSchemaSeed()), QString{});
         QCOMPARE(b.lastExportWarning(), QString{});
     }
 

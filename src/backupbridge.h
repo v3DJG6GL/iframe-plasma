@@ -65,6 +65,14 @@ public:
     // exports on the same day still differ once the user adds a suffix.
     Q_INVOKABLE QString suggestedExportName() const;
 
+    // Test-only seeder for m_lastExportWarning. The setPermissions
+    // failure that legitimately populates this in production only
+    // triggers on FAT/exFAT/SMB targets and can't be reproduced on a
+    // tmpfs; this hook lets us verify that exportToFile()'s reset at
+    // the top of each call actually clears a prior warning so a stale
+    // FAT-target message doesn't leak into a later clean ext4 export.
+    void setLastExportWarningForTest(const QString &warning);
+
 private:
     QString m_lastBackupPath;
     QString m_lastExportWarning;

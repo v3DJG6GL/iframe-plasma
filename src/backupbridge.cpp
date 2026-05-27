@@ -265,3 +265,8 @@ QString BackupBridge::suggestedExportName() const
     const QString today = QDateTime::currentDateTime().toString(u"yyyy-MM-dd"_s);
     return u"iframe-plasma-config-"_s + today + u".json"_s;
 }
+
+void BackupBridge::setLastExportWarningForTest(const QString &warning)
+{
+    m_lastExportWarning = warning;
+}

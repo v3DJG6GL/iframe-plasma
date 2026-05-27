@@ -94,6 +94,23 @@ private Q_SLOTS:
         QCOMPARE(i.headersSnapshot().size(), 0);
     }
 
+    // Pins the post-hygiene empty-header gate added in 47b3edc. Raw secrets
+    // that collapse to nothing after quote-stripping ("''" / "\"\"" / whitespace)
+    // legitimately produce an empty header from buildAuthHeader; without this
+    // gate, headersSnapshot would report the host as "wired up" while
+    // interceptRequest's !header.isEmpty() check correctly skipped injection
+    // — operator inspection got the wrong answer.
+    void applyProfile_rawCollapsedAfterStrip_doesNotRegister()
+    {
+        BasicAuthInterceptor i;
+        i.applyProfile(u"P"_s, u"raw"_s, u""_s, u"''"_s, {u"a.com"_s});
+        QCOMPARE(i.headersSnapshot().size(), 0);
+        i.applyProfile(u"P"_s, u"raw"_s, u""_s, u"\"\""_s, {u"a.com"_s});
+        QCOMPARE(i.headersSnapshot().size(), 0);
+        i.applyProfile(u"P"_s, u"raw"_s, u""_s, u"   "_s, {u"a.com"_s});
+        QCOMPARE(i.headersSnapshot().size(), 0);
+    }
+
     // ---------------------------------------------------------------
     // Host normalisation: lower-case + trim + skip-empty
     // ---------------------------------------------------------------
