@@ -162,6 +162,15 @@ TestCase {
         compare(G.transform("https://g/x#anchor", opts),
                 "https://g/x?kiosk#anchor");
     }
+    function test_kiosk_alreadyPresent_beforeFragment_noDuplicate() {
+        // Regex terminator omitted `#`, so `?...kiosk#anchor` was missed
+        // and the append branch produced `?...kiosk&kiosk#anchor`.
+        const opts = _off(); opts.kiosk = true;
+        compare(G.transform("https://g/x?orgId=1&kiosk#anchor", opts),
+                "https://g/x?orgId=1&kiosk#anchor");
+        compare(G.transform("https://g/x?kiosk#anchor", opts),
+                "https://g/x?kiosk#anchor");
+    }
 
     // ===== Theme placeholder ==========================================
     function test_theme_addsPlaceholder() {

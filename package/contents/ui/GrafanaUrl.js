@@ -107,7 +107,7 @@ function transform(input, opts) {
     //    11.2.x regression. Delimiter-anchor so kiosk.example.com host
     //    or kioskMode=1 param don't suppress insertion. Route through
     //    splitFragment so the flag doesn't bleed past a `#anchor`.
-    if (opts.kiosk && !/[?&]kiosk(=|&|$)/.test(u)) {
+    if (opts.kiosk && !/[?&]kiosk(=|&|#|$)/.test(u)) {
         const parts = splitFragment(u);
         const base = parts[0];
         const frag = parts[1];
