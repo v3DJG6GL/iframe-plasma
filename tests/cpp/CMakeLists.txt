@@ -51,7 +51,14 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tst_secretsbridge.cpp")
         LIBS    Qt6::Qml KF6::Wallet KF6::I18n)
 endif()
 
-# 5. ScreenLockMonitor — state-machine half via QMetaObject + DBus
+# 5. BackupBridge — versioned-JSON round-trip + envelope validation.
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tst_backupbridge.cpp")
+    iframe_add_cpp_test(tst_backupbridge
+        SOURCES "${CMAKE_SOURCE_DIR}/src/backupbridge.cpp"
+        LIBS    Qt6::Qml)
+endif()
+
+# 6. ScreenLockMonitor — state-machine half via QMetaObject + DBus
 #    subscription via the dbusmock fixture (skips if python3-dbusmock
 #    isn't available on the runner).
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tst_screenlockmonitor.cpp")

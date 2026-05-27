@@ -11,6 +11,7 @@ qt_add_qml_module(iframe_plasma_qml
         iwallet.h
         basicauthinterceptor.cpp basicauthinterceptor.h
         screenlockmonitor.cpp screenlockmonitor.h
+        backupbridge.cpp backupbridge.h
 )
 
 # Qt's CMake creates the plugin as a MODULE target which omits the "lib" prefix
