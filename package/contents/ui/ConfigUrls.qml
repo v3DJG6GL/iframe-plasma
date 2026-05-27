@@ -83,6 +83,15 @@ KCM.SimpleKCM {
         })
     }
 
+    // Write one field on a row and persist. Centralises the
+    // setProperty(...)+serialize() two-step that otherwise repeats at every
+    // per-field editor below; bulk loops (e.g. onAuthProfilesChanged) still
+    // call setProperty directly to amortise a single serialize().
+    function _setRowField(idx, field, val) {
+        listModel.setProperty(idx, field, val);
+        store.serialize();
+    }
+
     QtObject {
         id: store
         property string json: "[]"
@@ -296,7 +305,7 @@ KCM.SimpleKCM {
                             Layout.fillWidth: true
                             placeholderText: i18n("Label (e.g. CPU load)")
                             text: label
-                            onEditingFinished: { listModel.setProperty(index, "label", text); store.serialize() }
+                            onEditingFinished: page._setRowField(index, "label", text)
                         }
                         QQC.TextField {
                             Layout.fillWidth: true
@@ -316,8 +325,7 @@ KCM.SimpleKCM {
                             onEditingFinished: {
                                 const cleaned = String(text).replace(/[\r\n\0]/g, "");
                                 if (cleaned !== text) text = cleaned;
-                                listModel.setProperty(index, "url", cleaned);
-                                store.serialize();
+                                page._setRowField(index, "url", cleaned);
                             }
                         }
                         // Auth profile selector. Profiles are managed on the
@@ -345,11 +353,7 @@ KCM.SimpleKCM {
                                 model: rows
                                 textRole: "display"
                                 valueRole: "id"
-                                onActivated: _ => {
-                                    const v = rows[currentIndex].id;
-                                    listModel.setProperty(index, "authProfileId", v);
-                                    store.serialize();
-                                }
+                                onActivated: _ => page._setRowField(index, "authProfileId", rows[currentIndex].id)
                                 QQC.ToolTip.visible: hovered && page.authProfiles.length === 0
                                 QQC.ToolTip.delay: 400
                                 QQC.ToolTip.text: i18n("Create auth profiles on the Authentication tab, then pick one here.")
@@ -428,11 +432,7 @@ KCM.SimpleKCM {
                                 // capture `index` and we'd write to the wrong
                                 // listModel row (the activated combo item
                                 // index, not the URL-row index).
-                                onActivated: _ => {
-                                    const v = thumbModePresets[currentIndex].value;
-                                    listModel.setProperty(index, "thumbMode", v);
-                                    store.serialize();
-                                }
+                                onActivated: _ => page._setRowField(index, "thumbMode", thumbModePresets[currentIndex].value)
                                 QQC.ToolTip.visible: hovered
                                 QQC.ToolTip.delay: 600
                                 QQC.ToolTip.text: page.isGrafanaEmbed(url)
@@ -465,7 +465,7 @@ KCM.SimpleKCM {
                             visible: thumbMode === "custom"
                             placeholderText: i18n("e.g. .u-wrap, canvas, [data-testid='data-testid panel content']")
                             text: thumbSelector
-                            onEditingFinished: { listModel.setProperty(index, "thumbSelector", text); store.serialize() }
+                            onEditingFinished: page._setRowField(index, "thumbSelector", text)
                         }
 
                         // `text` mode follow-up: the panel slot renders this
@@ -479,7 +479,7 @@ KCM.SimpleKCM {
                             visible: thumbMode === "text"
                             placeholderText: i18n("e.g. DEV, PROD, server-01 (defaults to the tab label)")
                             text: thumbText
-                            onEditingFinished: { listModel.setProperty(index, "thumbText", text); store.serialize() }
+                            onEditingFinished: page._setRowField(index, "thumbText", text)
                         }
 
                         // `icon` mode follow-up: button opens our tabbed
@@ -520,10 +520,8 @@ KCM.SimpleKCM {
                             IconPickerDialog {
                                 id: iconPicker
                                 onIconNameChanged: (picked) => {
-                                    if (picked && picked.length > 0) {
-                                        listModel.setProperty(index, "thumbIconName", picked);
-                                        store.serialize();
-                                    }
+                                    if (picked && picked.length > 0)
+                                        page._setRowField(index, "thumbIconName", picked);
                                 }
                             }
                         }
@@ -568,11 +566,7 @@ KCM.SimpleKCM {
                                     const idx = presets.findIndex(x => x.value === popupMode);
                                     return idx >= 0 ? idx : 0;
                                 }
-                                onActivated: _ => {
-                                    const v = presets[currentIndex].value;
-                                    listModel.setProperty(index, "popupMode", v);
-                                    store.serialize();
-                                }
+                                onActivated: _ => page._setRowField(index, "popupMode", presets[currentIndex].value)
                                 QQC.ToolTip.visible: hovered
                                 QQC.ToolTip.delay: 600
                                 QQC.ToolTip.text: i18n(
@@ -592,7 +586,7 @@ KCM.SimpleKCM {
                             visible: popupMode === "custom"
                             placeholderText: i18n("e.g. .mb-8, [data-testid='dashboard'], #main")
                             text: popupSelector
-                            onEditingFinished: { listModel.setProperty(index, "popupSelector", text); store.serialize() }
+                            onEditingFinished: page._setRowField(index, "popupSelector", text)
                         }
                     }
 
@@ -1003,8 +997,7 @@ KCM.SimpleKCM {
                 const stripped = stripManagedParams(row.url);
                 const out = transformUrl(stripped);
                 if (!out) return;
-                listModel.setProperty(editingIndex, "url", out);
-                store.serialize();
+                page._setRowField(editingIndex, "url", out);
                 return;
             }
             const out = transformUrl(pastedUrl.text);
