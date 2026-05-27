@@ -120,7 +120,16 @@ KCM.SimpleKCM {
             const path = String(selectedFile).replace(/^file:\/\//, "");
             const err = IframePlasma.BackupBridge.exportToFile(path, page._collectConfig());
             if (err === "") {
-                page._showResult(i18n("Configuration exported to %1.", path), false);
+                // A non-fatal perm-restriction warning from a FAT/SMB
+                // target lands in lastExportWarning() — the file IS
+                // written, so the banner stays Positive but appends the
+                // warning so the user can choose a safer destination.
+                let msg = i18n("Configuration exported to %1.", path);
+                const warn = IframePlasma.BackupBridge.lastExportWarning();
+                if (warn) {
+                    msg += " " + i18n("(Warning: %1)", warn);
+                }
+                page._showResult(msg, false);
             } else {
                 page._showResult(i18n("Export failed: %1", err), true);
             }
@@ -146,6 +155,10 @@ KCM.SimpleKCM {
                 if (result.skipped && result.skipped.length) {
                     msg += " " + i18np("%1 unknown key skipped.", "%1 unknown keys skipped.",
                                        result.skipped.length);
+                }
+                if (result.warning) {
+                    // Non-fatal snapshot caveat (e.g. FAT-target perms).
+                    msg += " " + i18n("(Warning: %1)", result.warning);
                 }
                 if (result.error) {
                     // Non-fatal: backup write failed but import proceeded.

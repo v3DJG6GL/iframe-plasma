@@ -203,6 +203,30 @@ private Q_SLOTS:
         QVERIFY(!err.isEmpty());
     }
 
+    // ----- exportToFile: warning-vs-error contract ------------------
+
+    void export_cleanSuccess_lastExportWarningEmpty()
+    {
+        // Happy path on a POSIX-permissioned tmpfs MUST leave
+        // lastExportWarning() empty — callers gate UI behaviour on this.
+        BackupBridge b;
+        const QString path = m_xdg.filePath(u"export_warn_clean.json"_s);
+        QCOMPARE(b.exportToFile(path, fullSchemaSeed()), QString{});
+        QCOMPARE(b.lastExportWarning(), QString{});
+    }
+
+    void export_warningIsReset_betweenCalls()
+    {
+        // A subsequent successful export must clear any previously
+        // set warning so the accessor always reflects the latest call.
+        BackupBridge b;
+        const QString p1 = m_xdg.filePath(u"export_warn_reset1.json"_s);
+        const QString p2 = m_xdg.filePath(u"export_warn_reset2.json"_s);
+        QCOMPARE(b.exportToFile(p1, fullSchemaSeed()), QString{});
+        QCOMPARE(b.exportToFile(p2, fullSchemaSeed()), QString{});
+        QCOMPARE(b.lastExportWarning(), QString{});
+    }
+
     // ----- importFromFile happy path --------------------------------
 
     void roundTrip_preservesAllSchemaValues()
@@ -220,6 +244,7 @@ private Q_SLOTS:
         const QVariantMap result = b.importFromFile(path, currentBefore);
         QCOMPARE(result.value(u"ok"_s).toBool(), true);
         QCOMPARE(result.value(u"error"_s).toString(), QString{});
+        QCOMPARE(result.value(u"warning"_s).toString(), QString{});
         QVERIFY(result.value(u"skipped"_s).toStringList().isEmpty());
 
         const QVariantMap applied = result.value(u"config"_s).toMap();

@@ -52,6 +52,14 @@ public:
 
     Q_INVOKABLE QString lastBackupPath() const;
 
+    // Set by the most recent exportToFile() call when the write itself
+    // succeeded but a non-fatal post-condition didn't — currently only
+    // setPermissions() returning false on FAT/exFAT/SMB filesystems that
+    // don't honour POSIX perms. Empty string means "clean success".
+    // Callers should check this AFTER exportToFile() returns "", not
+    // instead of the return value.
+    Q_INVOKABLE QString lastExportWarning() const;
+
     // Default filename for the save dialog (e.g.
     // "iframe-plasma-config-2026-05-27.json"). Date-stamped so multiple
     // exports on the same day still differ once the user adds a suffix.
@@ -59,4 +67,5 @@ public:
 
 private:
     QString m_lastBackupPath;
+    QString m_lastExportWarning;
 };

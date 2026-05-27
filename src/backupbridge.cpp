@@ -84,6 +84,11 @@ BackupBridge::BackupBridge(QObject *parent)
 
 QString BackupBridge::exportToFile(const QString &path, const QVariantMap &config)
 {
+    // Reset before each call so lastExportWarning() reflects only the
+    // most recent export and stale warnings from a prior FAT-target
+    // attempt don't leak into a subsequent ext4 export.
+    m_lastExportWarning.clear();
+
     QJsonObject root;
     root[u"$schema"_s] = u"iframe-plasma-config"_s;
     root[u"version"_s] = kSchemaVersion;
@@ -125,10 +130,11 @@ QString BackupBridge::exportToFile(const QString &path, const QVariantMap &confi
     // anyway: the file lists every Authelia host the user touches.
     // On FAT/exFAT/SMB filesystems (a likely transport for "move tabs
     // between machines") setPermissions silently fails and the file
-    // keeps default umask perms; surface that as a non-fatal warning
-    // so the user can pick a safer destination.
+    // keeps default umask perms; surface that through lastExportWarning()
+    // so the export is reported as successful (the file IS written and
+    // usable) but the user can still see the perm-restriction warning.
     if (!QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner)) {
-        return u"Wrote %1 but could not restrict permissions to 0600 (filesystem may not honour POSIX perms)."_s.arg(path);
+        m_lastExportWarning = u"Wrote %1 but could not restrict permissions to 0600 (filesystem may not honour POSIX perms)."_s.arg(path);
     }
     return {};
 }
@@ -138,6 +144,7 @@ QVariantMap BackupBridge::importFromFile(const QString &path, const QVariantMap 
     QVariantMap result;
     result.insert(u"ok"_s, false);
     result.insert(u"error"_s, QString{});
+    result.insert(u"warning"_s, QString{});
     result.insert(u"config"_s, QVariantMap{});
     result.insert(u"skipped"_s, QStringList{});
 
@@ -218,6 +225,14 @@ QVariantMap BackupBridge::importFromFile(const QString &path, const QVariantMap 
     const QString snapErr = exportToFile(backupPath, currentConfig);
     if (snapErr.isEmpty()) {
         m_lastBackupPath = backupPath;
+        // A non-fatal perm-restriction warning from the snapshot write
+        // (e.g. XDG_CONFIG_HOME on a FAT mount) flows through `warning`
+        // rather than `error` so the QML side renders it as an info
+        // banner alongside the success message instead of an Error.
+        if (!m_lastExportWarning.isEmpty()) {
+            result[u"warning"_s] = QString(u"Pre-import backup written but with caveat: "_s
+                                           + m_lastExportWarning);
+        }
     } else {
         // Don't fail the import for a snapshot write error — surface it
         // through `error` but still return ok=true with `config` so the
@@ -238,6 +253,11 @@ QVariantMap BackupBridge::importFromFile(const QString &path, const QVariantMap 
 QString BackupBridge::lastBackupPath() const
 {
     return m_lastBackupPath;
+}
+
+QString BackupBridge::lastExportWarning() const
+{
+    return m_lastExportWarning;
 }
 
 QString BackupBridge::suggestedExportName() const
