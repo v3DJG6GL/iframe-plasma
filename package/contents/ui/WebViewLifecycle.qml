@@ -22,9 +22,15 @@
  * view can only return to Active. The caller MUST make the view invisible
  * (bind its `visible`) for any non-Active state to be reachable at all —
  * the controller only changes lifecycleState, never visibility.
+ *
+ * The pure decision core lives in LifecyclePolicy.js so
+ * tests/qml/tst_lifecycle.qml can drive every transition without spinning
+ * up a real WebEngineView; this file does the enum↔string conversion and
+ * carries out the policy's action object.
  */
 import QtQuick
 import QtWebEngine
+import "./LifecyclePolicy.js" as Policy
 
 QtObject {
     id: ctl
@@ -47,33 +53,45 @@ QtObject {
     // Date.now() ms when the view entered Frozen; 0 when not frozen.
     property double _frozenAtMs: 0
 
+    function _stateName(s) {
+        if (s === WebEngineView.LifecycleState.Frozen)    return "frozen";
+        if (s === WebEngineView.LifecycleState.Discarded) return "discarded";
+        return "active";
+    }
+    function _stateEnum(name) {
+        if (name === "frozen")    return WebEngineView.LifecycleState.Frozen;
+        if (name === "discarded") return WebEngineView.LifecycleState.Discarded;
+        return WebEngineView.LifecycleState.Active;
+    }
+
+    function _apply(action) {
+        if (!target) return;
+        if (action.stopTimer) _phaseTimer.stop();
+        if (action.setState !== undefined) {
+            target.lifecycleState = _stateEnum(action.setState);
+        }
+        if (action.resetFrozenAtMs) _frozenAtMs = 0;
+        if (action.frozenAtMs !== undefined) _frozenAtMs = action.frozenAtMs;
+        if (action.reload) {
+            try { target.reload(); } catch (e) { /* view gone */ }
+        }
+        if (action.scheduleMs !== undefined) {
+            _phaseTimer.interval = action.scheduleMs;
+            _phaseTimer.restart();
+        }
+        if (action.chainReevaluate) _reevaluate();
+    }
+
     function _reevaluate() {
-        if (!target)
-            return;
-        if (desiredActive) {
-            _phaseTimer.stop();
-            if (target.lifecycleState !== WebEngineView.LifecycleState.Active) {
-                const stale = target.lifecycleState === WebEngineView.LifecycleState.Frozen
-                    && stalenessSec > 0 && _frozenAtMs > 0
-                    && (Date.now() - _frozenAtMs) > stalenessSec * 1000;
-                // Discarded->Active reloads on its own; this covers Frozen.
-                target.lifecycleState = WebEngineView.LifecycleState.Active;
-                _frozenAtMs = 0;
-                if (stale) {
-                    try { target.reload(); } catch (e) { /* view gone */ }
-                }
-            }
-            return;
-        }
-        // desiredActive false: schedule the next downward step.
-        if (target.lifecycleState === WebEngineView.LifecycleState.Discarded) {
-            _phaseTimer.stop();   // nothing lower to go to
-            return;
-        }
-        _phaseTimer.interval = (target.lifecycleState === WebEngineView.LifecycleState.Active
-            ? Math.max(1, freezeDelaySec)
-            : Math.max(1, discardDelaySec - freezeDelaySec)) * 1000;
-        _phaseTimer.restart();
+        if (!target) return;
+        _apply(Policy.decideOnChange(
+            _stateName(target.lifecycleState),
+            desiredActive,
+            _frozenAtMs,
+            freezeDelaySec,
+            discardDelaySec,
+            stalenessSec,
+            Date.now()));
     }
 
     onTargetChanged: _reevaluate()
@@ -84,26 +102,12 @@ QtObject {
         repeat: false
         onTriggered: {
             const t = ctl.target;
-            if (!t || ctl.desiredActive)
-                return;
-            // A loading or audible view is pinned Active by the engine
-            // (recommendedState === Active) — don't fight it, retry later.
-            if (t.recommendedState === WebEngineView.LifecycleState.Active) {
-                interval = Math.max(1, ctl.freezeDelaySec) * 1000;
-                restart();
-                return;
-            }
-            if (t.lifecycleState === WebEngineView.LifecycleState.Active) {
-                t.lifecycleState = WebEngineView.LifecycleState.Frozen;
-                ctl._frozenAtMs = Date.now();
-                ctl._reevaluate();           // chain into the discard phase
-            } else if (t.lifecycleState === WebEngineView.LifecycleState.Frozen
-                       && t.recommendedState === WebEngineView.LifecycleState.Discarded) {
-                t.lifecycleState = WebEngineView.LifecycleState.Discarded;
-                ctl._frozenAtMs = 0;
-            }
-            // else: recommendedState pins it at Frozen (form input / PDF) —
-            // leave it frozen, no discard.
+            if (!t || ctl.desiredActive) return;
+            ctl._apply(Policy.decideOnTimer(
+                ctl._stateName(t.lifecycleState),
+                ctl._stateName(t.recommendedState),
+                ctl.freezeDelaySec,
+                Date.now()));
         }
     }
 }
