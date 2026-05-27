@@ -33,3 +33,11 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tst_auth_injection.cpp")
     iframe_add_e2e_test(tst_auth_injection
         SOURCES "${CMAKE_SOURCE_DIR}/src/basicauthinterceptor.cpp")
 endif()
+
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tst_authelia_redirect.cpp")
+    iframe_add_e2e_test(tst_authelia_redirect)
+endif()
+
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tst_grafana_rewrite_e2e.cpp")
+    iframe_add_e2e_test(tst_grafana_rewrite_e2e)
+endif()

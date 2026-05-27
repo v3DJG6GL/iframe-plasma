@@ -77,9 +77,13 @@ class FixtureHandler(BaseHTTPRequestHandler):
 
     # ----- routes -------------------------------------------------------------
     def do_GET(self) -> None:  # noqa: N802 (BaseHTTPRequestHandler convention)
-        self._record_url()
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
+        # Skip self-recording for the read-only endpoints — otherwise
+        # /_report would overwrite lastUrl with "/_report" before the
+        # caller could inspect what the test page actually fetched.
+        if path not in ("/_report", "/_record"):
+            self._record_url()
 
         if path == "/basic":
             self._record_auth()
