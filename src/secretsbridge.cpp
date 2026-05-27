@@ -93,9 +93,17 @@ bool SecretsBridge::ensureOpen()
     if (m_wallet->isOpen()) {
         // Wallet may have been used by another caller on a different folder
         // since our last call — always re-pin so the per-op guards downstream
-        // can be dropped.
-        if (m_wallet->currentFolder() != kFolder) {
-            m_wallet->setFolder(kFolder);
+        // can be dropped. If our folder was deleted externally (e.g. via
+        // kwalletmanager) setFolder returns false; recreate it the same
+        // way the cold-open branch does so reads/writes don't silently
+        // target whatever folder the wallet was previously in.
+        if (m_wallet->currentFolder() != kFolder && !m_wallet->setFolder(kFolder)) {
+            if (!m_wallet->hasFolder(kFolder)) {
+                m_wallet->createFolder(kFolder);
+            }
+            if (!m_wallet->setFolder(kFolder)) {
+                return false;
+            }
         }
         return true;
     }

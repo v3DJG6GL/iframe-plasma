@@ -196,12 +196,13 @@ void BasicAuthInterceptor::interceptRequest(QWebEngineUrlRequestInfo &info)
     // Gate on http(s): operator-registered hosts are intended for HTTP
     // traffic; never inject the Authorization header onto ws://, wss://,
     // ftp://, or any future custom scheme that happens to share host().
-    const QString scheme = info.requestUrl().scheme();
+    const QUrl url = info.requestUrl();
+    const QString scheme = url.scheme();
     if (scheme != QLatin1String("https") && scheme != QLatin1String("http")) {
         return;
     }
     const QString host = iframeplasma::auth::canonicalizeHost(
-        info.requestUrl().host(), scheme, info.requestUrl().port());
+        url.host(), scheme, url.port());
     QByteArray header;
     bool hadAny = false;
     {
@@ -218,11 +219,11 @@ void BasicAuthInterceptor::interceptRequest(QWebEngineUrlRequestInfo &info)
         // string (e.g. Grafana share links with auth params), so keep them
         // off the default journal stream.
         qCDebug(lcIframeAuth).noquote() << "interceptor: injected Authorization for"
-            << info.requestUrl().toString().left(120);
+            << url.toString().left(120);
     } else if (hadAny) {
         // Only log near-misses if we have any creds at all
         qCDebug(lcIframeAuth).noquote() << "interceptor: NO MATCH host=" << host
-            << "url=" << info.requestUrl().toString().left(120);
+            << "url=" << url.toString().left(120);
     }
 }
 

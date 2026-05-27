@@ -123,7 +123,13 @@ QString BackupBridge::exportToFile(const QString &path, const QVariantMap &confi
     }
     // 0600 — no secrets in the file by design, but be conservative
     // anyway: the file lists every Authelia host the user touches.
-    QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+    // On FAT/exFAT/SMB filesystems (a likely transport for "move tabs
+    // between machines") setPermissions silently fails and the file
+    // keeps default umask perms; surface that as a non-fatal warning
+    // so the user can pick a safer destination.
+    if (!QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner)) {
+        return u"Wrote %1 but could not restrict permissions to 0600 (filesystem may not honour POSIX perms)."_s.arg(path);
+    }
     return {};
 }
 
@@ -183,11 +189,20 @@ QVariantMap BackupBridge::importFromFile(const QString &path, const QVariantMap 
         const QJsonObject groupObj = gIt.value().toObject();
         for (auto kIt = groupObj.constBegin(); kIt != groupObj.constEnd(); ++kIt) {
             const QString k = kIt.key();
-            if (schemaKeys.contains(k)) {
-                toApply.insert(k, kIt.value().toVariant());
-            } else {
+            if (!schemaKeys.contains(k)) {
                 skipped.append(k);
+                continue;
             }
+            // JSON null/undefined would convert to an invalid QVariant
+            // which the QML _applyConfig loop blindly writes back to the
+            // kcfg_* alias — blanking the live property and corrupting
+            // KConfig on Apply. Surface them via `skipped` so the QML
+            // side knows the import was partial.
+            if (kIt.value().isNull() || kIt.value().isUndefined()) {
+                skipped.append(k);
+                continue;
+            }
+            toApply.insert(k, kIt.value().toVariant());
         }
     }
 
@@ -206,7 +221,11 @@ QVariantMap BackupBridge::importFromFile(const QString &path, const QVariantMap 
     } else {
         // Don't fail the import for a snapshot write error — surface it
         // through `error` but still return ok=true with `config` so the
-        // user can choose to proceed. The QML side flags this visually.
+        // user can choose to proceed. Clear m_lastBackupPath so the QML
+        // caller's "Previous configuration saved to <path>" hint doesn't
+        // point at a STALE backup from a prior successful import — the
+        // user would otherwise be invited to revert from the wrong file.
+        m_lastBackupPath.clear();
         result[u"error"_s] = QString(u"Pre-import backup failed (continuing): "_s + snapErr);
     }
 
