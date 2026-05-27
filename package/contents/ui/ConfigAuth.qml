@@ -36,11 +36,25 @@ KCM.SimpleKCM {
     readonly property var authSupport: authLoader.item
     readonly property bool kwalletAvailable: authLoader.status === Loader.Ready
 
+    // See the matching block in ConfigUrls.qml for the rationale: this gate
+    // suppresses both the self-write path (serialize) and the loading path
+    // (repopulate) so onJsonChanged doesn't recursively rebuild listModel
+    // and silently lose any uncommitted text in sibling TextFields.
+    property bool _reloading: false
+
     QtObject {
         id: store
         property string json: "[]"
 
+        // Re-sync listModel when authProfilesJson changes from outside this
+        // page — the Backup KCM page's Import path writes the cfg_*
+        // backing value through KCM's cross-page kcfg mirror. Without this,
+        // listModel still carries the pre-import rows and any subsequent
+        // edit's serialize() would clobber the imported value.
+        onJsonChanged: if (!page._reloading) page.repopulate()
+
         function serialize() {
+            if (page._reloading) return;
             const arr = [];
             for (let i = 0; i < listModel.count; i++) {
                 const row = listModel.get(i);
@@ -53,11 +67,52 @@ KCM.SimpleKCM {
                     preempt: row.preempt === true
                 });
             }
-            json = JSON.stringify(arr);
+            // Gate the self-write so onJsonChanged doesn't re-enter
+            // repopulate() and recycle every delegate on each keystroke
+            // commit (per the ConfigUrls fix).
+            page._reloading = true;
+            try {
+                json = JSON.stringify(arr);
+            } finally {
+                page._reloading = false;
+            }
         }
     }
 
     ListModel { id: listModel }
+
+    function repopulate() {
+        _reloading = true;
+        try {
+            listModel.clear();
+            const arr = JSON.parse(store.json || "[]");
+            if (!Array.isArray(arr)) return;
+            let synthesized = false;
+            for (const entry of arr) {
+                const norm = RowSchema.normaliseAuthProfileRow(entry, newUuid);
+                norm.row.autheliaHost = sanitizeAutheliaHost(norm.row.autheliaHost);
+                if (norm.synthesized) synthesized = true;
+                listModel.append(norm.row);
+            }
+            // Persist synthesized UUIDs immediately — otherwise the next
+            // load generates fresh UUIDs, orphaning any wallet entry
+            // written this session under the prior synthesized id. Done
+            // here (not in serialize) because synthesis is a load-time
+            // concern and must run regardless of which load path fired.
+            if (synthesized) {
+                // Drop the gate just for the inner serialize so the JSON
+                // write actually happens, then re-raise it. The outer
+                // finally still resets it cleanly.
+                _reloading = false;
+                store.serialize();
+                _reloading = true;
+            }
+        } catch (e) {
+            console.warn("ConfigAuth: parse error", e.message);
+        } finally {
+            _reloading = false;
+        }
+    }
 
     // Strip C0/DEL/C1 controls + ALM/ZWSP/ZWNJ/ZWJ/LRM/RLM/PDF/LRE/RLE/LRO/RLO/
     // LRI/RLI/FSI/PDI/LS/PS/BOM from the Authelia-host string before persisting.
@@ -87,28 +142,7 @@ KCM.SimpleKCM {
         return s;
     }
 
-    Component.onCompleted: {
-        try {
-            const arr = JSON.parse(store.json || "[]");
-            let synthesized = false;
-            for (const entry of arr) {
-                const norm = RowSchema.normaliseAuthProfileRow(entry, newUuid);
-                // The autheliaHost still needs the bidi/C0-control sanitiser
-                // here — legacy JSON written before 3224e0e (or hand-edited
-                // config) would otherwise bypass the WebTab overlay-host
-                // comparison until the user manually re-edits the field.
-                // Sanitize lives in QML (Kirigami-context-free), so wire it
-                // in here rather than dragging Sanitize into RowSchema.js.
-                norm.row.autheliaHost = sanitizeAutheliaHost(norm.row.autheliaHost);
-                if (norm.synthesized) synthesized = true;
-                listModel.append(norm.row);
-            }
-            // Persist synthesized UUIDs immediately — otherwise the next load
-            // generates fresh UUIDs, orphaning any wallet entry written this
-            // session under the prior synthesized id.
-            if (synthesized) store.serialize();
-        } catch (e) { console.warn("ConfigAuth: parse error", e.message); }
-    }
+    Component.onCompleted: page.repopulate()
 
     function profileUsageHosts(profileId) {
         // Return labels of URLs that reference the given profile id (used by

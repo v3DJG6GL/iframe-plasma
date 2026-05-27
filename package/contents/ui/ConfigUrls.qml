@@ -94,9 +94,17 @@ KCM.SimpleKCM {
         store.serialize();
     }
 
-    // Set by repopulate() while it's rebuilding listModel from store.json.
-    // Without this gate the per-row append would re-enter serialize() via
-    // any onChanged handler and clobber the JSON we're loading FROM.
+    // Raised in two situations, both of which must suppress the
+    // onJsonChanged → repopulate path:
+    //   * repopulate() is loading listModel from store.json (without the
+    //     gate, per-row append would re-enter serialize() and clobber the
+    //     JSON we're loading FROM).
+    //   * serialize() is writing store.json (our own write would otherwise
+    //     trigger an immediate clear+append cycle, destroying any
+    //     uncommitted text in sibling TextFields whose delegate gets
+    //     recycled — see ListModel.clear() semantics).
+    // Reset is in a finally so an exception during append/JSON.stringify
+    // can't strand the gate at true and silence the page permanently.
     property bool _reloading: false
 
     // Rebuild listModel from store.json. Used both at startup (in
@@ -115,8 +123,11 @@ KCM.SimpleKCM {
                     listModel.append(RowSchema.normaliseTabRow(entry));
                 }
             }
-        } catch (e) { console.warn("ConfigUrls: parse error", e.message); }
-        _reloading = false;
+        } catch (e) {
+            console.warn("ConfigUrls: parse error", e.message);
+        } finally {
+            _reloading = false;
+        }
     }
 
     QtObject {
@@ -147,7 +158,16 @@ KCM.SimpleKCM {
                     popupSelector: row.popupSelector || ""
                 });
             }
-            json = JSON.stringify(arr);
+            // Gate the self-write: onJsonChanged would otherwise fire
+            // repopulate() against the same data we just serialized,
+            // recycling every delegate and wiping any uncommitted text
+            // in sibling TextFields on every editingFinished.
+            page._reloading = true;
+            try {
+                json = JSON.stringify(arr);
+            } finally {
+                page._reloading = false;
+            }
         }
     }
 
