@@ -5,6 +5,7 @@
 import QtQuick
 import QtWebEngine
 import "./CropEngine.js" as CropEngine
+import "./QueryUtils.js" as QueryUtils
 
 Item {
     id: tab
@@ -252,12 +253,9 @@ Item {
     // "custom" for non-standard from/to, or "" if no time params at all.
     readonly property string currentTimeRange: {
         const u = String(webview.url);
-        const from = _readQuery(u, 'from');
-        const to   = _readQuery(u, 'to');
-        if (!from && !to) return '';
-        const m = from.match(/^now-(\d+[smhdwMy])$/);
-        if (m && to === 'now') return m[1];
-        return 'custom';
+        return QueryUtils.matchTimeRangePreset(
+            _readQuery(u, 'from'),
+            _readQuery(u, 'to'));
     }
 
     // userRefreshChoice wins over the URL: Grafana's TimeSrv re-injects
@@ -280,66 +278,10 @@ Item {
         }
     }
 
-    // Manual query-string edit. QML's V4 JavaScript engine has a buggy
-    // URLSearchParams: `delete()` / `set()` modifications silently fail
-    // to propagate back to `url.toString()`. `updates` maps key → value
-    // (null/undefined removes; string sets). Preserves unrelated params,
-    // the hash fragment, and flag-style params (`&kiosk` with no value).
-    function _editQuery(urlStr, updates) {
-        try {
-            const hashIdx = urlStr.indexOf('#');
-            const hash = hashIdx >= 0 ? urlStr.slice(hashIdx) : '';
-            const beforeHash = hashIdx >= 0 ? urlStr.slice(0, hashIdx) : urlStr;
-            const qIdx = beforeHash.indexOf('?');
-            const path = qIdx >= 0 ? beforeHash.slice(0, qIdx) : beforeHash;
-            const query = qIdx >= 0 ? beforeHash.slice(qIdx + 1) : '';
-            const pairs = query.length > 0 ? query.split('&') : [];
-            const handled = {};
-            const out = [];
-            for (const p of pairs) {
-                const eq = p.indexOf('=');
-                const k = eq === -1 ? p : p.slice(0, eq);
-                if (k in updates) {
-                    if (!handled[k]) {
-                        handled[k] = true;
-                        const v = updates[k];
-                        if (v !== null && v !== undefined) {
-                            out.push(k + '=' + encodeURIComponent(v));
-                        }
-                    }
-                } else {
-                    out.push(p);
-                }
-            }
-            for (const k of Object.keys(updates)) {
-                if (!handled[k] && updates[k] !== null && updates[k] !== undefined) {
-                    out.push(k + '=' + encodeURIComponent(updates[k]));
-                }
-            }
-            return path + (out.length ? '?' + out.join('&') : '') + hash;
-        } catch (e) {
-            console.warn("iframe-plasma: _editQuery error:", e.message);
-            return urlStr;
-        }
-    }
-
-    function _readQuery(urlStr, name) {
-        try {
-            const hashIdx = urlStr.indexOf('#');
-            const beforeHash = hashIdx >= 0 ? urlStr.slice(0, hashIdx) : urlStr;
-            const qIdx = beforeHash.indexOf('?');
-            if (qIdx < 0) return "";
-            const pairs = beforeHash.slice(qIdx + 1).split('&');
-            for (const p of pairs) {
-                const eq = p.indexOf('=');
-                const k = eq === -1 ? p : p.slice(0, eq);
-                if (k === name) {
-                    return eq === -1 ? "" : decodeURIComponent(p.slice(eq + 1));
-                }
-            }
-            return "";
-        } catch (e) { return ""; }
-    }
+    // Manual query-string edit + read — implementations live in
+    // QueryUtils.js for testability; these are thin forwarders.
+    function _editQuery(urlStr, updates) { return QueryUtils.editQuery(urlStr, updates); }
+    function _readQuery(urlStr, name)    { return QueryUtils.readQuery(urlStr, name); }
 
     // `range` is a preset like "24h", a `{from, to}` object, or "" to
     // revert from/to to whatever the configured `tab.url` had.
@@ -385,14 +327,7 @@ Item {
     }
 
     function onAutheliaHost(currentUrl) {
-        if (!tab.autheliaHost || tab.autheliaHost.length === 0) return false;
-        try {
-            const host = new URL(currentUrl).host;
-            return host === tab.autheliaHost
-                || host.endsWith("." + tab.autheliaHost);
-        } catch (e) {
-            return false;
-        }
+        return QueryUtils.isAutheliaHost(currentUrl, tab.autheliaHost);
     }
 
     WebEngineView {
