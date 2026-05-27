@@ -20,6 +20,11 @@ KCM.SimpleKCM {
     // opened in this session, so its own `onAuthProfilesChanged` scrub
     // never fires.
     property string cfg_urlsJson: "[]"
+    // Bumped on every successful secret write/remove so the widget
+    // (running in a different QML engine than this dialog) re-runs
+    // primeAuthProfiles + reloadAll via the KConfig change-notification
+    // path. See main.xml comment on the entry.
+    property int cfg_authProfilesSecretsSerial: 0
 
     Loader {
         id: authLoader
@@ -312,6 +317,10 @@ KCM.SimpleKCM {
                                 if (page.authSupport.setMap(page.authSupport.profileKey(card.id), map)) {
                                     card.hasStoredSecret = true;
                                     savedHint.show();
+                                    // Tell main.qml (different QML engine — direct
+                                    // QML signals won't cross) that secrets changed,
+                                    // via the KConfig change-notification path.
+                                    page.cfg_authProfilesSecretsSerial = page.cfg_authProfilesSecretsSerial + 1;
                                     // Clear the buffer so the showSecret toggle
                                     // can't reveal a just-saved password to a
                                     // bystander; the "(stored — type to replace)"
@@ -416,6 +425,7 @@ KCM.SimpleKCM {
                                 if (referencing.length === 0) {
                                     // No URLs to warn about — just delete.
                                     if (page.authSupport) page.authSupport.removeKey(page.authSupport.profileKey(card.id));
+                                    page.cfg_authProfilesSecretsSerial = page.cfg_authProfilesSecretsSerial + 1;
                                     listModel.remove(card.index);
                                     store.serialize();
                                     return;
@@ -464,6 +474,7 @@ KCM.SimpleKCM {
 
         onAccepted: {
             if (page.authSupport) page.authSupport.removeKey(page.authSupport.profileKey(deleteConfirm.profileId));
+            page.cfg_authProfilesSecretsSerial = page.cfg_authProfilesSecretsSerial + 1;
             // Patch urlsJson to unlink the orphaned references
             try {
                 const tabs = JSON.parse(page.cfg_urlsJson || "[]");

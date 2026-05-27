@@ -28,6 +28,9 @@ namespace {
 //   * compactPreviewMigrated / authProfilesPreemptMigrated — migration
 //     flags. On import we force-reset both to false so any legacy-shaped
 //     data in the imported file re-triggers the migration cleanly.
+//   * authProfilesSecretsSerial — transient session counter ConfigAuth
+//     uses to notify main.qml of KWallet writes across the dialog/widget
+//     engine boundary; never exported.
 struct Entry
 {
     const char *group;

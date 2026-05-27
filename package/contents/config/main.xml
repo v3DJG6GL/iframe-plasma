@@ -102,6 +102,18 @@
         <entry name="authProfilesPreemptMigrated" type="Bool">
             <default>false</default>
         </entry>
+        <!-- Monotonic counter bumped by ConfigAuth whenever a KWallet
+             entry is written or removed. main.qml watches it via the
+             standard KConfig change-notification path (the SecretsBridge
+             QML signal can't cross the dialog/widget engine boundary).
+             On bump, primeAuthProfiles + reloadAll fire so a freshly-
+             entered password immediately re-arms the interceptor and
+             any tab sitting on a 401/Authelia page re-requests with
+             the new Authorization header. Not user-visible; excluded
+             from Backup export (transient session state). -->
+        <entry name="authProfilesSecretsSerial" type="Int">
+            <default>0</default>
+        </entry>
     </group>
     <group name="Advanced">
         <entry name="userAgentOverride" type="String">

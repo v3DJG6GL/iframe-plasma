@@ -247,6 +247,17 @@ PlasmoidItem {
                 root._profiles[key].httpUserAgent = ua;
             }
         }
+        // Bumped by ConfigAuth on every successful setMap/removeKey.
+        // The C++ secretsChanged QML signal can't cross from the
+        // config-dialog engine to the widget engine, so we route the
+        // notification via KConfig instead. On bump, re-prime + reload
+        // so the live interceptor picks up a freshly typed password
+        // and any 401-stuck WebTab re-requests with the new header.
+        function onAuthProfilesSecretsSerialChanged() {
+            console.info("iframe-plasma[auth] authProfilesSecretsSerial bumped -> re-prime + reloadAll");
+            root.primeAuthProfiles();
+            root.reloadAll();
+        }
     }
 
     // After the user saves a fresh password (typical post-Backup-Import
