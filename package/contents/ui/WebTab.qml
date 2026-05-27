@@ -587,12 +587,20 @@ Item {
         // the view just goes blank — both a DoS vector (hostile page crashes
         // its own renderer to disable the widget) and a forensics gap. Cap at
         // one retry per session to avoid a crash-loop hammering plasmashell.
+        //
+        // Reset loginInProgress for the same reason tab.reload()/hardReload()
+        // do (see contract at L90-95): the crash destroyed any in-flight form
+        // contents and the post-reload LoadSucceeded on Authelia would
+        // otherwise take the "hide overlay" branch and leave the operator
+        // typing into a bare Authelia form with no trust signal. Same
+        // bug-class as bb69913's broadcast-reload latch leak.
         property bool _renderRetried: false
         onRenderProcessTerminated: function(status, exitCode) {
             console.warn("iframe-plasma[render] terminated status=" + status
                 + " exitCode=" + exitCode + " retried=" + _renderRetried);
             if (status !== WebEngineView.NormalTerminationStatus && !_renderRetried) {
                 _renderRetried = true;
+                tab.loginInProgress = false;
                 webview.reload();
             }
         }
