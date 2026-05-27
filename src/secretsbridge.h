@@ -7,9 +7,10 @@
 #include <QObject>
 #include <QString>
 #include <QVariantMap>
+#include <memory>
 #include <qqmlregistration.h>
 
-namespace KWallet { class Wallet; }
+class IWallet;
 
 class SecretsBridge : public QObject
 {
@@ -18,7 +19,11 @@ class SecretsBridge : public QObject
     QML_SINGLETON
 
 public:
+    // Production: constructs a KWalletAdapter internally.
     explicit SecretsBridge(QObject *parent = nullptr);
+    // Tests: inject a fake wallet (FakeWallet in tests/fixtures/fakewallet/).
+    // The bridge takes ownership.
+    explicit SecretsBridge(std::unique_ptr<IWallet> wallet, QObject *parent = nullptr);
     ~SecretsBridge() override;
 
     // Single-string entries — kept for legacy migration (basic:<host> entries).
@@ -46,6 +51,6 @@ Q_SIGNALS:
 private:
     bool ensureOpen();
 
-    KWallet::Wallet *m_wallet = nullptr;
+    std::unique_ptr<IWallet> m_wallet;
     static const QString kFolder;
 };

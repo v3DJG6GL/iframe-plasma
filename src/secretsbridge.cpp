@@ -4,27 +4,93 @@
  */
 #include "secretsbridge.h"
 
+#include "iwallet.h"
+
 #include <KWallet>
 #include <QDebug>
+
+namespace {
+
+// Production adapter wrapping the real KWallet::Wallet. Defined in the
+// translation unit so the only thing exposed to tests is the IWallet
+// interface — fakewallet doesn't link KWallet.
+class KWalletAdapter final : public IWallet
+{
+public:
+    ~KWalletAdapter() override
+    {
+        if (m_wallet) {
+            m_wallet->deleteLater();
+            m_wallet = nullptr;
+        }
+    }
+
+    bool isEnabled() const override { return KWallet::Wallet::isEnabled(); }
+
+    bool open() override
+    {
+        // Synchronous open — kwallet prompts the user once if needed; subsequent calls reuse.
+        m_wallet = KWallet::Wallet::openWallet(
+            KWallet::Wallet::NetworkWallet(), 0, KWallet::Wallet::Synchronous);
+        return m_wallet && m_wallet->isOpen();
+    }
+
+    bool isOpen() const override { return m_wallet && m_wallet->isOpen(); }
+
+    QString currentFolder() const override
+    {
+        return m_wallet ? m_wallet->currentFolder() : QString();
+    }
+    bool setFolder(const QString &f) override { return m_wallet && m_wallet->setFolder(f); }
+    bool hasFolder(const QString &f) override { return m_wallet && m_wallet->hasFolder(f); }
+    bool createFolder(const QString &f) override { return m_wallet && m_wallet->createFolder(f); }
+
+    bool hasEntry(const QString &key) override
+    {
+        return m_wallet && m_wallet->hasEntry(key);
+    }
+    int readPassword(const QString &key, QString &value) override
+    {
+        return m_wallet ? m_wallet->readPassword(key, value) : -1;
+    }
+    int readMap(const QString &key, QMap<QString, QString> &value) override
+    {
+        return m_wallet ? m_wallet->readMap(key, value) : -1;
+    }
+    int writeMap(const QString &key, const QMap<QString, QString> &value) override
+    {
+        return m_wallet ? m_wallet->writeMap(key, value) : -1;
+    }
+    int removeEntry(const QString &key) override
+    {
+        return m_wallet ? m_wallet->removeEntry(key) : -1;
+    }
+
+private:
+    KWallet::Wallet *m_wallet = nullptr;
+};
+
+} // namespace
 
 const QString SecretsBridge::kFolder = QStringLiteral("iframe-plasma");
 
 SecretsBridge::SecretsBridge(QObject *parent)
     : QObject(parent)
+    , m_wallet(std::make_unique<KWalletAdapter>())
 {
 }
 
-SecretsBridge::~SecretsBridge()
+SecretsBridge::SecretsBridge(std::unique_ptr<IWallet> wallet, QObject *parent)
+    : QObject(parent)
+    , m_wallet(std::move(wallet))
 {
-    if (m_wallet) {
-        m_wallet->deleteLater();
-        m_wallet = nullptr;
-    }
 }
+
+SecretsBridge::~SecretsBridge() = default;
 
 bool SecretsBridge::ensureOpen()
 {
-    if (m_wallet && m_wallet->isOpen()) {
+    if (m_wallet->isOpen()) {
         // Wallet may have been used by another caller on a different folder
         // since our last call — always re-pin so the per-op guards downstream
         // can be dropped.
@@ -33,14 +99,11 @@ bool SecretsBridge::ensureOpen()
         }
         return true;
     }
-    if (!KWallet::Wallet::isEnabled()) {
+    if (!m_wallet->isEnabled()) {
         Q_EMIT error(tr("KDE Wallet is not enabled."));
         return false;
     }
-    // Synchronous open — kwallet prompts the user once if needed; subsequent calls reuse.
-    m_wallet = KWallet::Wallet::openWallet(
-        KWallet::Wallet::NetworkWallet(), 0, KWallet::Wallet::Synchronous);
-    if (!m_wallet || !m_wallet->isOpen()) {
+    if (!m_wallet->open()) {
         Q_EMIT error(tr("Failed to open the network wallet."));
         return false;
     }

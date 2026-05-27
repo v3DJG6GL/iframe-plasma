@@ -8,6 +8,7 @@ qt_add_qml_module(iframe_plasma_qml
     OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml/io/github/v3DJG6GL/iframe
     SOURCES
         secretsbridge.cpp secretsbridge.h
+        iwallet.h
         basicauthinterceptor.cpp basicauthinterceptor.h
         screenlockmonitor.cpp screenlockmonitor.h
 )
