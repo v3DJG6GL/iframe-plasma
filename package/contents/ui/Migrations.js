@@ -157,8 +157,12 @@ function legacyAuthMigration(urlsJson, profilesJson, autheliaHostFallback,
         let host = "";
         try { host = new URL(t.url).host; } catch (e) { /* keep "" */ }
 
+        // Full header in the key — truncating (e.g. to 32 chars) silently
+        // dedupes distinct HS256/RS256 JWTs because every `Bearer eyJ…`
+        // shares its first ~36 chars (the constant base64-encoded alg/typ
+        // header), so two different tokens would land on the same profile.
         const sig = t.rawAuthHeader
-            ? ("raw:" + t.rawAuthHeader.substring(0, 32))
+            ? ("raw:" + t.rawAuthHeader)
             : ("basic:" + host + ":" + (t.basicAuthUser || ""));
 
         let p = byKey[sig];

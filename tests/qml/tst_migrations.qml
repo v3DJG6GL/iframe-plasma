@@ -324,6 +324,24 @@ TestCase {
         compare(out.urlsJson, "{not");
     }
 
+    function test_legacy_jwtBearers_sharedAlgPrefix_distinctProfiles() {
+        // Two HS256 JWT bearer tokens for two different services share the
+        // first ~36 chars (constant `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9`
+        // alg/typ prefix). Truncating the dedup key would collapse them into
+        // one profile and break auth on the second tab.
+        const jwt1 = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.payloadA.signatureA";
+        const jwt2 = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.payloadB.signatureB";
+        const out = M.legacyAuthMigration(
+            '[{"url":"https://a.com/","rawAuthHeader":"' + jwt1 + '"},'
+          + ' {"url":"https://b.com/","rawAuthHeader":"' + jwt2 + '"}]',
+            "[]", "", null, _gen);
+        const profiles = JSON.parse(out.profilesJson);
+        compare(profiles.length, 2);
+        compare(out.walletWrites.length, 2);
+        const tabs = JSON.parse(out.urlsJson);
+        verify(tabs[0].authProfileId !== tabs[1].authProfileId);
+    }
+
     function test_legacy_mixedLegacyAndModern() {
         // Three tabs: legacy with secret, modern (already has authProfileId),
         // legacy without secret. Only the first triggers a wallet write.
