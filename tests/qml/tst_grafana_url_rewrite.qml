@@ -254,6 +254,44 @@ TestCase {
         compare(out, "https://g/goto/abc?from=now-1h&to=now&kiosk");
     }
 
+    // ===== Fragment bleed on existence regexes ========================
+    // Whole-string existence regexes for theme=/hideLogo=/_ifp_hidePanelMenu=
+    // and kiosk previously scanned the #fragment. A Grafana hash-routed
+    // share link whose fragment carries query-style chars (e.g.
+    // "#/d/abc?theme=dark") falsely satisfied "already present?" and
+    // silently suppressed the requested append. Same class as the Run #4
+    // viewPanel terminator (21acd1e) and Run #9 kiosk terminator
+    // (2f771a5) fixes, generalised by splitting the fragment once at
+    // the top of transform().
+    function test_theme_inFragmentDoesNotSuppressAppend() {
+        const opts = _off(); opts.theme = true;
+        compare(G.transform("https://g/x#/d/abc?theme=dark", opts),
+                "https://g/x?theme=${theme}#/d/abc?theme=dark");
+    }
+    function test_hideLogo_inFragmentDoesNotSuppressAppend() {
+        const opts = _off(); opts.hideLogo = true;
+        compare(G.transform("https://g/x#/d/abc?hideLogo=false", opts),
+                "https://g/x?hideLogo=true#/d/abc?hideLogo=false");
+    }
+    function test_hidePanelMenu_inFragmentDoesNotSuppressAppend() {
+        const opts = _off(); opts.hidePanelMenu = true;
+        compare(G.transform("https://g/x#a?_ifp_hidePanelMenu=0", opts),
+                "https://g/x?_ifp_hidePanelMenu=1#a?_ifp_hidePanelMenu=0");
+    }
+    function test_kiosk_inFragmentDoesNotSuppressAppend() {
+        const opts = _off(); opts.kiosk = true;
+        compare(G.transform("https://g/x#a?kiosk=1", opts),
+                "https://g/x?kiosk#a?kiosk=1");
+    }
+    function test_viewPanel_inFragmentIsNotMatched() {
+        // viewPanel inside the fragment must NOT be misidentified as a
+        // real query param; the /d/ → /d-solo/ rewrite must be a no-op
+        // and the fragment must survive verbatim.
+        const opts = _off(); opts.convertDSolo = true;
+        compare(G.transform("https://g/d/abc/slug#x?viewPanel=panel-7", opts),
+                "https://g/d/abc/slug#x?viewPanel=panel-7");
+    }
+
     // ===== splitFragment / appendParam / stripParam ===================
     function test_splitFragment_noFrag() { compare(G.splitFragment("https://x?a=1"), ["https://x?a=1", ""]); }
     function test_splitFragment_withFrag() { compare(G.splitFragment("https://x?a=1#anchor"), ["https://x?a=1", "#anchor"]); }

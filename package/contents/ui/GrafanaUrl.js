@@ -71,18 +71,27 @@ function transform(input, opts) {
 
     opts = opts || {};
 
+    // Split off the fragment once up front, work on `base` for the
+    // entire pipeline, re-attach at the end. The existence regexes
+    // below (`/[?&]theme=/`, `/[?&]hideLogo=/`, `/[?&]_ifp_hidePanelMenu=/`,
+    // `/[?&]kiosk(=|&|#|$)/`) and the viewPanel match all scan the
+    // whole string. For a Grafana hash-routed share link whose fragment
+    // carries query-style chars (e.g. "https://g/x#/d/abc?theme=dark"),
+    // a key embedded in `#…` falsely satisfies "already present?" and
+    // silently suppresses the requested append, or a `?viewPanel=…` in
+    // the fragment is misidentified as a real query param. Same
+    // bug-class as the Run #4 viewPanel-terminator (21acd1e) and Run
+    // #9 kiosk-terminator (2f771a5) fixes, generalised across the
+    // remaining four existence guards via single-site fragment split.
+    const _topParts = splitFragment(u);
+    let base = _topParts[0];
+    const frag = _topParts[1];
+
     // 1) /d/ → /d-solo/ (only when we have a viewPanel to convert).
-    const viewPanelMatch = u.match(/[?&]viewPanel=panel-(\d+)(?:-clone\d+)?/);
-    if (opts.convertDSolo && viewPanelMatch && u.indexOf("/d/") !== -1) {
-        u = u.replace("/d/", "/d-solo/");
-        u = u.replace(/([?&])viewPanel=panel-\d+(-clone\d+)?(&|#|$)/, function(_, before, _clone, after) {
-            // "#" is a fragment terminator — without "#" in the alternation
-            // the regex silently fails to match for "?viewPanel=panel-7#frag"
-            // URLs (Grafana share links with anchor routes) and the orphan
-            // viewPanel survives alongside the appended panelId, producing
-            // dup params that Grafana resolves version-dependently. Preserve
-            // the "#" verbatim so the fragment doesn't disappear with it.
-            if (after === "#") return "#";
+    const viewPanelMatch = base.match(/[?&]viewPanel=panel-(\d+)(?:-clone\d+)?/);
+    if (opts.convertDSolo && viewPanelMatch && base.indexOf("/d/") !== -1) {
+        base = base.replace("/d/", "/d-solo/");
+        base = base.replace(/([?&])viewPanel=panel-\d+(-clone\d+)?(&|$)/, function(_, before, _clone, after) {
             return before === "?" && after === "" ? ""
                  : before === "?" ? "?"
                  : after === "" ? "" : "&";
@@ -91,51 +100,47 @@ function transform(input, opts) {
         // prior drill-down; without this strip we'd emit two panelId
         // params and Grafana picks first-or-last in a version-dependent
         // way (user sees the wrong panel with no diagnostic).
-        u = stripParam(u, "panelId");
-        u = appendParam(u, "panelId", viewPanelMatch[1]);
+        base = stripParam(base, "panelId");
+        base = appendParam(base, "panelId", viewPanelMatch[1]);
     }
 
     // 2) Time range — strip any existing from/to, then add the preset.
     if (opts.timeRange) {
-        u = stripParam(u, "from");
-        u = stripParam(u, "to");
-        u = appendParam(u, "from", "now-" + opts.timeRange);
-        u = appendParam(u, "to", "now");
+        base = stripParam(base, "from");
+        base = stripParam(base, "to");
+        base = appendParam(base, "from", "now-" + opts.timeRange);
+        base = appendParam(base, "to", "now");
     }
 
     // 3) Kiosk — emit just `&kiosk` (no value); kiosk=1 has a Grafana
     //    11.2.x regression. Delimiter-anchor so kiosk.example.com host
-    //    or kioskMode=1 param don't suppress insertion. Route through
-    //    splitFragment so the flag doesn't bleed past a `#anchor`.
-    if (opts.kiosk && !/[?&]kiosk(=|&|#|$)/.test(u)) {
-        const parts = splitFragment(u);
-        const base = parts[0];
-        const frag = parts[1];
-        u = base + (base.indexOf("?") === -1 ? "?" : "&") + "kiosk" + frag;
+    //    or kioskMode=1 param don't suppress insertion.
+    if (opts.kiosk && !/[?&]kiosk(=|&|$)/.test(base)) {
+        base = base + (base.indexOf("?") === -1 ? "?" : "&") + "kiosk";
     }
 
     // 4) Theme — runtime substitutes ${theme}.
-    if (opts.theme && !/[?&]theme=/.test(u)) {
-        u = appendParam(u, "theme", "${theme}");
+    if (opts.theme && !/[?&]theme=/.test(base)) {
+        base = appendParam(base, "theme", "${theme}");
     }
 
     // 5) Refresh — omit entirely when off (empty refresh= is buggy).
     if (opts.refresh) {
-        u = stripParam(u, "refresh");
-        u = appendParam(u, "refresh", String(opts.refreshSeconds) + "s");
+        base = stripParam(base, "refresh");
+        base = appendParam(base, "refresh", String(opts.refreshSeconds) + "s");
     }
 
     // 6) hideLogo — strip the "Powered by Grafana" overlay on 12.4+.
-    if (opts.hideLogo && !/[?&]hideLogo=/.test(u)) {
-        u = appendParam(u, "hideLogo", "true");
+    if (opts.hideLogo && !/[?&]hideLogo=/.test(base)) {
+        base = appendParam(base, "hideLogo", "true");
     }
 
     // 7) hidePanelMenu — internal sentinel (Grafana ignores unknown
     //    params). WebTab.qml's user script suppresses the per-panel
     //    kebab when set.
-    if (opts.hidePanelMenu && !/[?&]_ifp_hidePanelMenu=/.test(u)) {
-        u = appendParam(u, "_ifp_hidePanelMenu", "1");
+    if (opts.hidePanelMenu && !/[?&]_ifp_hidePanelMenu=/.test(base)) {
+        base = appendParam(base, "_ifp_hidePanelMenu", "1");
     }
 
-    return u;
+    return base + frag;
 }
