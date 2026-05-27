@@ -478,10 +478,18 @@ const _PICKER_START_BODY = `(function(){
   }
   function click(e) {
     outline.style.display = 'none';
+    const bannerWasVisible = banner.style.display !== 'none';
+    banner.style.display = 'none';
     const t = document.elementFromPoint(e.clientX, e.clientY) || lastHover;
+    if (bannerWasVisible) banner.style.display = 'block';
     e.preventDefault();
     e.stopImmediatePropagation();
     e.stopPropagation();
+    // Guard against self-click (banner): without hiding above, clicking
+    // the instruction banner would compute `#__ifpPickerBanner` as the
+    // selector, save it, and the user gets a silently-broken pick that
+    // matches nothing after teardown.
+    if (!t || t === outline || t === banner) { finish(''); return; }
     finish(compute(t));
   }
   function key(e) {
