@@ -1,5 +1,8 @@
 # iframe-plasma
 
+[![CI](https://github.com/v3DJG6GL/iframe-plasma/actions/workflows/ci.yml/badge.svg)](https://github.com/v3DJG6GL/iframe-plasma/actions/workflows/ci.yml)
+[![REUSE status](https://api.reuse.software/badge/github.com/v3DJG6GL/iframe-plasma)](https://api.reuse.software/info/github.com/v3DJG6GL/iframe-plasma)
+
 A KDE Plasma 6 widget that embeds authenticated web pages — primarily designed
 for pinning **Grafana panels** onto your desktop or panel — with first-class
 support for **Authelia SSO** and **HTTP Basic Auth** behind a reverse proxy.
@@ -271,6 +274,32 @@ sqlite3 ~/.local/share/iframe-plasma/<plasmoidId>/Cookies \
 # Verify wallet entries
 kwalletmanager6  # browse → folder "iframe-plasma"
 ```
+
+## Testing
+
+The suite is opt-in via `-DBUILD_TESTING=ON` and runs entirely headless via
+`ctest`:
+
+```bash
+cmake -S . -B build -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Debug
+cmake --build build -j
+ctest --test-dir build --output-on-failure -j$(nproc)
+```
+
+Slice by label:
+
+```bash
+ctest --test-dir build -L cpp     # Qt Test unit tests (C++ plugin internals)
+ctest --test-dir build -L qml     # Qt Quick Test (QML/JS helpers)
+ctest --test-dir build -L js      # Node + jsdom (CropEngine.js)
+```
+
+Node 18+ and `npm` are required for the `-L js` slice (jsdom is installed by
+the first run automatically). All other layers depend only on the same Qt /
+KF6 / Plasma packages used to build the widget itself.
+
+GitHub Actions runs the full suite plus REUSE and pre-commit linting on every
+push and pull request — see [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 ## Acknowledgements
 

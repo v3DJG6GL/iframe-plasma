@@ -30,3 +30,12 @@ path = [".gitignore", "CHANGELOG.md", "README.md", "SIMPLIFY_NOTES.md", "SECURIT
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 v3DJG6GL <72495210+v3DJG6GL@users.noreply.github.com>"
 SPDX-License-Identifier = "AGPL-3.0-or-later"
+
+# Test fixtures + JS deps manifests + .qml test files. reuse's extension
+# registry doesn't carry .qml yet, and JSON/.gitignore have no usable
+# comment syntax, so declare them in aggregate here.
+[[annotations]]
+path = ["tests/**.qml", "tests/**/package.json", "tests/**/.gitignore"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 v3DJG6GL <72495210+v3DJG6GL@users.noreply.github.com>"
+SPDX-License-Identifier = "AGPL-3.0-or-later"
