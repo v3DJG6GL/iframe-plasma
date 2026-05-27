@@ -86,7 +86,15 @@ Item {
     // WebEngine's automatic post-promotion reload do the work. For
     // hardReload we arm _pendingHardReload so the LoadStartedStatus
     // consumer below stops the auto-reload and re-issues bypass-cache.
+    //
+    // A deliberate reload discards in-progress login state by definition:
+    // form contents are about to be nuked by the navigation. Without this
+    // reset, a broadcast reload (secretsChanged → reloadAll while user is
+    // mid-Authelia) leaves loginInProgress stuck-true; the post-reload
+    // LoadSucceeded on Authelia then takes the "hide overlay" branch and
+    // the operator types into a bare Authelia form with no trust signal.
     function reload() {
+        tab.loginInProgress = false;
         if (webview.lifecycleState === WebEngineView.LifecycleState.Discarded) {
             webview.lifecycleState = WebEngineView.LifecycleState.Active;
             return;
@@ -94,6 +102,7 @@ Item {
         webview.reload();
     }
     function hardReload() {
+        tab.loginInProgress = false;
         if (webview.lifecycleState === WebEngineView.LifecycleState.Discarded) {
             _pendingHardReload = true;
             hardReloadFallback.restart();
