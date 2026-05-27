@@ -1963,37 +1963,28 @@ PlasmoidItem {
                 // the existing popupSelector because _PICKER_START_BODY's
                 // teardown stripped isolation before this dialog opened.
                 property bool _saved: false
+                function _finishSave(scope) {
+                    savePickedDialog._saved = true;
+                    root.savePickedSelector(savePickedDialog.tabIdx, scope,
+                                            savePickedDialog.pickedSelector);
+                    savePickedDialog.close();
+                }
                 standardButtons: Kirigami.Dialog.NoButton
                 customFooterActions: [
                     Kirigami.Action {
                         text: i18n("Save for both")
                         icon.name: "edit-copy"
-                        onTriggered: {
-                            savePickedDialog._saved = true;
-                            root.savePickedSelector(savePickedDialog.tabIdx, "both",
-                                                    savePickedDialog.pickedSelector);
-                            savePickedDialog.close();
-                        }
+                        onTriggered: savePickedDialog._finishSave("both")
                     },
                     Kirigami.Action {
                         text: i18n("Save as Thumbnail")
                         icon.name: "view-preview"
-                        onTriggered: {
-                            savePickedDialog._saved = true;
-                            root.savePickedSelector(savePickedDialog.tabIdx, "thumb",
-                                                    savePickedDialog.pickedSelector);
-                            savePickedDialog.close();
-                        }
+                        onTriggered: savePickedDialog._finishSave("thumb")
                     },
                     Kirigami.Action {
                         text: i18n("Save as Widget popup")
                         icon.name: "view-fullscreen"
-                        onTriggered: {
-                            savePickedDialog._saved = true;
-                            root.savePickedSelector(savePickedDialog.tabIdx, "popup",
-                                                    savePickedDialog.pickedSelector);
-                            savePickedDialog.close();
-                        }
+                        onTriggered: savePickedDialog._finishSave("popup")
                     },
                     Kirigami.Action {
                         text: i18n("Cancel")
