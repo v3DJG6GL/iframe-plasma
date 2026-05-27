@@ -146,6 +146,60 @@ TestCase {
         compare((entry.popupMode || ""), row.popupMode);
     }
 
+    // ===== thumbIconName allow-list ==================================
+    //
+    // BackupBridge.importFromFile does not introspect urlsJson contents,
+    // so an attacker-crafted backup can land arbitrary strings in this
+    // field. Kirigami.Icon { source: "http://..." } actually issues an
+    // outbound HTTP fetch via QQmlEngine::networkAccessManager — a
+    // persistent beacon on every panel paint. normaliseTabRow MUST drop
+    // anything that is not (empty | theme name | bundled:<safe> | file:///<path>).
+    function test_iconName_emptyKept() {
+        compare(Schema.normaliseTabRow({ thumbIconName: "" }).thumbIconName, "");
+    }
+    function test_iconName_themeNameKept() {
+        compare(Schema.normaliseTabRow({ thumbIconName: "applications-internet" }).thumbIconName,
+                "applications-internet");
+    }
+    function test_iconName_themeNameWithDotsKept() {
+        compare(Schema.normaliseTabRow({ thumbIconName: "org.kde.plasma.foo" }).thumbIconName,
+                "org.kde.plasma.foo");
+    }
+    function test_iconName_bundledKept() {
+        compare(Schema.normaliseTabRow({ thumbIconName: "bundled:bell-ringing" }).thumbIconName,
+                "bundled:bell-ringing");
+    }
+    function test_iconName_fileUrlKept() {
+        compare(Schema.normaliseTabRow({ thumbIconName: "file:///home/op/icons/x.svg" }).thumbIconName,
+                "file:///home/op/icons/x.svg");
+    }
+    function test_iconName_httpRejected() {
+        compare(Schema.normaliseTabRow({ thumbIconName: "http://attacker.example/beacon.png" }).thumbIconName,
+                "");
+    }
+    function test_iconName_httpsRejected() {
+        compare(Schema.normaliseTabRow({ thumbIconName: "https://attacker.example/p?h=KIOSK" }).thumbIconName,
+                "");
+    }
+    function test_iconName_dataUrlRejected() {
+        compare(Schema.normaliseTabRow({ thumbIconName: "data:image/svg+xml;base64,PHN2Zy8+" }).thumbIconName,
+                "");
+    }
+    function test_iconName_bundledTraversalRejected() {
+        compare(Schema.normaliseTabRow({ thumbIconName: "bundled:../../../etc/passwd" }).thumbIconName,
+                "");
+    }
+    function test_iconName_bundledSlashRejected() {
+        compare(Schema.normaliseTabRow({ thumbIconName: "bundled:a/b" }).thumbIconName, "");
+    }
+    function test_iconName_fileUrlWithControlByteRejected() {
+        compare(Schema.normaliseTabRow({ thumbIconName: "file:///tmp/a\nb.svg" }).thumbIconName, "");
+    }
+    function test_iconName_leadingDotRejected() {
+        // FreeDesktop spec disallows; also blocks a stray "://" slipping past.
+        compare(Schema.normaliseTabRow({ thumbIconName: ".hidden" }).thumbIconName, "");
+    }
+
     // ===== full round-trip JSON →→ array →→ ListModel-shape =========
     function test_fullJsonRoundtrip() {
         const json = '[{"label":"k","url":"https://k","thumbMode":"icon","thumbIconName":"cpu"},'

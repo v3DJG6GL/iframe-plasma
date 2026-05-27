@@ -217,10 +217,14 @@ KCM.SimpleKCM {
     // Plain name → theme icon; "bundled:foo" → shipped SVG; "file://..."
     // → straight file URL.
     function resolveIconPreview(name) {
-        if (!name) return "image-missing";
-        if (String(name).startsWith("bundled:"))
-            return Qt.resolvedUrl("../icons/bundled/" + String(name).substring(8) + ".svg");
-        return name;
+        // DiD allow-list — mirror of main.qml's resolveIconSource. Catches
+        // an imported-JSON thumbIconName before the per-card Kirigami.Icon
+        // preview can issue an outbound HTTP request for an attacker URL.
+        const safe = RowSchema.sanitizeIconName(name);
+        if (!safe) return "image-missing";
+        if (safe.startsWith("bundled:"))
+            return Qt.resolvedUrl("../icons/bundled/" + safe.substring(8) + ".svg");
+        return safe;
     }
 
     // Read-only mirror of the Auth tab's profile list. KCM auto-binds

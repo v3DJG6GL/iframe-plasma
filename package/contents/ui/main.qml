@@ -13,6 +13,7 @@ import org.kde.plasma.core as PlasmaCore
 import org.kde.kirigami as Kirigami
 import "./CropEngine.js" as CropEngine
 import "./Migrations.js" as Migrations
+import "./RowSchema.js" as RowSchema
 import "./UrlUtils.js" as UrlUtils
 
 PlasmoidItem {
@@ -512,10 +513,14 @@ PlasmoidItem {
     // configured `icon` mode still looks intentional. ConfigUrls.qml has
     // its own copy (resolveIconPreview) for the per-card preview.
     function resolveIconSource(name) {
-        if (!name) return Plasmoid.icon || "applications-internet";
-        if (String(name).startsWith("bundled:"))
-            return Qt.resolvedUrl("../icons/bundled/" + String(name).substring(8) + ".svg");
-        return name;
+        // DiD allow-list. parseTabs runs before normaliseTabRow on the
+        // import path, so a malicious thumbIconName can reach here in the
+        // gap between Import-Apply and the next ConfigUrls.repopulate().
+        const safe = RowSchema.sanitizeIconName(name);
+        if (!safe) return Plasmoid.icon || "applications-internet";
+        if (safe.startsWith("bundled:"))
+            return Qt.resolvedUrl("../icons/bundled/" + safe.substring(8) + ".svg");
+        return safe;
     }
 
     // Per-tab thumbnail CSS selector. Lifted out of the compact rep so the
