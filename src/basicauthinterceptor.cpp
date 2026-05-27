@@ -124,6 +124,12 @@ void BasicAuthInterceptor::clearAll()
     m_headers.clear();
 }
 
+QHash<QString, QByteArray> BasicAuthInterceptor::headersSnapshot() const
+{
+    QReadLocker locker(&m_headersLock);
+    return m_headers;
+}
+
 void BasicAuthInterceptor::applyProfile(const QString &profileId,
                                        const QString &authType,
                                        const QString &username,

@@ -35,11 +35,11 @@ iframe_add_cpp_test(tst_buildauthheader
     SOURCES "${CMAKE_SOURCE_DIR}/src/basicauthinterceptor.cpp"
     LIBS    Qt6::WebEngineCore Qt6::WebEngineQuick)
 
-# 3. BasicAuthInterceptor class behaviour (added later in Phase 2).
+# 3. BasicAuthInterceptor class behaviour
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tst_basicauthinterceptor.cpp")
     iframe_add_cpp_test(tst_basicauthinterceptor
         SOURCES "${CMAKE_SOURCE_DIR}/src/basicauthinterceptor.cpp"
-        LIBS    Qt6::WebEngineCore Qt6::WebEngineQuick)
+        LIBS    Qt6::WebEngineCore Qt6::WebEngineQuick Qt6::Concurrent)
 endif()
 
 # 4. SecretsBridge against the FakeWallet in tests/fixtures/fakewallet/.
@@ -48,7 +48,7 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tst_secretsbridge.cpp")
         SOURCES
             "${CMAKE_SOURCE_DIR}/src/secretsbridge.cpp"
             "${CMAKE_SOURCE_DIR}/tests/fixtures/fakewallet/fakewallet.cpp"
-        LIBS    KF6::Wallet KF6::I18n)
+        LIBS    Qt6::Qml KF6::Wallet KF6::I18n)
 endif()
 
 # 5. ScreenLockMonitor against a python-dbusmock fixture (added later).

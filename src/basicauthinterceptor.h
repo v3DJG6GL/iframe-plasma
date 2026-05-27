@@ -63,6 +63,13 @@ public:
 
     void interceptRequest(QWebEngineUrlRequestInfo &info) override;
 
+    // Read-only snapshot of currently-registered (host → header) entries.
+    // QWebEngineUrlRequestInfo is `final` and has no public constructor, so
+    // unit tests cannot drive interceptRequest() directly; they verify
+    // applyProfile/clearAll state through this accessor instead. Cheap
+    // (one QHash COW) and locked under the read side of m_headersLock.
+    QHash<QString, QByteArray> headersSnapshot() const;
+
 private:
     // host (lowercased) -> precomputed "Basic <base64>" / "Bearer …" / raw header value.
     // interceptRequest() runs on Chromium's IO thread; applyProfile()/clearAll()
