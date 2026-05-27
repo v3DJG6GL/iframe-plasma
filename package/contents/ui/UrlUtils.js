@@ -74,9 +74,18 @@ function substituteTheme(url, theme) {
 // Same heuristic main.qml's toolbar uses to gate Time-range / Refresh
 // dropdowns: only enable them for Grafana-shaped URLs. Matches /d/ and
 // /d-solo/ followed by an alphanumeric uid segment.
+//
+// Drop the `#fragment` before scanning: a hash-routed share URL like
+// `https://example.com/page#/d/abc/dashboard` would otherwise false-
+// positive as Grafana and expose Grafana-only affordances (thumbnail
+// presets, "Edit Grafana settings…" toolbutton) on a non-Grafana card.
+// Same regex-terminator/fragment-bleed bug-class as Runs #15/#19.
 function isGrafanaEmbed(u) {
     if (!u) return false;
-    return /\/d(-solo)?\/[A-Za-z0-9_-]+\//.test(String(u));
+    const s = String(u);
+    const hashIdx = s.indexOf('#');
+    const base = hashIdx === -1 ? s : s.slice(0, hashIdx);
+    return /\/d(-solo)?\/[A-Za-z0-9_-]+\//.test(base);
 }
 
 // Auto-cycle stepper. Given the current tab index and the live `tabs`

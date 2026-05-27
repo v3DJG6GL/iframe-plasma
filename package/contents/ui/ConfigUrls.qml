@@ -10,6 +10,7 @@ import org.kde.kcmutils as KCM
 import org.kde.kirigami as Kirigami
 import "./GrafanaUrl.js" as GrafanaUrl
 import "./RowSchema.js" as RowSchema
+import "./UrlUtils.js" as UrlUtils
 
 KCM.SimpleKCM {
     id: page
@@ -202,9 +203,12 @@ KCM.SimpleKCM {
     // helper dialog produces or accepts. Used to gate the per-card
     // "Edit Grafana settings…" button so it doesn't appear on non-
     // Grafana tabs (e.g., a Home Assistant dashboard URL).
+    // One-line forwarder to UrlUtils.isGrafanaEmbed — keeps the KCM's
+    // affordance-gating in lockstep with main.qml's toolbar gating so the
+    // two cannot silently diverge (e.g. the fragment-bleed fix at Run #20
+    // only had to land in one place).
     function isGrafanaEmbed(u) {
-        if (!u) return false;
-        return /\/d(-solo)?\/[A-Za-z0-9_-]+\//.test(u);
+        return UrlUtils.isGrafanaEmbed(u);
     }
 
     // Mirror of main.qml's resolveIconSource for the per-card preview.

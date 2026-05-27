@@ -96,4 +96,17 @@ TestCase {
         // the toolbar gate doesn't enable them.
         verify(!U.isGrafanaEmbed("https://grafana.example.com/goto/abc"));
     }
+    function test_isGrafanaEmbed_dropsFragmentBeforeScanning() {
+        // A hash-routed share URL whose `#fragment` happens to contain
+        // `/d/<uid>/` must NOT false-positive — the regex scans only the
+        // pre-fragment base. Same bug-class as Runs #15/#19 on the
+        // transform/parseSettings/viewPanel-derive sites.
+        verify(!U.isGrafanaEmbed("https://example.com/page#/d/abc/dashboard"));
+        verify(!U.isGrafanaEmbed("https://example.com/x#/d-solo/abc/y"));
+    }
+    function test_isGrafanaEmbed_keepsRealGrafanaWithFragment() {
+        // A real Grafana URL whose path matches the regex must still
+        // pass even when a `#section=...` fragment is appended.
+        verify(U.isGrafanaEmbed("https://grafana.example.com/d/abc/slug?orgId=1#section=2"));
+    }
 }
