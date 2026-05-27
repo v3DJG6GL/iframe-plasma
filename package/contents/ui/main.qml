@@ -2006,10 +2006,6 @@ PlasmoidItem {
             Layout.fillHeight: true
             currentIndex: root.currentTabIndex
 
-            function itemAt(idx) {
-                const item = repeater.itemAt(idx);
-                return item ? item.webView : null;
-            }
             function reloadAll() {
                 // Go through the WebTab wrapper (NOT the raw webView) so the
                 // Discarded/Frozen-promotion path in WebTab.reload() runs —
