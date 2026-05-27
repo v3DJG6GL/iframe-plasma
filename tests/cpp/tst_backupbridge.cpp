@@ -408,6 +408,38 @@ private Q_SLOTS:
         QCOMPARE(applied.value(u"themeMode"_s).toString(), u"dark"_s);
     }
 
+    // ----- import: JSON null/undefined values surfaced as skipped ---
+
+    void import_nullValueOnSchemaKey_reportedInSkippedAndExcluded()
+    {
+        // A schema-recognised key whose value is JSON null would convert
+        // to an invalid QVariant; the QML _applyConfig loop would blindly
+        // write it back to the kcfg_* alias and blank the live property.
+        // The fix routes such keys to `skipped` (forward-compat
+        // partial-import reporting) and excludes them from `config`.
+        const QString path = m_xdg.filePath(u"nullval.json"_s);
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(R"({
+            "version": 1,
+            "config": {
+                "General": { "urlsJson": null, "currentTabIndex": 3 }
+            }
+        })");
+        f.close();
+
+        BackupBridge b;
+        const QVariantMap result = b.importFromFile(path, {});
+        QCOMPARE(result.value(u"ok"_s).toBool(), true);
+        const QStringList skipped = result.value(u"skipped"_s).toStringList();
+        QVERIFY(skipped.contains(u"urlsJson"_s));
+        const QVariantMap applied = result.value(u"config"_s).toMap();
+        // Null-valued key MUST NOT appear in the apply map.
+        QVERIFY(!applied.contains(u"urlsJson"_s));
+        // Sibling non-null key still applies.
+        QCOMPARE(applied.value(u"currentTabIndex"_s).toInt(), 3);
+    }
+
     // ----- suggestedExportName --------------------------------------
 
     void suggestedExportName_hasExpectedShape()
