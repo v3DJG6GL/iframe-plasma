@@ -481,9 +481,9 @@ ${_TEARDOWN_BODY}
     e.stopImmediatePropagation();
     e.stopPropagation();
     // Guard against self-click (banner): without hiding above, clicking
-    // the instruction banner would compute `#__ifpPickerBanner` as the
-    // selector, save it, and the user gets a silently-broken pick that
-    // matches nothing after teardown.
+    // the instruction banner would compute the banner's #__ifpPickerBanner
+    // id as the selector, save it, and the user gets a silently-broken
+    // pick that matches nothing after teardown.
     if (!t || t === outline || t === banner) { finish(''); return; }
     finish(compute(t));
   }
