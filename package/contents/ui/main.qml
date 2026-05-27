@@ -711,9 +711,23 @@ PlasmoidItem {
     // thumbnail, and sets the _suppressTabsRebuildOnce guard so the
     // urlsJson write triggers persistence WITHOUT a rebuild.
     function savePickedSelector(tabIdx, scope, sel) {
+        // Hoist fr so the early-return and catch paths can re-engage
+        // popup isolation that the picker's _PICKER_START_BODY stripped
+        // before the dialog opened. savePickedDialog._saved=true skips
+        // its onClosed restore, so this function owns the restore on
+        // every exit path.
+        const fr = root.fullRepresentationItem;
+        function _restoreOnAbort() {
+            if (fr && typeof fr.restorePopupSelectorAt === "function") {
+                fr.restorePopupSelectorAt(tabIdx);
+            }
+        }
         try {
             const arr = JSON.parse(Plasmoid.configuration.urlsJson || "[]");
-            if (!Array.isArray(arr) || tabIdx < 0 || tabIdx >= arr.length) return;
+            if (!Array.isArray(arr) || tabIdx < 0 || tabIdx >= arr.length) {
+                _restoreOnAbort();
+                return;
+            }
             const entry = arr[tabIdx] || {};
             if (scope === "thumb" || scope === "both") {
                 entry.thumbMode = "custom";
@@ -746,7 +760,6 @@ PlasmoidItem {
             // picker save a no-op (the urlsJson write below never
             // even ran). Confirmed in journal as `save error:
             // repeater is not defined`.
-            const fr = root.fullRepresentationItem;
             if (scope === "popup" || scope === "both") {
                 const newPopupSel = (entry.popupMode === "custom")
                                   ? (entry.popupSelector || "") : "";
@@ -801,6 +814,7 @@ PlasmoidItem {
                 + " sel=" + JSON.stringify(sel) + " idx=" + tabIdx);
         } catch (e) {
             console.warn("iframe-plasma[picker] save error:", e.message);
+            _restoreOnAbort();
         }
     }
 
