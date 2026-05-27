@@ -68,6 +68,21 @@ KCM.SimpleKCM {
         }
     }
 
+    // Install the popupWheelForwarder on `combo`'s popup the first time it
+    // opens. Per-combo `_popupWheelHooked` is required on the ComboBox itself
+    // so the user's `property bool _popupWheelHooked: false` declaration owns
+    // the one-shot gate; this helper centralises the connect/create plumbing
+    // so each ComboBox only needs the property + a Component.onCompleted call.
+    function _hookComboPopupWheel(combo, scrollTarget) {
+        if (!combo || !combo.popup) return
+        combo.popup.opened.connect(function() {
+            if (combo._popupWheelHooked) return
+            popupWheelForwarder.createObject(combo.popup.contentItem,
+                                             { combo: combo, scrollTarget: scrollTarget })
+            combo._popupWheelHooked = true
+        })
+    }
+
     QtObject {
         id: store
         property string json: "[]"
@@ -363,16 +378,7 @@ KCM.SimpleKCM {
                                 QQC.ToolTip.text: i18n("Create auth profiles on the Authentication tab, then pick one here.")
                                 NoWheel {}
                                 property bool _popupWheelHooked: false
-                                Connections {
-                                    target: profileCombo.popup
-                                    function onOpened() {
-                                        if (profileCombo._popupWheelHooked) return
-                                        popupWheelForwarder.createObject(
-                                            profileCombo.popup.contentItem,
-                                            { combo: profileCombo, scrollTarget: urlList })
-                                        profileCombo._popupWheelHooked = true
-                                    }
-                                }
+                                Component.onCompleted: page._hookComboPopupWheel(profileCombo, urlList)
                             }
                             // currentIndex via Binding so it survives the
                             // ComboBox's internal write on user click —
@@ -473,16 +479,7 @@ KCM.SimpleKCM {
                                       + "  • Hide            — never show this tab in the slot; skipped during rotation.")
                                 NoWheel {}
                                 property bool _popupWheelHooked: false
-                                Connections {
-                                    target: thumbModeCombo.popup
-                                    function onOpened() {
-                                        if (thumbModeCombo._popupWheelHooked) return
-                                        popupWheelForwarder.createObject(
-                                            thumbModeCombo.popup.contentItem,
-                                            { combo: thumbModeCombo, scrollTarget: urlList })
-                                        thumbModeCombo._popupWheelHooked = true
-                                    }
-                                }
+                                Component.onCompleted: page._hookComboPopupWheel(thumbModeCombo, urlList)
                             }
                         }
                         QQC.TextField {
@@ -609,16 +606,7 @@ KCM.SimpleKCM {
                                   + "Survives SPA re-renders and works on any tag, not just Grafana canvases.")
                                 NoWheel {}
                                 property bool _popupWheelHooked: false
-                                Connections {
-                                    target: popupModeCombo.popup
-                                    function onOpened() {
-                                        if (popupModeCombo._popupWheelHooked) return
-                                        popupWheelForwarder.createObject(
-                                            popupModeCombo.popup.contentItem,
-                                            { combo: popupModeCombo, scrollTarget: urlList })
-                                        popupModeCombo._popupWheelHooked = true
-                                    }
-                                }
+                                Component.onCompleted: page._hookComboPopupWheel(popupModeCombo, urlList)
                             }
                         }
                         QQC.TextField {
