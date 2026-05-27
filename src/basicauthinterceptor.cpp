@@ -215,17 +215,25 @@ void BasicAuthInterceptor::interceptRequest(QWebEngineUrlRequestInfo &info)
     if (scheme != QLatin1String("https") && scheme != QLatin1String("http")) {
         return;
     }
+    // Fast-path: most users have zero or a small number of profiles wired
+    // up to specific dashboards but browse to many sub-resources. Take a
+    // brief read lock to check emptiness before paying for canonicalizeHost
+    // (which allocates a lowercased QString plus optional IPv6/port concat
+    // every call) — saves an alloc per sub-resource on the IO hot path
+    // when no profiles are registered.
+    {
+        QReadLocker locker(&m_headersLock);
+        if (m_headers.isEmpty()) return;
+    }
     const QString host = iframeplasma::auth::canonicalizeHost(
         url.host(), scheme, url.port());
     QByteArray header;
-    bool hadAny = false;
     {
         QReadLocker locker(&m_headersLock);
         const auto it = m_headers.constFind(host);
         if (it != m_headers.cend()) {
             header = it.value();
         }
-        hadAny = !m_headers.isEmpty();
     }
     if (!header.isEmpty()) {
         info.setHttpHeader(QByteArrayLiteral("Authorization"), header);
@@ -234,8 +242,9 @@ void BasicAuthInterceptor::interceptRequest(QWebEngineUrlRequestInfo &info)
         // off the default journal stream.
         qCDebug(lcIframeAuth).noquote() << "interceptor: injected Authorization for"
             << url.toString().left(120);
-    } else if (hadAny) {
-        // Only log near-misses if we have any creds at all
+    } else {
+        // Log near-misses only when creds exist; the empty-headers gate
+        // above guarantees that's the case if we reach here.
         qCDebug(lcIframeAuth).noquote() << "interceptor: NO MATCH host=" << host
             << "url=" << url.toString().left(120);
     }
