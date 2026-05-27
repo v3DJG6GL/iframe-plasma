@@ -154,12 +154,66 @@ Rectangle {
                 icon.name: "view-refresh-symbolic"
                 onTriggered: tb.hardReloadClicked()
             }
+            // `Clear HTTP cache && reload` and `Open in default browser`
+            // moved to the gear-icon advanced-actions menu (below) — they're
+            // rarely-used and were diluting the reload caret's purpose.
+        }
+
+        // Gear-icon overflow for rarely-used actions. Sits immediately
+        // after the reload split button so reload-family actions cluster
+        // visually. Replaces the standalone CSS-picker button, which was
+        // a visual twin of the adjacent pin button (both small mute-grey
+        // rectangles with a short-stem-and-head icon) and got mis-clicked.
+        // Also absorbs `Clear HTTP cache && reload` and `Open in default
+        // browser` from the reload caret menu so the caret carries only
+        // reload variants and this menu groups all session-rare actions.
+        QQC.AbstractButton {
+            id: moreBtn
+            width: 22; height: 20
+            padding: 0
+            Layout.alignment: Qt.AlignVCenter
+            Layout.preferredWidth: width
+            Layout.preferredHeight: height
+            hoverEnabled: true
+            onClicked: moreMenu.popup(moreBtn, 0, moreBtn.height)
+            QQC.ToolTip.text: i18n("More actions — element picker, clear cache, open externally")
+            QQC.ToolTip.visible: hovered
+            QQC.ToolTip.delay: 600
+            contentItem: Rectangle {
+                color: moreBtn.hovered ? Theme.surfaceHi : Theme.surface
+                border.color: Theme.fgMute
+                border.width: 1
+                radius: 2
+                Kirigami.Icon {
+                    anchors.centerIn: parent
+                    width: 14; height: 14
+                    // `configure` is Breeze's canonical settings-cog action
+                    // icon — distinct silhouette (multi-toothed gear) vs.
+                    // the pin's vertical-stem profile, so the two buttons
+                    // no longer read as twins.
+                    source: "configure"
+                    color: Theme.fgDim
+                    isMask: true
+                }
+            }
+        }
+
+        QQC.Menu {
+            id: moreMenu
+            QQC.MenuItem {
+                text: i18n("Pick element to crop…")
+                icon.name: "tool_color_picker"
+                // Same gate as the previous standalone picker button —
+                // pickerStart on a blank tab has nothing to inject into.
+                enabled: tb.host.length > 0
+                onTriggered: tb.pickElementClicked()
+            }
+            QQC.MenuSeparator {}
             QQC.MenuItem {
                 text: i18n("Clear HTTP cache && reload")
                 icon.name: "edit-clear-history"
                 onTriggered: tb.clearCookiesClicked()
             }
-            QQC.MenuSeparator {}
             QQC.MenuItem {
                 text: i18n("Open in default browser")
                 icon.name: "internet-web-browser"
@@ -280,50 +334,6 @@ Rectangle {
                     width: 14; height: 14
                     source: "window-pin"
                     color: tb.pinned ? Theme.accent : Theme.fgMute
-                    isMask: true
-                }
-            }
-        }
-
-        // Activates the in-page click-to-pick overlay so the user can
-        // visually select an element instead of authoring a CSS selector
-        // by hand. Result is sent back via the active tab's
-        // selectorPicked signal — main.qml prompts for scope (thumbnail
-        // vs widget) and writes to the URL config.
-        // Mirror reloadBtn's sizing: hardcoded width/height with zero
-        // padding so the contentItem Rectangle fills the AbstractButton
-        // box. Layout.preferredWidth + QQC2's default 6 px padding
-        // shrinks the Rectangle and pushes the centred ⌖ glyph off-axis.
-        QQC.AbstractButton {
-            id: pickBtn
-            width: 22; height: 20
-            padding: 0
-            Layout.alignment: Qt.AlignVCenter
-            Layout.preferredWidth: width
-            Layout.preferredHeight: height
-            visible: tb.host.length > 0
-            hoverEnabled: true
-            onClicked: tb.pickElementClicked()
-            QQC.ToolTip.text: i18n("Pick an element to crop to — click any element in the page, Esc to cancel")
-            QQC.ToolTip.visible: hovered
-            QQC.ToolTip.delay: 600
-            contentItem: Rectangle {
-                color: pickBtn.hovered ? Theme.surfaceHi : Theme.surface
-                border.color: Theme.fgMute
-                border.width: 1
-                radius: 2
-                // Kirigami.Icon auto-centres a Breeze SVG inside its box,
-                // sidestepping the asymmetric sidebearings of the ⌖
-                // glyph (U+2316) in monospaced fonts that left the
-                // previous Label visually offset. `tool_color_picker`
-                // is the standard Breeze action icon for an in-app
-                // element/colour picker — semantically closest to
-                // "click an element to capture its selector".
-                Kirigami.Icon {
-                    anchors.centerIn: parent
-                    width: 14; height: 14
-                    source: "tool_color_picker"
-                    color: Theme.accent
                     isMask: true
                 }
             }
