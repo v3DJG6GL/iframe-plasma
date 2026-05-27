@@ -918,7 +918,14 @@ KCM.SimpleKCM {
                 .replace(/[?]kiosk(?:=[^&]*)?(?:&|$)/, function(m) {
                     return m.endsWith("&") ? "?" : "";
                 })
-                .replace(/[&]kiosk(?:=[^&]*)?/g, "");
+                // Lookahead-anchor the terminator: without `(?=&|$)` the optional
+                // value group succeeds at zero-length on `M` and `&kiosk` is
+                // stripped as a prefix of `&kioskMode=tv`, corrupting the next
+                // param's value (`?orgId=1&kioskMode=tv` → `?orgId=1Mode=tv`).
+                // Lookahead (not consuming) so adjacent `&kiosk&kiosk` chains
+                // both strip via the shared separator. Same regex-terminator
+                // class as Runs #4/#9.
+                .replace(/[&]kiosk(?:=[^&]*)?(?=&|$)/g, "");
             // Normalize stray trailing `?`/`&` or doubled `&`.
             b = b.replace(/&&+/g, "&").replace(/[?&]$/, "");
             return b + frag;
