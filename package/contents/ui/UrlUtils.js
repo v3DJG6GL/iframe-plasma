@@ -16,9 +16,13 @@
 
 // Tab URLs must be http(s). Pasted `data:`, `file:`, `javascript:`, `blob:`
 // etc. would execute in the per-profile cookie/storage origin or read
-// local files, so they're filtered out early.
+// local files, so they're filtered out early. Embedded CR/LF/NUL is
+// rejected for the same defence-in-depth reason GrafanaUrl.transform's
+// C0 gate exists — a control byte in a URL routed through any
+// non-WebEngine HTTP path would smuggle additional header lines.
 function isSafeTabUrl(s) {
     if (typeof s !== "string") return false;
+    if (/[\r\n\0]/.test(s)) return false;
     return /^https?:\/\//i.test(s);
 }
 

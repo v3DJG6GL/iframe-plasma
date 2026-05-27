@@ -73,6 +73,11 @@ function transform(input, opts) {
                  : before === "?" ? "?"
                  : after === "" ? "" : "&";
         });
+        // /d/ dashboard URLs sometimes already carry a panelId from a
+        // prior drill-down; without this strip we'd emit two panelId
+        // params and Grafana picks first-or-last in a version-dependent
+        // way (user sees the wrong panel with no diagnostic).
+        u = stripParam(u, "panelId");
         u = appendParam(u, "panelId", viewPanelMatch[1]);
     }
 
