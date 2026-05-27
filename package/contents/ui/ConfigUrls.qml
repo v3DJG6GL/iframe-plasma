@@ -902,8 +902,13 @@ KCM.SimpleKCM {
         // (panelId, orgId, var-*, dashboard-specific flags) is preserved.
         function stripManagedParams(url) {
             let u = url;
-            u = stripParam(u, "from");
-            u = stripParam(u, "to");
+            // `from`/`to` are intentionally NOT stripped: when the combo
+            // sits on the head row "(keep URL's range)", `transformUrl`
+            // passes `timeRange: ""` to GrafanaUrl.transform which then
+            // skips its own strip+append block, so any pre-existing
+            // from/to MUST survive untouched. The "Last X" preset path
+            // is also safe: GrafanaUrl.transform strips and re-appends
+            // from/to itself when `opts.timeRange` is truthy.
             u = stripParam(u, "refresh");
             u = stripParam(u, "theme");
             u = stripParam(u, "hideLogo");
