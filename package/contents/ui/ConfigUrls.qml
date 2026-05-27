@@ -242,33 +242,10 @@ KCM.SimpleKCM {
             // card, over the gap between cards, over empty trailing space —
             // up to the outer scroller (the wrapper Flickable that
             // QQC.ScrollView puts around this ListView and gives full
-            // content height to). Attaching a WheelHandler at the ListView
-            // catches the whole subtree; a per-delegate handler would miss
-            // the spacing gaps and any unfilled tail. The walk skips this
-            // ListView (its contentH == h, since the ScrollView expanded it
-            // to fit) and lands on the actual scrolling Flickable.
-            WheelHandler {
-                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-                onWheel: (event) => {
-                    const dy = event.pixelDelta.y !== 0 ? event.pixelDelta.y
-                             : event.angleDelta.y / 8
-                    let p = parent
-                    while (p) {
-                        if (typeof p.returnToBounds === "function"
-                            && p.contentY !== undefined
-                            && p.contentHeight !== undefined
-                            && p.height !== undefined
-                            && p.contentHeight > p.height) {
-                            p.contentY = Math.max(0,
-                                Math.min(p.contentHeight - p.height,
-                                         p.contentY - dy))
-                            break
-                        }
-                        p = p.parent
-                    }
-                    event.accepted = true
-                }
-            }
+            // content height to). Attaching at the ListView catches the
+            // whole subtree; a per-delegate handler would miss the spacing
+            // gaps and any unfilled tail.
+            ScrollForwardingWheelHandler {}
 
             delegate: Kirigami.AbstractCard {
                 required property int index
