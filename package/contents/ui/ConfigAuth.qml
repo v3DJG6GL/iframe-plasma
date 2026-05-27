@@ -138,7 +138,7 @@ KCM.SimpleKCM {
             Layout.fillWidth: true
             type: Kirigami.MessageType.Information
             visible: page.kwalletAvailable
-            text: i18n("Secrets stored in KDE Wallet under folder \"iframe-plasma\". Open kwalletmanager6 to inspect.")
+            text: i18n("Secrets stored in KDE Wallet under folder \"io.github.v3DJG6GL.iframe-plasma\". Open kwalletmanager6 to inspect.")
         }
         QQC.Button {
             text: i18n("Add profile")

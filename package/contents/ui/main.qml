@@ -338,7 +338,7 @@ PlasmoidItem {
         // scheme so QtWebEngine gets a real filesystem path, not a literal "file:" dir.
         const base = String(StandardPaths.writableLocation(StandardPaths.AppDataLocation))
                         .replace(/^file:\/\//, "");
-        return base + "/iframe-plasma/" + (Plasmoid.id || 0);
+        return base + "/io.github.v3DJG6GL.iframe-plasma/" + (Plasmoid.id || 0);
     }
 
     // authProfileId -> WebEngineProfile (cached, lifetime = root).

@@ -72,7 +72,7 @@ private:
 
 } // namespace
 
-const QString SecretsBridge::kFolder = QStringLiteral("iframe-plasma");
+const QString SecretsBridge::kFolder = QStringLiteral("io.github.v3DJG6GL.iframe-plasma");
 
 SecretsBridge::SecretsBridge(QObject *parent)
     : QObject(parent)

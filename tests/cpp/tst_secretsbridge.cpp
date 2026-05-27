@@ -11,7 +11,7 @@
 
 using namespace Qt::Literals::StringLiterals;
 
-static constexpr auto kFolder = u"iframe-plasma";
+static constexpr auto kFolder = u"io.github.v3DJG6GL.iframe-plasma";
 
 static std::unique_ptr<FakeWallet> makeWallet()
 {
