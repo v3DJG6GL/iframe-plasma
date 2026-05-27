@@ -95,6 +95,7 @@ Kirigami.Dialog {
                     cellWidth: Kirigami.Units.gridUnit * 6
                     cellHeight: Kirigami.Units.gridUnit * 6
                     delegate: ColumnLayout {
+                        id: bundledCell
                         width: bundledGrid.cellWidth
                         height: bundledGrid.cellHeight
                         spacing: 2
@@ -121,10 +122,15 @@ Kirigami.Dialog {
                             font.pixelSize: Kirigami.Theme.defaultFont.pixelSize - 2
                             color: Kirigami.Theme.disabledTextColor
                         }
-                        MouseArea {
-                            anchors.fill: parent
+                        // QtQuick.Layouts silently rejects anchors on direct
+                        // Layout children — a MouseArea with anchors.fill here
+                        // is sized as a layout item with 0 implicit size and
+                        // receives no clicks. TapHandler attaches to its
+                        // parent (the ColumnLayout) without taking a slot, so
+                        // the entire cell is clickable.
+                        TapHandler {
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: dialog._emit("bundled:" + parent.modelData)
+                            onTapped: dialog._emit("bundled:" + bundledCell.modelData)
                         }
                     }
                 }
