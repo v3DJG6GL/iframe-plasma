@@ -254,6 +254,49 @@ private Q_SLOTS:
         b.get(u"any-key"_s);
         QVERIFY(raw->hasFolderForTest(QString(kFolder)));
     }
+
+    // ---------------------------------------------------------------
+    // secretsChanged signal — load-bearing for the prime-after-write
+    // chain (AuthSupport.qml wires this into the QML support signal,
+    // which main.qml uses to re-fire primeAuthProfiles so a freshly
+    // entered password reaches the interceptor — see 67e2651).
+    // Untested, a regression that drops Q_EMIT secretsChanged() or
+    // fires it on a failure path silently breaks that flow.
+    // ---------------------------------------------------------------
+    void setMap_success_emitsSecretsChanged()
+    {
+        SecretsBridge b{makeWallet()};
+        QSignalSpy spy(&b, &SecretsBridge::secretsChanged);
+        QVERIFY(b.setMap(u"k"_s, {{u"x"_s, u"y"_s}}));
+        QCOMPARE(spy.count(), 1);
+    }
+
+    void setMap_failure_doesNotEmitSecretsChanged()
+    {
+        auto w = makeWallet();
+        w->setWriteWillFail(true);
+        SecretsBridge b{std::move(w)};
+        QSignalSpy spy(&b, &SecretsBridge::secretsChanged);
+        QVERIFY(!b.setMap(u"k"_s, {{u"x"_s, u"y"_s}}));
+        QCOMPARE(spy.count(), 0);
+    }
+
+    void removeKey_success_emitsSecretsChanged()
+    {
+        SecretsBridge b{makeWallet()};
+        QVERIFY(b.setMap(u"k"_s, {{u"x"_s, u"y"_s}}));
+        QSignalSpy spy(&b, &SecretsBridge::secretsChanged);
+        QVERIFY(b.removeKey(u"k"_s));
+        QCOMPARE(spy.count(), 1);
+    }
+
+    void removeKey_absent_doesNotEmitSecretsChanged()
+    {
+        SecretsBridge b{makeWallet()};
+        QSignalSpy spy(&b, &SecretsBridge::secretsChanged);
+        QVERIFY(!b.removeKey(u"never-stored"_s));
+        QCOMPARE(spy.count(), 0);
+    }
 };
 
 QTEST_GUILESS_MAIN(TestSecretsBridge)
