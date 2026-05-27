@@ -8,6 +8,7 @@ import QtQuick.Layouts
 import org.kde.kcmutils as KCM
 import org.kde.kirigami as Kirigami
 import "sanitize.js" as Sanitize
+import "./RowSchema.js" as RowSchema
 
 KCM.SimpleKCM {
     id: page
@@ -86,35 +87,16 @@ KCM.SimpleKCM {
             const arr = JSON.parse(store.json || "[]");
             let synthesized = false;
             for (const entry of arr) {
-                let id = entry.id;
-                if (!id) { id = newUuid(); synthesized = true; }
-                const authType = entry.authType || "basic";
-                // Default `preempt` per type when the field is missing on
-                // existing entries (pre-0.5.0 config). Bearer/raw MUST
-                // pre-empt — Qt's 401 dialog can only collect user+password,
-                // so a token mismatch under non-preempt is unrecoverable
-                // (main.qml handleBasicAuth early-returns for those types).
-                let preempt;
-                if (typeof entry.preempt === "boolean") {
-                    preempt = entry.preempt;
-                } else {
-                    preempt = (authType === "bearer" || authType === "raw");
-                    synthesized = true;
-                }
-                listModel.append({
-                    id: id,
-                    name: entry.name || "",
-                    authType: authType,
-                    username: entry.username || "",
-                    // Sanitise on load too — the on-edit + on-persist sanitisers
-                    // (3224e0e) close the in-session input path, but legacy JSON
-                    // written before 3224e0e (or hand-edited config) carries the
-                    // unsanitised value through `store.serialize()` verbatim and
-                    // would bypass the WebTab overlay-host comparison until the
-                    // user manually re-edits the field.
-                    autheliaHost: sanitizeAutheliaHost(entry.autheliaHost),
-                    preempt: preempt
-                });
+                const norm = RowSchema.normaliseAuthProfileRow(entry, newUuid);
+                // The autheliaHost still needs the bidi/C0-control sanitiser
+                // here — legacy JSON written before 3224e0e (or hand-edited
+                // config) would otherwise bypass the WebTab overlay-host
+                // comparison until the user manually re-edits the field.
+                // Sanitize lives in QML (Kirigami-context-free), so wire it
+                // in here rather than dragging Sanitize into RowSchema.js.
+                norm.row.autheliaHost = sanitizeAutheliaHost(norm.row.autheliaHost);
+                if (norm.synthesized) synthesized = true;
+                listModel.append(norm.row);
             }
             // Persist synthesized UUIDs immediately — otherwise the next load
             // generates fresh UUIDs, orphaning any wallet entry written this

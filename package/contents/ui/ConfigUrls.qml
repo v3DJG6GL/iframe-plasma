@@ -9,6 +9,7 @@ import QtQuick.Dialogs
 import org.kde.kcmutils as KCM
 import org.kde.kirigami as Kirigami
 import "./GrafanaUrl.js" as GrafanaUrl
+import "./RowSchema.js" as RowSchema
 
 KCM.SimpleKCM {
     id: page
@@ -181,33 +182,12 @@ KCM.SimpleKCM {
         try {
             const arr = JSON.parse(store.json || "[]");
             for (const entry of arr) {
-                // Migration: legacy configs only have `thumbSelector`. If a
-                // selector is set but no `thumbMode`, this was a power-user
-                // tab — preserve the value by switching to `custom`.
-                let mode = entry.thumbMode || "";
-                const sel = entry.thumbSelector || "";
-                if (!mode) mode = sel.length > 0 ? "custom" : "chartOnly";
-                // Legacy auth fields (basicAuthUser, basicAuthPasswordPlaintext,
-                // rawAuthHeader) are migrated to auth profiles in main.qml at
-                // widget startup. Here on the config page we just read
-                // `authProfileId` which is set after migration.
-                // popupMode legacy migration: a tab with no popupMode but a
-                // popupSelector set is a hand-edited config — treat as custom.
-                let pmode = entry.popupMode || "";
-                const psel = entry.popupSelector || "";
-                if (!pmode) pmode = psel.length > 0 ? "custom" : "fullPanel";
-                listModel.append({
-                    label: entry.label || "",
-                    url: entry.url || "",
-                    authProfileId: entry.authProfileId || "",
-                    thumbMode: mode,
-                    thumbSelector: sel,
-                    thumbText: entry.thumbText || "",
-                    thumbIconName: entry.thumbIconName || "",
-                    thumbTimeRange: entry.thumbTimeRange || "",
-                    popupMode: pmode,
-                    popupSelector: psel
-                });
+                // RowSchema.normaliseTabRow handles every field default +
+                // the thumbMode/popupMode legacy migration (selector
+                // present but mode missing → "custom"). Legacy auth
+                // fields (basicAuthUser etc.) are migrated upstream in
+                // main.qml; here we just read the resulting authProfileId.
+                listModel.append(RowSchema.normaliseTabRow(entry));
             }
         } catch (e) { console.warn("ConfigUrls: parse error", e.message); }
     }
