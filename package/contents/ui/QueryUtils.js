@@ -42,11 +42,16 @@ function editQuery(urlStr, updates) {
         const pairs = query.length > 0 ? query.split('&') : [];
         const handled = {};
         const out = [];
+        // hasOwnProperty (not `k in updates`): `in` walks the prototype
+        // chain, so a URL carrying e.g. `?toString=foo` would match
+        // Object.prototype.toString and get rewritten to the encoded
+        // function source, silently corrupting the navigated URL.
+        const hasOwn = Object.prototype.hasOwnProperty;
         for (const p of pairs) {
             const eq = p.indexOf('=');
             const k = eq === -1 ? p : p.slice(0, eq);
-            if (k in updates) {
-                if (!handled[k]) {
+            if (hasOwn.call(updates, k)) {
+                if (!hasOwn.call(handled, k)) {
                     handled[k] = true;
                     const v = updates[k];
                     if (v !== null && v !== undefined) {
@@ -58,7 +63,7 @@ function editQuery(urlStr, updates) {
             }
         }
         for (const k of Object.keys(updates)) {
-            if (!handled[k] && updates[k] !== null && updates[k] !== undefined) {
+            if (!hasOwn.call(handled, k) && updates[k] !== null && updates[k] !== undefined) {
                 out.push(k + '=' + encodeURIComponent(updates[k]));
             }
         }
@@ -97,9 +102,14 @@ function matchTimeRangePreset(fromValue, toValue) {
 function isAutheliaHost(currentUrl, autheliaHost) {
     if (!autheliaHost || autheliaHost.length === 0) return false;
     try {
+        // WHATWG URL.host is always ASCII-lowercased; sanitizeAutheliaHost
+        // (ConfigAuth.qml) only trims + strips control bytes and does not
+        // lowercase, so a stored value like "Auth.Example.COM" would
+        // silently fail to match and the overlay never engages.
         const host = new URL(currentUrl).host;
-        return host === autheliaHost
-            || host.endsWith("." + autheliaHost);
+        const want = String(autheliaHost).toLowerCase();
+        return host === want
+            || host.endsWith("." + want);
     } catch (e) {
         return false;
     }

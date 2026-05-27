@@ -35,12 +35,16 @@ TestCase {
                                   "auth.example.com"));
     }
 
-    function test_caseSensitive() {
-        // WHATWG URL.host returns lowercased hosts, so an uppercase
-        // currentUrl arrives lowercased; an uppercase autheliaHost
-        // configuration will mismatch.
+    function test_caseInsensitive() {
+        // WHATWG URL.host returns lowercased hosts. sanitizeAutheliaHost
+        // (ConfigAuth.qml) trims + strips control bytes but does NOT
+        // lowercase, so isAutheliaHost lowercases the stored value here
+        // too — otherwise an operator-typed "Auth.Example.COM" would
+        // silently mismatch and the Authelia overlay would never engage
+        // (credentials would land on the upstream login page).
         verify(Q.isAutheliaHost("https://AUTH.EXAMPLE.COM/", "auth.example.com"));
-        verify(!Q.isAutheliaHost("https://auth.example.com/", "AUTH.EXAMPLE.COM"));
+        verify(Q.isAutheliaHost("https://auth.example.com/", "AUTH.EXAMPLE.COM"));
+        verify(Q.isAutheliaHost("https://app.AUTH.EXAMPLE.COM/", "auth.example.com"));
     }
 
     function test_explicitPortInUrl_isKept() {
