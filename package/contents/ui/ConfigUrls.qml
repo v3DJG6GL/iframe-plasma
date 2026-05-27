@@ -8,6 +8,7 @@ import QtQuick.Layouts
 import QtQuick.Dialogs
 import org.kde.kcmutils as KCM
 import org.kde.kirigami as Kirigami
+import "./GrafanaUrl.js" as GrafanaUrl
 
 KCM.SimpleKCM {
     id: page
@@ -772,112 +773,29 @@ KCM.SimpleKCM {
         }
 
         // --- URL transformation logic ----------------------------------------
-        // Rewrites /d/<uid>/<slug>?…&viewPanel=panel-N → /d-solo/<uid>/<slug>?…&panelId=N
-        // and appends kiosk / theme / refresh / from-to per the toggles.
+        // Thin wrappers around GrafanaUrl.js — the pure pipeline lives there
+        // so tests/qml/tst_grafana_url_rewrite.qml can drive every branch
+        // without instantiating this Dialog tree.
         function transformUrl(input) {
-            let u = (input || "").trim();
-            if (!u) return "";
-
-            // Reject CR/LF/NUL up-front. Operator-trust applies to the KCM
-            // surface, but a pasted URL containing a stray \r\n\0 (or a stray
-            // `#` mid-querystring) corrupts splitFragment() — `indexOf("#")`
-            // returns the first match, so a payload `?a=1\n#kiosk` lands the
-            // `kiosk` flag inside the fragment, where Grafana ignores it and
-            // operator chrome stays visible. Same threat-class as the
-            // auth-interceptor C0-byte reject and the userAgent CR/LF strip.
-            if (/[\r\n\0]/.test(u)) {
-                console.warn("iframe-plasma[config-urls] rejected pasted URL with CR/LF/NUL");
-                return "";
-            }
-
-            // 1) /d/ → /d-solo/ (only when we have a viewPanel to convert)
-            const viewPanelMatch = u.match(/[?&]viewPanel=panel-(\d+)(?:-clone\d+)?/);
-            if (convertDSolo.checked && viewPanelMatch && u.indexOf("/d/") !== -1) {
-                u = u.replace("/d/", "/d-solo/");
-                u = u.replace(/([?&])viewPanel=panel-\d+(-clone\d+)?(&|$)/, function(_, before, _clone, after) {
-                    // Drop the param cleanly without leaving a dangling `?` or `&&`
-                    return before === "?" && after === "" ? ""
-                         : before === "?" ? "?"
-                         : after === "" ? "" : "&";
-                });
-                u = appendParam(u, "panelId", viewPanelMatch[1]);
-            }
-
-            // 2) Time range — strip any existing from/to, then add our preset
-            const tr = timeRangeCombo.currentValue;
-            if (tr) {
-                u = stripParam(u, "from");
-                u = stripParam(u, "to");
-                u = appendParam(u, "from", "now-" + tr);
-                u = appendParam(u, "to", "now");
-            }
-
-            // 3) Kiosk — emit just `&kiosk` (no value); kiosk=1 has a Grafana
-            //    11.2.x regression (issue #96595). Anchor the match to a
-            //    query delimiter so a host like "kiosk.example.com" or a
-            //    param like "kioskMode=1" doesn't suppress the insertion.
-            //    Route insertion through splitFragment so we don't bleed
-            //    the flag past a `#anchor` (appendParam wraps key=value, so
-            //    we can't reuse it for a valueless flag).
-            if (addKiosk.checked && !/[?&]kiosk(=|&|$)/.test(u)) {
-                const [base, frag] = splitFragment(u);
-                u = base + (base.indexOf("?") === -1 ? "?" : "&") + "kiosk" + frag;
-            }
-
-            // 4) Theme — let the widget runtime substitute ${theme}.
-            //    Same delimiter-anchor rationale: don't be fooled by an
-            //    unrelated param like "widgetTheme=dark".
-            if (addTheme.checked && !/[?&]theme=/.test(u)) {
-                u = appendParam(u, "theme", "${theme}");
-            }
-
-            // 5) Refresh — omit entirely when off (empty refresh= is buggy per #41329)
-            if (addRefresh.checked) {
-                u = stripParam(u, "refresh");
-                u = appendParam(u, "refresh", refreshInterval.value + "s");
-            }
-
-            // 6) hideLogo — strip the "Powered by Grafana" overlay on 12.4+.
-            //    Same delimiter-anchor rationale as kiosk/theme above.
-            if (addHideLogo.checked && !/[?&]hideLogo=/.test(u)) {
-                u = appendParam(u, "hideLogo", "true");
-            }
-
-            // 7) hidePanelMenu — internal sentinel (Grafana ignores unknown
-            //    params). WebTab.qml's `iframe-plasma-hide-panel-menu` user
-            //    script reads window.location.search and injects CSS to
-            //    suppress the per-panel kebab when set.
-            if (addHidePanelMenu.checked && !/[?&]_ifp_hidePanelMenu=/.test(u)) {
-                u = appendParam(u, "_ifp_hidePanelMenu", "1");
-            }
-
-            return u;
-        }
-
-        // Split off the `#fragment` so the query-string ops below don't
-        // bleed params into the hash (appendParam) or eat the anchor
-        // (stripParam's [^&]* would consume a trailing #anchor).
-        function splitFragment(u) {
-            const i = u.indexOf("#");
-            return i === -1 ? [u, ""] : [u.substring(0, i), u.substring(i)];
-        }
-        // Append `key=value`, picking the right separator. Doesn't dedupe.
-        function appendParam(u, key, value) {
-            const [base, frag] = splitFragment(u);
-            const sep = base.indexOf("?") === -1 ? "?" : "&";
-            return base + sep + key + "=" + value + frag;
-        }
-        // Remove all occurrences of &key=… or ?key=… from the query string.
-        function stripParam(u, key) {
-            let [base, frag] = splitFragment(u);
-            // ?key=val&…       → ?…
-            base = base.replace(new RegExp("[?]" + key + "=[^&]*(?:&|$)"), function(m) {
-                return m.endsWith("&") ? "?" : "";
+            const out = GrafanaUrl.transform(input, {
+                convertDSolo:   convertDSolo.checked,
+                timeRange:      timeRangeCombo.currentValue,
+                kiosk:          addKiosk.checked,
+                theme:          addTheme.checked,
+                refresh:        addRefresh.checked,
+                refreshSeconds: refreshInterval.value,
+                hideLogo:       addHideLogo.checked,
+                hidePanelMenu:  addHidePanelMenu.checked,
             });
-            // &key=val
-            base = base.replace(new RegExp("[&]" + key + "=[^&]*", "g"), "");
-            return base + frag;
+            if (out === "" && (input || "").trim().length > 0
+                && /[\r\n\0]/.test(input)) {
+                console.warn("iframe-plasma[config-urls] rejected pasted URL with CR/LF/NUL");
+            }
+            return out;
         }
+        function splitFragment(u) { return GrafanaUrl.splitFragment(u); }
+        function appendParam(u, key, value) { return GrafanaUrl.appendParam(u, key, value); }
+        function stripParam(u, key) { return GrafanaUrl.stripParam(u, key); }
 
         function deriveLabel(panelId) {
             if (pastedLabel.text.trim().length > 0) return pastedLabel.text.trim();

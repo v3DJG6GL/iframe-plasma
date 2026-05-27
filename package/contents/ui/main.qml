@@ -12,6 +12,7 @@ import org.kde.plasma.plasmoid 2.0
 import org.kde.plasma.core as PlasmaCore
 import org.kde.kirigami as Kirigami
 import "./CropEngine.js" as CropEngine
+import "./UrlUtils.js" as UrlUtils
 
 PlasmoidItem {
     id: root
@@ -74,13 +75,7 @@ PlasmoidItem {
     property var authProfiles: parseAuthProfiles(Plasmoid.configuration.authProfilesJson)
 
     function parseAuthProfiles(jsonStr) {
-        try {
-            const arr = JSON.parse(jsonStr || "[]");
-            return Array.isArray(arr) ? arr : [];
-        } catch (e) {
-            console.warn("iframe-plasma: bad authProfilesJson:", e.message);
-            return [];
-        }
+        return UrlUtils.parseAuthProfiles(jsonStr);
     }
 
     function profileById(id) {
@@ -119,42 +114,29 @@ PlasmoidItem {
     // etc. cannot execute in any profile's cookie/storage origin or read
     // local files.
     function _isSafeTabUrl(s) {
-        if (typeof s !== "string") return false;
-        return /^https?:\/\//i.test(s);
+        return UrlUtils.isSafeTabUrl(s);
     }
 
     function parseTabs(jsonStr) {
-        try {
-            const arr = JSON.parse(jsonStr || "[]");
-            if (Array.isArray(arr)) return arr.filter(t => t && _isSafeTabUrl(t.url));
-        } catch (e) {
-            console.warn("iframe-plasma: bad urlsJson:", e.message);
-        }
-        return [];
+        return UrlUtils.parseTabs(jsonStr);
     }
 
     function resolveTheme() {
-        const mode = Plasmoid.configuration.themeMode;
-        if (mode === "light" || mode === "dark") return mode;
-        // auto: pick from KDE color scheme background lightness
-        const bg = Kirigami.Theme.backgroundColor;
-        const lightness = 0.2126 * bg.r + 0.7152 * bg.g + 0.0722 * bg.b;
-        return lightness < 0.5 ? "dark" : "light";
+        return UrlUtils.pickThemeForBackground(
+            Plasmoid.configuration.themeMode,
+            Kirigami.Theme.backgroundColor);
     }
 
     function resolveUrl(tab) {
         if (!tab || !tab.url) return "about:blank";
-        return String(tab.url).replace(/\$\{theme\}/g, resolveTheme());
+        return UrlUtils.substituteTheme(tab.url, resolveTheme());
     }
 
-    // Same heuristic as ConfigUrls.qml's isGrafanaEmbed — duplicated
-    // here (rather than singleton-extracted) because the regex is two
-    // lines and pulling KCM-singleton scope into the popup isn't worth
-    // the indirection. Used by the toolbar to gate the Time-range and
-    // Refresh-interval chips, which rewrite Grafana-shaped URL params.
+    // Used by the toolbar to gate the Time-range and Refresh-interval
+    // chips, which rewrite Grafana-shaped URL params. Implementation
+    // lives in UrlUtils.js (also shared by ConfigUrls.qml).
     function isGrafanaEmbed(u) {
-        if (!u) return false;
-        return /\/d(-solo)?\/[A-Za-z0-9_-]+\//.test(String(u));
+        return UrlUtils.isGrafanaEmbed(u);
     }
 
     // Live session time-range from the popup's active WebTab — updates when
