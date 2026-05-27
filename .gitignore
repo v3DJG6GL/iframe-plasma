@@ -63,3 +63,4 @@ SECURITY-REVIEW_NOTES.md
 # Python bytecode caches in test fixtures
 tests/fixtures/**/__pycache__/
 tests/fixtures/**/*.pyc
+CODE-REVIEW_NOTES.md
