@@ -52,7 +52,7 @@ KCM.SimpleKCM {
         QQC.TextField    { id: _urls }
         QQC.SpinBox      { id: _currentTab;     from: 0;     to: 9999 }
         QQC.CheckBox     { id: _autoCycle }
-        QQC.SpinBox      { id: _autoCycleSec;   from: 1;     to: 86400 }
+        QQC.SpinBox      { id: _autoCycleSec;   from: 5;     to: 3600 }
         QQC.SpinBox      { id: _zoom;           from: 25;    to: 500 }
         QQC.TextField    { id: _themeMode }
         QQC.CheckBox     { id: _showTabBar }
