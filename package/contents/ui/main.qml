@@ -1381,36 +1381,41 @@ PlasmoidItem {
                 // auto-rotate, the override stays put → URL stays put →
                 // no reload.
                 property string sessionRangeOverride: ""
-                // Track currentTabIndex changes to disambiguate "tab switched"
-                // from "user picked a new range on the same tab". Both fire
-                // onActiveTabSessionRangeChanged, but only the latter should
-                // propagate to the thumb. Reference comparison on tab
-                // objects was unreliable — modelData captured at delegate
-                // creation can drift from root.tabs[i] after rebuild
-                // patterns — so use the integer index instead.
-                property int _lastSeenActiveIndex: -1
+                // Suppress propagation of activeTabSessionRange events that
+                // are side effects of a tab switch (vs. a real user pick).
+                // A tab switch fires onCurrentTabIndexChanged synchronously
+                // and may or may not fire onActiveTabSessionRangeChanged
+                // depending on whether the two tabs' ranges differ — the
+                // previous approach tracked _lastSeenActiveIndex inside the
+                // range handler and broke for the dominant case where every
+                // tab defaults to the same range (e.g. now-24h): no range
+                // event fires on switch, the index marker doesn't update,
+                // and the next legitimate range pick is then misclassified
+                // as a tab switch and silently dropped. Set on tab change,
+                // clear on the next event-loop tick — short enough that a
+                // genuine pick a beat later still propagates.
+                property bool _suppressRangePropagation: false
 
                 profile: root.profileForAuthId(ownTab ? ownTab.authProfileId : "")
                 url: root.resolveThumbUrlWith(ownTab, sessionRangeOverride)
 
-                Component.onCompleted: _lastSeenActiveIndex = root.currentTabIndex
-
                 Connections {
                     target: root
+                    function onCurrentTabIndexChanged() {
+                        miniView._suppressRangePropagation = true;
+                        Qt.callLater(function() {
+                            miniView._suppressRangePropagation = false;
+                        });
+                    }
                     function onActiveTabSessionRangeChanged() {
-                        const newRange = root.activeTabSessionRange;
-                        const currentIdx = root.currentTabIndex;
-                        const sameTab = (currentIdx === miniView._lastSeenActiveIndex);
-                        if (!sameTab) {
-                            // Tab switch in popup / auto-rotate tick. Don't
-                            // propagate — thumb keeps its last-shown view.
-                            miniView._lastSeenActiveIndex = currentIdx;
+                        if (miniView._suppressRangePropagation) {
                             return;
                         }
-                        // Same active tab, range actually changed (user
-                        // picked a new preset). Propagate ONLY if THIS
-                        // delegate is the popup's active tab AND its tab
-                        // opted into auto-follow ("" or "auto" thumbTimeRange).
+                        const newRange = root.activeTabSessionRange;
+                        const currentIdx = root.currentTabIndex;
+                        // Propagate ONLY if THIS delegate is the popup's
+                        // active tab AND its tab opted into auto-follow
+                        // ("" or "auto" thumbTimeRange).
                         if (miniView.ownIndex !== currentIdx) return;
                         const t = miniView.ownTab;
                         if (!t || (t.thumbTimeRange || "auto") !== "auto") return;
