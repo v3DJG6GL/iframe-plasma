@@ -29,14 +29,20 @@ Item {
 
     // True once the user clicked "Log in here" — suppresses the overlay for
     // subsequent Authelia subpages (TOTP, WebAuthn) until we land off-host.
-    // Also cleared on LoadFailed and on a foreground transition: when the
-    // popup closes mid-login the lifecycle freezes/discards the tab; on
-    // re-open the auto-reload may land on Authelia again, and without the
-    // foreground-reset the stale flag would hide the auth-required overlay
-    // for the new session.
+    // Also cleared on LoadFailed and on a foreground transition where the
+    // view was paused (Frozen / Discarded): popup-close-mid-login freezes
+    // then discards the tab, and the post-promotion auto-reload may land on
+    // Authelia again — without this reset the stale flag would hide the
+    // auth-required overlay for the new session. Gating on lifecycleState
+    // skips in-popup tab switches (the previously-current tab is still
+    // Active inside freezeDelaySec), so switching away from a TOTP / WebAuthn
+    // step and back does not silently re-cover the form mid-typing.
     property bool loginInProgress: false
     onDesiredActiveChanged: {
-        if (tab.desiredActive) tab.loginInProgress = false;
+        if (tab.desiredActive
+            && webview.lifecycleState !== WebEngineView.LifecycleState.Active) {
+            tab.loginInProgress = false;
+        }
     }
 
     // Live load state — surfaced to the tab bar so the leading status dot can
