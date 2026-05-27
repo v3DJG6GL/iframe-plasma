@@ -322,12 +322,13 @@ const _TEARDOWN_BODY = `
     for (var _ifpKI = 0; _ifpKI < _ifpKeeps.length; _ifpKI++) _ifpKeeps[_ifpKI].removeAttribute('data-ifp-keep');
     var _ifpTargets = document.querySelectorAll('[data-ifp-target="1"]');
     for (var _ifpTI = 0; _ifpTI < _ifpTargets.length; _ifpTI++) _ifpTargets[_ifpTI].removeAttribute('data-ifp-target');
-    var _ifpDisp = document.getElementById('ifp-thumb-display');
-    if (_ifpDisp && _ifpDisp.parentNode) _ifpDisp.parentNode.removeChild(_ifpDisp);
-    var _ifpStyle = document.getElementById('ifp-thumb-style');
-    if (_ifpStyle && _ifpStyle.parentNode) _ifpStyle.parentNode.removeChild(_ifpStyle);
-    var _ifpMiss = document.getElementById('ifp-miss-banner');
-    if (_ifpMiss && _ifpMiss.parentNode) _ifpMiss.parentNode.removeChild(_ifpMiss);
+    var _ifpRmById = function(id) {
+        var n = document.getElementById(id);
+        if (n && n.parentNode) n.parentNode.removeChild(n);
+    };
+    _ifpRmById('ifp-thumb-display');
+    _ifpRmById('ifp-thumb-style');
+    _ifpRmById('ifp-miss-banner');
 `;
 
 // Tears down all crop state (data attributes, observers, timers,
