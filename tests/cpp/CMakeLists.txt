@@ -51,9 +51,10 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tst_secretsbridge.cpp")
         LIBS    Qt6::Qml KF6::Wallet KF6::I18n)
 endif()
 
-# 5. ScreenLockMonitor against a python-dbusmock fixture (added later).
+# 5. ScreenLockMonitor — state-machine half via QMetaObject::invokeMethod.
+#    DBus subscription is integration-tested by the live widget.
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tst_screenlockmonitor.cpp")
     iframe_add_cpp_test(tst_screenlockmonitor
         SOURCES "${CMAKE_SOURCE_DIR}/src/screenlockmonitor.cpp"
-        LIBS    Qt6::DBus)
+        LIBS    Qt6::Qml Qt6::DBus)
 endif()
