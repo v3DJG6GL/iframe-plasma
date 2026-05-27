@@ -26,4 +26,9 @@ ConfigModel {
         icon: "configure"
         source: "ConfigAdvanced.qml"
     }
+    ConfigCategory {
+        name: i18nc("@title:tab", "Backup")
+        icon: "document-save"
+        source: "ConfigBackup.qml"
+    }
 }
