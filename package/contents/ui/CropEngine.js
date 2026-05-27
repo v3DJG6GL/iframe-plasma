@@ -156,15 +156,20 @@ const _APPLY_BODY = `(function(sel){
     document.documentElement.setAttribute('data-ifp-isolate', '1');
   }
 
+  // Last matched element from apply(). schedule()'s rAF callback reads
+  // this instead of issuing a second document.querySelector(sel) just
+  // moments after apply() already did one.
+  let matchedEl = null;
   function apply() {
     // Picker-armed guard: same as isolateElement(). Short-circuits
     // every code path that could re-set data-ifp-isolate while the
     // user is mid-pick.
-    if (window.__ifpPickerArmed) return 'picker-active';
+    if (window.__ifpPickerArmed) { matchedEl = null; return 'picker-active'; }
     let el;
     try { el = document.querySelector(sel); }
-    catch(e) { console.warn('[ifp-thumb] invalid selector "'+sel+'": '+e.message); return 'invalid'; }
+    catch(e) { matchedEl = null; console.warn('[ifp-thumb] invalid selector "'+sel+'": '+e.message); return 'invalid'; }
     if (!el) {
+      matchedEl = null;
       // Fail open: when the new selector can't match yet (SPA hasn't
       // mounted the target, page mid-route-change), drop the gating
       // data-ifp-* attributes so the body is fully visible instead
@@ -182,6 +187,7 @@ const _APPLY_BODY = `(function(sel){
     } else {
       isolateElement(el);
     }
+    matchedEl = el;
     return 'matched';
   }
 
@@ -243,7 +249,7 @@ const _APPLY_BODY = `(function(sel){
         missStreak = 0;
         hideMissBanner();
       }
-      const el = document.querySelector(sel);
+      const el = matchedEl;
       if (r === 'matched' && el && el !== lastEl) {
         lastEl = el;
         const wrap = el.parentElement;
