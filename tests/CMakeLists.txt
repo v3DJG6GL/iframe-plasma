@@ -11,3 +11,11 @@ add_subdirectory(qml)
 add_subdirectory(js)
 add_subdirectory(e2e)
 add_subdirectory(smoke)
+
+# Regression gate: every kcfg entry must be referenced by a test
+# (or explicitly allowlisted with a rationale in the script).
+add_test(NAME iframe-coverage-kcfg
+    COMMAND ${Python3_EXECUTABLE}
+        "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/check_kcfg_coverage.py")
+set_tests_properties(iframe-coverage-kcfg PROPERTIES
+    LABELS "coverage")

@@ -46,14 +46,19 @@ jobs:
   #
   # kdeneon/plasma:unstable is the only mainstream image that ships a
   # working combination of Qt 6.7+, KF6, plasma-workspace and qt6-
-  # webengine-dev. The tag floats — pin to @sha256:<digest> once the
-  # workflow has run successfully and the image is mirrored to GHCR.
+  # webengine-dev. Pinned by content digest so upstream image churn
+  # can't break CI silently — bump via:
+  #
+  #     docker pull kdeneon/plasma:unstable
+  #     docker inspect --format='{{.RepoDigests}}' kdeneon/plasma:unstable
+  #
+  # and paste the new sha256:… into the `image:` line.
   # -------------------------------------------------------------------
   build-and-test:
     name: Build + test (kdeneon/plasma)
     runs-on: ubuntu-latest
     container:
-      image: kdeneon/plasma:unstable
+      image: kdeneon/plasma@sha256:4acf25665f68afc71bfdbca6c6c775664f78af23f6b3965c5759e37521e85e5c
       options: --user 0:0 --security-opt apparmor=unconfined
     env:
       QT_QPA_PLATFORM: offscreen
