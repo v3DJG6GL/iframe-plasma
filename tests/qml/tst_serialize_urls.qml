@@ -113,6 +113,39 @@ TestCase {
         compare(out.label, "L");
     }
 
+    // ===== load-time legacy-inference mutation must trigger re-persist
+    //
+    // Pins the invariant ConfigUrls.repopulate() relies on: when
+    // normaliseTabRow infers thumbMode/popupMode from selector presence,
+    // the rendered row's mode differs from the on-disk entry's missing
+    // field. Without the re-persist gate, KCM displays "custom" but the
+    // widget runtime falls back to chartOnly/fullPanel because
+    // main.qml:520 / :2076 read `tab.thumbMode || ...` directly.
+    function test_legacyInference_thumbMode_changesShape() {
+        const entry = { url: "https://x", thumbSelector: ".u-wrap" };
+        const row = Schema.normaliseTabRow(entry);
+        compare(row.thumbMode, "custom");
+        verify((entry.thumbMode || "") !== row.thumbMode);
+    }
+    function test_legacyInference_popupMode_changesShape() {
+        const entry = { url: "https://x", popupSelector: "section.app" };
+        const row = Schema.normaliseTabRow(entry);
+        compare(row.popupMode, "custom");
+        verify((entry.popupMode || "") !== row.popupMode);
+    }
+    function test_legacyInference_cleanRow_unchanged() {
+        // Negative case — the repopulate gate must NOT fire on a row
+        // whose modes are already canonical (else every load thrashes).
+        const entry = {
+            url: "https://x",
+            thumbMode: "chartOnly", thumbSelector: "",
+            popupMode: "fullPanel", popupSelector: "",
+        };
+        const row = Schema.normaliseTabRow(entry);
+        compare((entry.thumbMode || ""), row.thumbMode);
+        compare((entry.popupMode || ""), row.popupMode);
+    }
+
     // ===== full round-trip JSON →→ array →→ ListModel-shape =========
     function test_fullJsonRoundtrip() {
         const json = '[{"label":"k","url":"https://k","thumbMode":"icon","thumbIconName":"cpu"},'

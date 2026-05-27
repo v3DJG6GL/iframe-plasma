@@ -118,10 +118,35 @@ KCM.SimpleKCM {
         try {
             listModel.clear();
             const arr = JSON.parse(store.json || "[]");
+            let mutated = false;
             if (Array.isArray(arr)) {
                 for (const entry of arr) {
-                    listModel.append(RowSchema.normaliseTabRow(entry));
+                    const row = RowSchema.normaliseTabRow(entry);
+                    // Detect load-time legacy inference (thumbMode /
+                    // popupMode synthesised from selector presence) so the
+                    // sanitised display is also persisted. Mirror of
+                    // ConfigAuth's synthesized-UUID / autheliaHost gate-
+                    // drop pattern: without this, a pre-0.5.0 entry
+                    // carrying `thumbSelector` but no `thumbMode` is shown
+                    // as "custom" in this KCM, but main.qml:520 + L2076
+                    // both fall back to `entry.thumbMode || "chartOnly"`
+                    // and `popupMode === "custom"` checks raw, so the
+                    // popup slot renders chartOnly and ignores the user's
+                    // selector until any other field is touched.
+                    if ((entry && entry.thumbMode || "") !== row.thumbMode
+                     || (entry && entry.popupMode || "") !== row.popupMode) {
+                        mutated = true;
+                    }
+                    listModel.append(row);
                 }
+            }
+            if (mutated) {
+                // Drop the gate just for the inner serialize so the JSON
+                // write actually happens, then re-raise it. The outer
+                // finally still resets it cleanly.
+                _reloading = false;
+                store.serialize();
+                _reloading = true;
             }
         } catch (e) {
             console.warn("ConfigUrls: parse error", e.message);
