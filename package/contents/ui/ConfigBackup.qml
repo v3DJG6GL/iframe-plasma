@@ -117,7 +117,7 @@ KCM.SimpleKCM {
         defaultSuffix: "json"
         currentFile: "file://" + IframePlasma.BackupBridge.suggestedExportName()
         onAccepted: {
-            const path = String(selectedFile).replace(/^file:\/\//, "");
+            const path = page._urlToPath(selectedFile);
             const err = IframePlasma.BackupBridge.exportToFile(path, page._collectConfig());
             if (err === "") {
                 // A non-fatal perm-restriction warning from a FAT/SMB
@@ -143,7 +143,7 @@ KCM.SimpleKCM {
         nameFilters: [i18n("iframe-plasma config (*.iframeplasma.json *.json)"),
                       i18n("All files (*)")]
         onAccepted: {
-            const path = String(selectedFile).replace(/^file:\/\//, "");
+            const path = page._urlToPath(selectedFile);
             const result = IframePlasma.BackupBridge.importFromFile(path, page._collectConfig());
             if (result.ok) {
                 page._applyConfig(result.config);
@@ -169,6 +169,15 @@ KCM.SimpleKCM {
                 page._showResult(i18n("Import failed: %1", result.error), true);
             }
         }
+    }
+
+    // FileDialog.selectedFile is a QUrl; String(url) emits the percent-
+    // encoded form (e.g. "file:///home/foo%20bar/x.json"). Stripping the
+    // scheme without decoding hands that verbatim to QFile, which then
+    // fails to open any path containing a space or non-ASCII byte.
+    function _urlToPath(u) {
+        const s = String(u).replace(/^file:\/\//, "");
+        try { return decodeURIComponent(s); } catch (e) { return s; }
     }
 
     function _showResult(text, isError) {
