@@ -13,6 +13,16 @@ import io.github.v3DJG6GL.iframe 1.0 as IframePlasma
 QtObject {
     id: support
 
+    // Re-emitted from SecretsBridge.secretsChanged. main.qml listens so
+    // primeAuthProfiles() picks up freshly-saved passwords without
+    // requiring the user to also touch profile metadata first.
+    signal secretsChanged()
+
+    Connections {
+        target: IframePlasma.SecretsBridge
+        function onSecretsChanged() { support.secretsChanged() }
+    }
+
     // Screen-lock state, bridged from the C++ plugin's D-Bus monitor
     // (org.freedesktop.ScreenSaver). main.qml uses it to pause web views and
     // the auto-cycle while the screen is locked. Stays false if the D-Bus

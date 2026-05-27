@@ -249,6 +249,20 @@ PlasmoidItem {
         }
     }
 
+    // After the user saves a fresh password (typical post-Backup-Import
+    // case: profile metadata round-trips fine but the wallet entry is
+    // missing), re-prime so the interceptor picks up the new secret
+    // without requiring an unrelated profile-metadata edit. Pre-fix, the
+    // freshly-saved password landed in KWallet but the interceptor still
+    // had no Authorization header registered for the host.
+    Connections {
+        target: root.authSupport
+        enabled: !!root.authSupport
+        function onSecretsChanged() {
+            root.primeAuthProfiles();
+        }
+    }
+
     // Cancel any active selector picker when the popup hides. Without
     // this, the per-tab pickerTimer keeps polling __ifpPicked for up
     // to 2 minutes after the popup is gone (the timer lives in the

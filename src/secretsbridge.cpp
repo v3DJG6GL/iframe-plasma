@@ -159,7 +159,11 @@ bool SecretsBridge::setMap(const QString &key, const QVariantMap &fields)
     for (auto it = fields.constBegin(); it != fields.constEnd(); ++it) {
         raw.insert(it.key(), it.value().toString());
     }
-    return m_wallet->writeMap(key, raw) == 0;
+    if (m_wallet->writeMap(key, raw) != 0) {
+        return false;
+    }
+    Q_EMIT secretsChanged();
+    return true;
 }
 
 bool SecretsBridge::removeKey(const QString &key)
@@ -167,7 +171,11 @@ bool SecretsBridge::removeKey(const QString &key)
     if (key.isEmpty() || !ensureOpen()) {
         return false;
     }
-    return m_wallet->removeEntry(key) == 0;
+    if (m_wallet->removeEntry(key) != 0) {
+        return false;
+    }
+    Q_EMIT secretsChanged();
+    return true;
 }
 
 bool SecretsBridge::isWalletReady() const

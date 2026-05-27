@@ -48,6 +48,15 @@ public:
 Q_SIGNALS:
     void error(const QString &message);
 
+    // Fired after a successful setMap() or removeKey(). main.qml listens
+    // (via AuthSupport's mirror) so primeAuthProfiles() picks up a newly
+    // entered password and registers the interceptor header. Without
+    // this, re-entering a password after Backup→Import never reached
+    // the interceptor unless the user also touched profile metadata
+    // (which transitively retriggers primeAuthProfiles via
+    // onAuthProfilesJsonChanged).
+    void secretsChanged();
+
 private:
     bool ensureOpen();
 
