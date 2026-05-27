@@ -29,7 +29,15 @@ Item {
 
     // True once the user clicked "Log in here" — suppresses the overlay for
     // subsequent Authelia subpages (TOTP, WebAuthn) until we land off-host.
+    // Also cleared on LoadFailed and on a foreground transition: when the
+    // popup closes mid-login the lifecycle freezes/discards the tab; on
+    // re-open the auto-reload may land on Authelia again, and without the
+    // foreground-reset the stale flag would hide the auth-required overlay
+    // for the new session.
     property bool loginInProgress: false
+    onDesiredActiveChanged: {
+        if (tab.desiredActive) tab.loginInProgress = false;
+    }
 
     // Live load state — surfaced to the tab bar so the leading status dot can
     // reflect it. Values: "idle" | "loading" | "ok" | "err" | "auth".
@@ -540,6 +548,13 @@ Item {
             } else if (info.status === WebEngineView.LoadFailedStatus) {
                 console.warn("iframe-plasma[load] FAILED url=" + info.url
                     + " code=" + info.errorCode + " msg=" + info.errorString);
+                // Clear the login-in-progress latch so the next LoadSucceeded
+                // on Authelia surfaces the auth-required overlay instead of
+                // silently hiding it. Without this, a transient network drop
+                // mid-login leaves the flag stuck-true and subsequent
+                // re-auth events render as a bare Authelia form with no
+                // "Authentication required" prompt.
+                tab.loginInProgress = false;
                 tab.loadStatus = "err";
                 statusOverlay.showError(info.errorString || "Load failed");
             }
