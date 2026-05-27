@@ -29,9 +29,12 @@ Rectangle {
     property bool pulseEnabled: false
     // True while the full popup representation is on screen. The pulse
     // animation gates on this so it doesn't keep the QtQuick animation
-    // timer ticking when the popup is collapsed (the full rep is
-    // hidden, not destroyed). Forwarded from CyberToolbar.popupExpanded.
-    property bool popupExpanded: false
+    // timer ticking when the full rep is hidden (panel-mode popup
+    // collapsed, OR desktop-widget mode where root.expanded stays false
+    // but the full rep is rendered continuously — main.qml's
+    // fullRepVisible is the only correct source). Forwarded from
+    // CyberToolbar.fullRepVisible.
+    property bool fullRepVisible: false
 
     Layout.preferredHeight: Theme.chipHeight + 2
     Layout.alignment: Qt.AlignVCenter
@@ -57,7 +60,7 @@ Rectangle {
             font.pixelSize: chip.iconPixelSize
             color: chip.iconColor
             SequentialAnimation on opacity {
-                running: chip.pulseEnabled && chip.popupExpanded
+                running: chip.pulseEnabled && chip.fullRepVisible
                 loops: Animation.Infinite
                 NumberAnimation { from: 0.55; to: 1.0; duration: 1400; easing.type: Easing.InOutSine }
                 NumberAnimation { from: 1.0; to: 0.55; duration: 1400; easing.type: Easing.InOutSine }

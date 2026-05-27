@@ -26,10 +26,13 @@ Rectangle {
     property var tabs: []
     property int currentIndex: 0
     property var statuses: []
-    // True while the popup is open. The accent-glow animation is infinite, so
-    // without this gate it keeps the QtQuick animation timer ticking even when
-    // the popup is collapsed (the full representation is hidden, not destroyed).
-    property bool popupExpanded: false
+    // True while the full popup representation is on screen. The accent-glow
+    // animation is infinite, so without this gate it keeps the QtQuick
+    // animation timer ticking even when the full rep is hidden (panel-mode
+    // popup collapsed, OR desktop-widget mode where root.expanded stays
+    // false but the full rep is rendered continuously — main.qml's
+    // fullRepVisible is the only correct source, see its docblock).
+    property bool fullRepVisible: false
     signal tabSelected(int index)
     signal reloadRequested(int index)
 
@@ -46,7 +49,7 @@ Rectangle {
             tabList.positionViewAtIndex(bar.currentIndex, ListView.Contain);
     }
     onCurrentIndexChanged: Qt.callLater(scrollToCurrent)
-    onPopupExpandedChanged: if (popupExpanded) Qt.callLater(scrollToCurrent)
+    onFullRepVisibleChanged: if (fullRepVisible) Qt.callLater(scrollToCurrent)
     Component.onCompleted: Qt.callLater(scrollToCurrent)
 
     // 1px hairline under the tab strip
@@ -125,7 +128,7 @@ Rectangle {
                         // QtQuick animation timer ticking when the popup
                         // is collapsed (the full rep is hidden, not
                         // destroyed).
-                        running: tabDel.status === "loading" && bar.popupExpanded
+                        running: tabDel.status === "loading" && bar.fullRepVisible
                         loops: Animation.Infinite
                         NumberAnimation { from: 0.3; to: 1.0; duration: 700; easing.type: Easing.InOutSine }
                         NumberAnimation { from: 1.0; to: 0.3; duration: 700; easing.type: Easing.InOutSine }
@@ -190,7 +193,7 @@ Rectangle {
                     brightness: 0.15
                     SequentialAnimation on opacity {
                         loops: Animation.Infinite
-                        running: bar.popupExpanded
+                        running: bar.fullRepVisible
                         NumberAnimation { from: 0.55; to: 0.95; duration: 1200; easing.type: Easing.InOutSine }
                         NumberAnimation { from: 0.95; to: 0.55; duration: 1200; easing.type: Easing.InOutSine }
                     }

@@ -51,9 +51,12 @@ Rectangle {
     property bool pinned: false
     // True while the full popup representation is on screen. Infinite
     // animations (reload spinner, chip-pulse) gate on this so they
-    // don't keep the QtQuick animation timer ticking while the popup
-    // is collapsed (the full rep is hidden, not destroyed).
-    property bool popupExpanded: false
+    // don't keep the QtQuick animation timer ticking while the full
+    // rep is hidden (panel-mode popup collapsed, OR — and this is the
+    // trap — desktop-widget mode where root.expanded stays false but
+    // the full rep is rendered continuously; main.qml's fullRepVisible
+    // is the only correct gate, see its docblock).
+    property bool fullRepVisible: false
 
     signal reloadClicked()
     signal hardReloadClicked()
@@ -119,9 +122,9 @@ Rectangle {
                         font.pixelSize: 13
                         font.bold: true
                         RotationAnimation on rotation {
-                            // Gate on popupExpanded — see CyberToolbar header
+                            // Gate on fullRepVisible — see CyberToolbar header
                             // and matching CyberTabBar accent-glow gate.
-                            running: tb.loading && tb.popupExpanded
+                            running: tb.loading && tb.fullRepVisible
                             loops: Animation.Infinite
                             from: 0; to: 360; duration: 900
                             // "Animation on property" retains its last
@@ -244,7 +247,7 @@ Rectangle {
             emptyText: "—"
             tooltipText: i18n("Time range — overrides URL's from/to (session only)")
             menu: timeMenu
-            popupExpanded: tb.popupExpanded
+            fullRepVisible: tb.fullRepVisible
         }
 
         CyberDropdown {
@@ -288,7 +291,7 @@ Rectangle {
             menu: refreshMenu
             // Pulse the icon while auto-refresh is on (and chip is shown).
             pulseEnabled: tb.host.length > 0 && tb.refreshInterval.length > 0
-            popupExpanded: tb.popupExpanded
+            fullRepVisible: tb.fullRepVisible
         }
 
         CyberDropdown {

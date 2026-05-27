@@ -1980,7 +1980,7 @@ PlasmoidItem {
             id: toolbar
             Layout.fillWidth: true
             visible: root.tabs.length > 0
-            popupExpanded:   root.expanded
+            fullRepVisible:  root.fullRepVisible
             host:            root.activeTab ? root.activeTab.currentHost           : ""
             tlsOk:           root.activeTab ? root.activeTab.tlsOk                 : false
             httpStatus:      root.activeTab ? root.activeTab.httpStatus            : 0
@@ -2014,7 +2014,7 @@ PlasmoidItem {
             tabs: root.tabs
             currentIndex: root.currentTabIndex
             statuses: root.tabStatuses
-            popupExpanded: root.expanded
+            fullRepVisible: root.fullRepVisible
             onTabSelected: idx => root.setCurrentTab(idx)
             // Route through the broadcast signal so the panel-slot
             // thumbnail for the same tab also reloads.
