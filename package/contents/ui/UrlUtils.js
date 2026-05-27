@@ -74,3 +74,22 @@ function isGrafanaEmbed(u) {
     if (!u) return false;
     return /\/d(-solo)?\/[A-Za-z0-9_-]+\//.test(String(u));
 }
+
+// Auto-cycle stepper. Given the current tab index and the live `tabs`
+// array, return the next index whose tab is not marked
+// thumbMode="excluded". Returns -1 when no such tab exists (zero/one
+// tab, every non-current tab excluded, etc.). Modulo handles wrap-
+// around so currentIndex==tabs.length-1 still finds tab 0.
+function nextCycleTabIndex(currentIndex, tabs) {
+    if (!Array.isArray(tabs) || tabs.length < 2) return -1;
+    const n = tabs.length;
+    // Normalise currentIndex (the live binding can briefly be stale
+    // after a tab deletion).
+    const start = ((currentIndex % n) + n) % n;
+    for (let step = 1; step < n; step++) {
+        const candidate = (start + step) % n;
+        const t = tabs[candidate];
+        if (t && t.thumbMode !== "excluded") return candidate;
+    }
+    return -1;
+}

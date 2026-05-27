@@ -12,6 +12,7 @@ import org.kde.plasma.plasmoid 2.0
 import org.kde.plasma.core as PlasmaCore
 import org.kde.kirigami as Kirigami
 import "./CropEngine.js" as CropEngine
+import "./Migrations.js" as Migrations
 import "./UrlUtils.js" as UrlUtils
 
 PlasmoidItem {
@@ -856,75 +857,20 @@ PlasmoidItem {
         // re-invokes this once authSupport is ready.
         if (!root.authSupport) return;
 
-        let tabsRaw;
-        try {
-            tabsRaw = JSON.parse(Plasmoid.configuration.urlsJson || "[]");
-            if (!Array.isArray(tabsRaw)) return;
-        } catch (e) { return; }
+        const out = Migrations.legacyAuthMigration(
+            Plasmoid.configuration.urlsJson,
+            Plasmoid.configuration.authProfilesJson,
+            Plasmoid.configuration.autheliaHost || "",
+            function(key) { return root.authSupport.get(key); },
+            root.newUuid);
 
-        let profiles = root.parseAuthProfiles(Plasmoid.configuration.authProfilesJson);
-        const byKey = {};
-        // Pre-populate byKey from existing profiles so we re-use them on re-runs.
-        for (const p of profiles) {
-            // Use a synthesized signature based on profile type+username.
-            // (Hosts vary per-tab — we just need to dedupe legacy fields.)
-            const sig = (p.authType === "raw") ? ("raw:" + p.id) :
-                                                  ("basic:" + (p.username || ""));
-            byKey[sig] = p;
+        for (const w of out.walletWrites) {
+            root.authSupport.setMap(w.key, w.map);
         }
-
-        let mutated = false;
-        for (const t of tabsRaw) {
-            if (!t || t.authProfileId) continue;
-            const hasLegacy = (t.basicAuthUser && t.basicAuthUser.length > 0) ||
-                              (t.basicAuthPasswordPlaintext && t.basicAuthPasswordPlaintext.length > 0) ||
-                              (t.rawAuthHeader && t.rawAuthHeader.length > 0);
-            if (!hasLegacy) continue;
-
-            let host = "";
-            try { host = new URL(t.url).host; } catch (e) { /* keep "" */ }
-
-            // Dedupe signature: raw header is unique per value; basic shares
-            // by host+user (so 5 same-host same-user tabs → 1 profile).
-            const sig = t.rawAuthHeader
-                ? ("raw:" + t.rawAuthHeader.substring(0, 32))
-                : ("basic:" + host + ":" + (t.basicAuthUser || ""));
-
-            let p = byKey[sig];
-            if (!p) {
-                p = {
-                    id: root.newUuid(),
-                    name: host + (t.basicAuthUser ? " (" + t.basicAuthUser + ")"
-                                                  : t.rawAuthHeader ? " (raw header)" : ""),
-                    authType: t.rawAuthHeader ? "raw" : "basic",
-                    username: t.basicAuthUser || "",
-                    autheliaHost: Plasmoid.configuration.autheliaHost || ""
-                };
-                // Move the secret into KWallet under the new key.
-                const oldKWalletPw = root.authSupport.get("basic:" + host) || "";
-                const secret = t.rawAuthHeader || oldKWalletPw || t.basicAuthPasswordPlaintext || "";
-                if (secret.length > 0) {
-                    const map = {};
-                    if (t.rawAuthHeader) map.rawHeader = secret;
-                    else map.password = secret;
-                    root.authSupport.setMap(root.authSupport.profileKey(p.id), map);
-                }
-                profiles.push(p);
-                byKey[sig] = p;
-                console.info("iframe-plasma[migrate] created profile id=" + p.id
-                    + " name=" + p.name + " type=" + p.authType);
-            }
-            t.authProfileId = p.id;
-            delete t.basicAuthUser;
-            delete t.basicAuthPasswordPlaintext;
-            delete t.rawAuthHeader;
-            mutated = true;
-        }
-
-        if (mutated) {
-            Plasmoid.configuration.authProfilesJson = JSON.stringify(profiles);
-            Plasmoid.configuration.urlsJson = JSON.stringify(tabsRaw);
-            console.info("iframe-plasma[migrate] persisted: " + profiles.length + " profile(s), " + tabsRaw.length + " tab(s)");
+        if (out.mutated) {
+            Plasmoid.configuration.authProfilesJson = out.profilesJson;
+            Plasmoid.configuration.urlsJson         = out.urlsJson;
+            console.info("iframe-plasma[migrate] persisted: " + out.walletWrites.length + " wallet write(s)");
         }
     }
 
@@ -936,35 +882,17 @@ PlasmoidItem {
     // was silently broken and is now repaired. Basic respects the old global.
     function migratePreemptFlag() {
         if (Plasmoid.configuration.authProfilesPreemptMigrated) return;
-        const globalWasOn = Plasmoid.configuration.useBasicAuthInjection === true;
-        let profiles;
-        try {
-            profiles = JSON.parse(Plasmoid.configuration.authProfilesJson || "[]");
-            if (!Array.isArray(profiles)) profiles = [];
-        } catch (e) {
-            console.warn("iframe-plasma[preempt-migrate] parse error:", e.message);
-            Plasmoid.configuration.authProfilesPreemptMigrated = true;
-            return;
-        }
-        let mutated = false;
-        for (const p of profiles) {
-            if (typeof p.preempt === "boolean") continue;   // already set by ConfigAuth.qml load
-            const t = p.authType || "basic";
-            if (t === "bearer" || t === "raw") {
-                p.preempt = true;
-            } else if (t === "basic") {
-                p.preempt = globalWasOn;
-            } else {
-                p.preempt = false;   // "none" passthrough or unknown
-            }
-            mutated = true;
-        }
-        if (mutated) {
-            Plasmoid.configuration.authProfilesJson = JSON.stringify(profiles);
+        const out = Migrations.preemptMigration(
+            Plasmoid.configuration.authProfilesJson,
+            Plasmoid.configuration.useBasicAuthInjection === true);
+        if (out.error) {
+            console.warn("iframe-plasma[preempt-migrate] parse error:", out.error);
+        } else if (out.mutated) {
+            Plasmoid.configuration.authProfilesJson = out.json;
         }
         Plasmoid.configuration.authProfilesPreemptMigrated = true;
-        console.info("iframe-plasma[preempt-migrate] done; globalWasOn=" + globalWasOn
-            + " profilesUpdated=" + (mutated ? "yes" : "no"));
+        console.info("iframe-plasma[preempt-migrate] done; profilesUpdated="
+            + (out.mutated ? "yes" : "no"));
     }
 
     // One-shot 0.5.0 migration: the global "Preview source" dropdown is
@@ -976,46 +904,19 @@ PlasmoidItem {
     // do nothing: the new default already follows the popup's active tab.
     function migrateCompactPreview() {
         if (Plasmoid.configuration.compactPreviewMigrated) return;
-        const oldMode = Plasmoid.configuration.compactPreviewMode || "auto";
-        if (oldMode !== "fixed") {
-            Plasmoid.configuration.compactPreviewMigrated = true;
-            console.info("iframe-plasma[compact-migrate] no-op; oldMode=" + oldMode);
-            return;
-        }
-        const pinned = Plasmoid.configuration.compactPreviewTabIndex;
-        let tabsRaw;
-        try {
-            tabsRaw = JSON.parse(Plasmoid.configuration.urlsJson || "[]");
-            if (!Array.isArray(tabsRaw)) tabsRaw = [];
-        } catch (e) {
-            console.warn("iframe-plasma[compact-migrate] parse error:", e.message);
-            Plasmoid.configuration.compactPreviewMigrated = true;
-            return;
-        }
-        // Out-of-range pinned index would exclude EVERY tab (the i===pinned
-        // guard below never matches), wiping the user's "show only this tab"
-        // intent into "show nothing." Treat it as a corrupt config and skip
-        // the migration entirely so the new default (follow popup) takes over.
-        if (!Number.isInteger(pinned) || pinned < 0 || pinned >= tabsRaw.length) {
-            console.warn("iframe-plasma[compact-migrate] pinned index out-of-range ("
-                + pinned + "/" + tabsRaw.length + "); skipping exclusion sweep");
-            Plasmoid.configuration.compactPreviewMigrated = true;
-            return;
-        }
-        let mutated = false;
-        for (let i = 0; i < tabsRaw.length; i++) {
-            if (i === pinned) continue;   // keep the pinned tab visible
-            const t = tabsRaw[i];
-            if (!t || t.thumbMode === "excluded") continue;
-            t.thumbMode = "excluded";
-            mutated = true;
-        }
-        if (mutated) {
-            Plasmoid.configuration.urlsJson = JSON.stringify(tabsRaw);
+        const out = Migrations.compactPreviewMigration(
+            Plasmoid.configuration.urlsJson,
+            Plasmoid.configuration.compactPreviewMode || "auto",
+            Plasmoid.configuration.compactPreviewTabIndex);
+        if (out.skipped) {
+            console.info("iframe-plasma[compact-migrate] skipped: " + out.reason);
+        } else if (out.mutated) {
+            Plasmoid.configuration.urlsJson = out.json;
+            console.info("iframe-plasma[compact-migrate] " + out.reason);
+        } else {
+            console.info("iframe-plasma[compact-migrate] " + out.reason);
         }
         Plasmoid.configuration.compactPreviewMigrated = true;
-        console.info("iframe-plasma[compact-migrate] pinned=" + pinned
-            + " tabsExcluded=" + (mutated ? "yes" : "no"));
     }
 
     // Simple v4 UUID (sufficient for profile identity — not security-critical).
@@ -1049,19 +950,8 @@ PlasmoidItem {
                  && root.compactObservable
         repeat: true
         onTriggered: {
-            const n = root.tabs.length;
-            if (n < 2) return;
-            // Walk forward up to n-1 steps looking for the next non-excluded
-            // tab. Bail (no-op) if we wrap all the way back to where we
-            // started — all other tabs are excluded.
-            for (let step = 1; step < n; step++) {
-                const candidate = (root.currentTabIndex + step) % n;
-                const t = root.tabs[candidate];
-                if (t && t.thumbMode !== "excluded") {
-                    root.advanceCycleTab(candidate);
-                    return;
-                }
-            }
+            const next = UrlUtils.nextCycleTabIndex(root.currentTabIndex, root.tabs);
+            if (next >= 0) root.advanceCycleTab(next);
         }
     }
 
