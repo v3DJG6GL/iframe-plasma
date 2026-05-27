@@ -356,68 +356,23 @@ KCM.SimpleKCM {
                             icon.name: checked ? "password-show-on" : "password-show-off"
                             checkable: true
                         }
-                        // Transient saved-confirmation pill. Hidden by
-                        // default (opacity 0); show() ramps it to 1 over
-                        // 250 ms, holds for 1.5 s, then fades back to 0.
-                        RowLayout {
+                        // Transient capture-confirmation pill (success path)
+                        // and its red mirror for setMap()==false (failure
+                        // path) — without the latter, a wallet write failure
+                        // would be silent (field clears identically on success
+                        // and failure).
+                        HintPill {
                             id: savedHint
-                            opacity: 0
-                            spacing: 2
-                            visible: opacity > 0   // skip hit-testing when hidden
-                            Behavior on opacity { NumberAnimation { duration: 250 } }
-                            function show() {
-                                fadeOutTimer.stop();
-                                opacity = 1;
-                                fadeOutTimer.start();
-                            }
-                            Timer {
-                                id: fadeOutTimer
-                                interval: 1500
-                                onTriggered: savedHint.opacity = 0
-                            }
-                            Kirigami.Icon {
-                                source: "emblem-success"
-                                color: Kirigami.Theme.positiveTextColor
-                                implicitWidth:  Kirigami.Units.iconSizes.small
-                                implicitHeight: Kirigami.Units.iconSizes.small
-                            }
-                            QQC.Label {
-                                text: i18n("Saved")
-                                color: Kirigami.Theme.positiveTextColor
-                                font.italic: true
-                            }
+                            iconSource: "emblem-success"
+                            tint: Kirigami.Theme.positiveTextColor
+                            text: i18n("Saved")
                         }
-                        // Mirror of savedHint with a red "Wallet write failed"
-                        // message — surfaces a setMap() == false outcome that
-                        // would otherwise be silent (field clears identically
-                        // on success and failure).
-                        RowLayout {
+                        HintPill {
                             id: failedHint
-                            opacity: 0
-                            spacing: 2
-                            visible: opacity > 0
-                            Behavior on opacity { NumberAnimation { duration: 250 } }
-                            function show() {
-                                failedFadeTimer.stop();
-                                opacity = 1;
-                                failedFadeTimer.start();
-                            }
-                            Timer {
-                                id: failedFadeTimer
-                                interval: 4000
-                                onTriggered: failedHint.opacity = 0
-                            }
-                            Kirigami.Icon {
-                                source: "dialog-error"
-                                color: Kirigami.Theme.negativeTextColor
-                                implicitWidth:  Kirigami.Units.iconSizes.small
-                                implicitHeight: Kirigami.Units.iconSizes.small
-                            }
-                            QQC.Label {
-                                text: i18n("Wallet write failed")
-                                color: Kirigami.Theme.negativeTextColor
-                                font.italic: true
-                            }
+                            iconSource: "dialog-error"
+                            tint: Kirigami.Theme.negativeTextColor
+                            text: i18n("Wallet write failed")
+                            holdMs: 4000
                         }
                     }
 
