@@ -244,4 +244,24 @@ TestCase {
     function test_stripParam_preservesFragment() {
         compare(G.stripParam("https://x?a=1&b=2#h", "a"), "https://x?b=2#h");
     }
+    // Adjacent duplicates — Run-#1 fix would have left one survivor.
+    function test_stripParam_consecutiveHeadDupes_allRemoved() {
+        compare(G.stripParam("https://x?panelId=1&panelId=2", "panelId"), "https://x");
+    }
+    function test_stripParam_threeDupesScattered_allRemoved() {
+        compare(G.stripParam("https://x?panelId=1&panelId=2&panelId=3", "panelId"), "https://x");
+    }
+    function test_stripParam_dupesWithOtherParams_allRemoved() {
+        compare(G.stripParam("https://x?panelId=1&panelId=2&other=keep", "panelId"),
+                "https://x?other=keep");
+    }
+    function test_stripParam_preservesValuelessFlag() {
+        compare(G.stripParam("https://x?kiosk&a=1", "a"), "https://x?kiosk");
+    }
+    // Full-pipeline: dupe input must collapse to a single panelId.
+    function test_dSolo_preExistingDupePanelIds_collapsed() {
+        const opts = _off(); opts.convertDSolo = true;
+        const out = G.transform("https://g/d/abc/slug?panelId=1&panelId=2&viewPanel=panel-7", opts);
+        compare(out, "https://g/d-solo/abc/slug?panelId=7");
+    }
 }

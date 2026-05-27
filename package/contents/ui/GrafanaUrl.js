@@ -35,15 +35,22 @@ function appendParam(u, key, value) {
 
 function stripParam(u, key) {
     const parts = splitFragment(u);
-    let base = parts[0];
+    const base = parts[0];
     const frag = parts[1];
-    // ?key=val&…   → ?…
-    base = base.replace(new RegExp("[?]" + key + "=[^&]*(?:&|$)"), function(m) {
-        return m.endsWith("&") ? "?" : "";
+    const qIdx = base.indexOf("?");
+    if (qIdx === -1) return base + frag;
+    const path = base.substring(0, qIdx);
+    const query = base.substring(qIdx + 1);
+    // Split on `&` so consecutive duplicates (?panelId=1&panelId=2) all
+    // strip in one pass. The previous regex pair could only catch one
+    // head-position occurrence per call and silently left adjacent dupes.
+    const kept = query.split("&").filter(function(kv) {
+        if (!kv) return false;
+        const eq = kv.indexOf("=");
+        if (eq === -1) return true; // preserve valueless flags (e.g. kiosk)
+        return kv.substring(0, eq) !== key;
     });
-    // &key=val
-    base = base.replace(new RegExp("[&]" + key + "=[^&]*", "g"), "");
-    return base + frag;
+    return path + (kept.length ? "?" + kept.join("&") : "") + frag;
 }
 
 // Full URL transformation. `opts` shape:
