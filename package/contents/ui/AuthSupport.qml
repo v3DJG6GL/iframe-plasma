@@ -16,11 +16,13 @@ QtObject {
     // Re-emitted from SecretsBridge.secretsChanged. main.qml listens so
     // primeAuthProfiles() picks up freshly-saved passwords without
     // requiring the user to also touch profile metadata first.
+    // Wired via Component.onCompleted instead of a Connections child —
+    // QtObject has no default property, so a nested `Connections {}`
+    // fails to load and disables the whole C++ plugin import.
     signal secretsChanged()
 
-    Connections {
-        target: IframePlasma.SecretsBridge
-        function onSecretsChanged() { support.secretsChanged() }
+    Component.onCompleted: {
+        IframePlasma.SecretsBridge.secretsChanged.connect(support.secretsChanged);
     }
 
     // Screen-lock state, bridged from the C++ plugin's D-Bus monitor
