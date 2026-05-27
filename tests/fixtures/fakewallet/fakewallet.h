@@ -114,6 +114,12 @@ public:
     }
     bool hasFolderForTest(const QString &f) const { return m_folders.contains(f); }
     int totalEntries() const { return m_passwords.size() + m_maps.size(); }
+    // Simulate out-of-band folder deletion (kwalletmanager removing the
+    // folder while the SecretsBridge instance still has the wallet open).
+    // setFolder(f) will now return false until createFolder(f) is called
+    // — exercising the warm-path recovery branch in
+    // SecretsBridge::ensureOpen.
+    void removeFolderForTest(const QString &f) { m_folders.remove(f); }
 
 private:
     QString qual(const QString &key) const { return m_folder + QLatin1Char('/') + key; }

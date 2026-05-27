@@ -255,6 +255,46 @@ private Q_SLOTS:
         QVERIFY(raw->hasFolderForTest(QString(kFolder)));
     }
 
+    // Warm-path recovery: when an external actor (kwalletmanager) removes
+    // the folder while our wallet handle is still open, the next setFolder
+    // call fails. ensureOpen must detect this, recreate the folder and
+    // retry — otherwise subsequent reads/writes silently target whatever
+    // folder kwalletd settled on. Without coverage, a regression that drops
+    // the recovery branch passes CI because the empty-folder path still
+    // satisfies the rest of the SecretsBridge contract.
+    void ensureOpen_warmPath_folderDeletedExternally_recoversAndCompletesWrite()
+    {
+        auto w = makeWallet();
+        auto *raw = w.get();
+        SecretsBridge b{std::move(w)};
+        // Prime the warm-path: open the wallet and set folder.
+        QVERIFY(b.setMap(u"k1"_s, {{u"a"_s, u"1"_s}}));
+        QVERIFY(raw->hasFolderForTest(QString(kFolder)));
+        // External deletion — wallet still open, but folder is gone.
+        raw->removeFolderForTest(QString(kFolder));
+        QVERIFY(!raw->hasFolderForTest(QString(kFolder)));
+        // Next op enters the warm-path; setFolder fails → recovery
+        // branch recreates the folder and the write must succeed.
+        QVERIFY(b.setMap(u"k2"_s, {{u"b"_s, u"2"_s}}));
+        QVERIFY(raw->hasFolderForTest(QString(kFolder)));
+    }
+
+    void ensureOpen_warmPath_folderDeletedExternally_recoversAndReads()
+    {
+        auto w = makeWallet();
+        auto *raw = w.get();
+        SecretsBridge b{std::move(w)};
+        b.get(u"any-key"_s);  // prime warm-path
+        raw->removeFolderForTest(QString(kFolder));
+        // get() must not raise an error signal on the recovery path;
+        // missing key after recreate returns empty without going through
+        // the unenabled / open-failed branches.
+        QSignalSpy errSpy(&b, &SecretsBridge::error);
+        QCOMPARE(b.get(u"any-key"_s), QString());
+        QCOMPARE(errSpy.count(), 0);
+        QVERIFY(raw->hasFolderForTest(QString(kFolder)));
+    }
+
     // ---------------------------------------------------------------
     // secretsChanged signal — load-bearing for the prime-after-write
     // chain (AuthSupport.qml wires this into the QML support signal,
