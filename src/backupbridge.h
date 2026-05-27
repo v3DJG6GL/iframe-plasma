@@ -73,6 +73,15 @@ public:
     // FAT-target message doesn't leak into a later clean ext4 export.
     void setLastExportWarningForTest(const QString &warning);
 
+    // Test-only seeder for m_lastBackupPath. Lets a regression test
+    // seed a "prior successful import" path, drive an import whose
+    // snapshot write fails, and assert importFromFile()'s clear() on
+    // the snapshot-failure branch fires — otherwise the QML caller's
+    // "Previous configuration saved to %1" hint would invite the
+    // operator to revert from a STALE backup. Parallels the
+    // setLastExportWarningForTest hook above.
+    void setLastBackupPathForTest(const QString &path);
+
 private:
     QString m_lastBackupPath;
     QString m_lastExportWarning;

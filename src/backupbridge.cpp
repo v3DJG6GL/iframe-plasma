@@ -270,3 +270,8 @@ void BackupBridge::setLastExportWarningForTest(const QString &warning)
 {
     m_lastExportWarning = warning;
 }
+
+void BackupBridge::setLastBackupPathForTest(const QString &path)
+{
+    m_lastBackupPath = path;
+}

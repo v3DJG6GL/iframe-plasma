@@ -290,6 +290,44 @@ private Q_SLOTS:
         QCOMPARE(groups.value(u"Display"_s).toObject().value(u"zoomFactor"_s).toInt(), 75);
     }
 
+    void import_lastBackupPath_clearedOnSnapshotFailure()
+    {
+        // backupbridge.cpp:243 — m_lastBackupPath.clear() in the
+        // snapshot-failure branch guards the QML caller's "Previous
+        // configuration saved to %1" hint (ConfigBackup.qml reads
+        // lastBackupPath() unconditionally on the ok branch). Without
+        // the clear, an operator who ran a successful import and then
+        // a second import whose snapshot write failed would be invited
+        // to revert from the STALE prior path. Seed via the test hook
+        // because driving a real prior success inline would need an
+        // XDG flip mid-flight; mirrors the export_warningIsReset
+        // pattern at the top of this section.
+        BackupBridge b;
+        const QString stale = m_xdg.filePath(u"stale-prior-backup.json"_s);
+        b.setLastBackupPathForTest(stale);
+        QCOMPARE(b.lastBackupPath(), stale);
+
+        // Build a valid source file under the still-writable XDG dir.
+        const QString src = m_xdg.filePath(u"src_snapfail.json"_s);
+        QCOMPARE(b.exportToFile(src, fullSchemaSeed()), QString{});
+
+        // Force the snapshot write to fail by redirecting XDG_CONFIG_HOME
+        // at a path that can't be mkpath'd: a child of /dev/null, which
+        // is a character device — not a directory. QSaveFile.open() in
+        // exportToFile() then fails with EISDIR/ENOTDIR.
+        const QByteArray prevXdg = qgetenv("XDG_CONFIG_HOME");
+        qputenv("XDG_CONFIG_HOME", "/dev/null/iframe-plasma-snapfail");
+        const QVariantMap result = b.importFromFile(src, QVariantMap{});
+        qputenv("XDG_CONFIG_HOME", prevXdg);
+
+        // ok=true with config payload (the import body succeeded), but
+        // error is populated with the snapshot-failure message and the
+        // stale path was cleared so the QML hint can't be rendered.
+        QCOMPARE(result.value(u"ok"_s).toBool(), true);
+        QVERIFY(result.value(u"error"_s).toString().contains(u"Pre-import backup failed"_s));
+        QCOMPARE(b.lastBackupPath(), QString{});
+    }
+
     // ----- importFromFile failure paths -----------------------------
 
     void import_missingFile_returnsError()
