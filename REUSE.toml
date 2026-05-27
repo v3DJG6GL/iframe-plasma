@@ -1,0 +1,32 @@
+# SPDX-FileCopyrightText: 2026 v3DJG6GL <72495210+v3DJG6GL@users.noreply.github.com>
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# REUSE v3 manifest. Declares copyright/licence for files that cannot
+# carry inline SPDX headers (binary icons, generated qmldir, KDE plasmoid
+# metadata, generic dotfiles, project docs).
+
+version = 1
+
+[[annotations]]
+path = "package/contents/icons/bundled/**.svg"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "Copyright (c) 2023 Phosphor Icons"
+SPDX-License-Identifier = "MIT"
+
+[[annotations]]
+path = "package/contents/icons/bundled/LICENSE"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "Copyright (c) 2023 Phosphor Icons"
+SPDX-License-Identifier = "MIT"
+
+[[annotations]]
+path = ["package/contents/ui/qmldir", "package/metadata.json"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 v3DJG6GL <72495210+v3DJG6GL@users.noreply.github.com>"
+SPDX-License-Identifier = "AGPL-3.0-or-later"
+
+[[annotations]]
+path = [".gitignore", "CHANGELOG.md", "README.md", "SIMPLIFY_NOTES.md", "SECURITY-REVIEW_NOTES.md", "docs/**", "data/**.svg"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 v3DJG6GL <72495210+v3DJG6GL@users.noreply.github.com>"
+SPDX-License-Identifier = "AGPL-3.0-or-later"

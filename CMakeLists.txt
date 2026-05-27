@@ -36,4 +36,12 @@ install(FILES data/io.github.v3DJG6GL.iframe-plasma.svg
     DESTINATION ${KDE_INSTALL_FULL_ICONDIR}/hicolor/scalable/apps
     OPTIONAL)
 
+# Test suite — opt-in via -DBUILD_TESTING=ON; KDECMakeSettings already defines
+# the BUILD_TESTING option but defaults it to ON. We keep that default and
+# only add the subdirectory when enabled so packagers can skip tests cleanly.
+if(BUILD_TESTING)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
+
 feature_summary(WHAT ALL FATAL_ON_MISSING_REQUIRED_PACKAGES)
