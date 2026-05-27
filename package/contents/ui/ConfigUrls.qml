@@ -858,13 +858,20 @@ KCM.SimpleKCM {
         // is preserved verbatim by stripManagedParams + the re-application
         // path in onAccepted.
         function parseSettings(url) {
-            const u = String(url || "");
+            // Drop the fragment before any existence/value scan. A hash-routed
+            // share link whose `#…` carries query-style chars (e.g.
+            // `https://g/d-solo/abc?orgId=1#section=2&theme=dark&kiosk`) would
+            // otherwise report theme/kiosk/from/refresh from the fragment,
+            // mis-pre-fill the Edit dialog, and let onAccepted silently graft
+            // those params onto the real query. Same bug-class as Run #15
+            // GrafanaUrl.transform fragment-split (8ee8bcd).
+            const [u, _frag] = splitFragment(String(url || ""));
             // Time range — match from=now-<X> shape (the form we emit).
             // Hand-edited URLs with absolute timestamps or now-2h-style
             // offsets that don't match any preset fall back to "no
             // override" (combo head row).
             let tr = "";
-            const fromMatch = u.match(/[?&]from=now-([0-9]+(?:[smhdwMy]))(?:&|$|#)/);
+            const fromMatch = u.match(/[?&]from=now-([0-9]+(?:[smhdwMy]))(?:&|$)/);
             if (fromMatch) {
                 const cand = fromMatch[1];
                 for (const p of grafanaHelper.timeRangePresets) {
@@ -876,7 +883,7 @@ KCM.SimpleKCM {
             // refresh) → toggle off, keep SpinBox at last value.
             let refreshOn = false;
             let refreshSec = refreshInterval.value;
-            const refMatch = u.match(/[?&]refresh=([0-9]+)s(?:&|$|#)/);
+            const refMatch = u.match(/[?&]refresh=([0-9]+)s(?:&|$)/);
             if (refMatch) {
                 refreshOn = true;
                 refreshSec = parseInt(refMatch[1], 10);
@@ -885,7 +892,7 @@ KCM.SimpleKCM {
             }
             return {
                 timeRange: tr,
-                kiosk:        /[?&]kiosk(=|&|$|#)/.test(u),
+                kiosk:        /[?&]kiosk(=|&|$)/.test(u),
                 // Any `theme=…` value (literal `light`/`dark` or our
                 // ${theme} sentinel) counts as on — saving will normalize
                 // to ${theme}, overwriting hand-edited literals.
