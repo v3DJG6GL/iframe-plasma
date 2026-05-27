@@ -988,7 +988,13 @@ KCM.SimpleKCM {
             }
             const out = transformUrl(pastedUrl.text);
             if (!out) return;
-            const vpMatch = pastedUrl.text.match(/[?&]viewPanel=panel-(\d+)/);
+            // Scan post-fragment-split base only — a hash-routed share
+            // link's `#…` carrying `&viewPanel=panel-N` would otherwise
+            // label the card "Panel N" even though transformUrl (8ee8bcd)
+            // correctly fragment-strips so the iframe never loads that
+            // panel. Same bug-class as parseSettings (49bf930).
+            const [vpBase, _vpFrag] = splitFragment(pastedUrl.text);
+            const vpMatch = vpBase.match(/[?&]viewPanel=panel-(\d+)/);
             const lbl = deriveLabel(vpMatch ? vpMatch[1] : null);
             listModel.append({ label: lbl, url: out, authProfileId: "", thumbMode: "chartOnly", thumbSelector: "", thumbText: "", thumbIconName: "", thumbTimeRange: "", popupMode: "fullPanel", popupSelector: "" });
             store.serialize();
