@@ -418,6 +418,31 @@ KCM.SimpleKCM {
                                 NoWheel {}
                                 property bool _popupWheelHooked: false
                                 Component.onCompleted: page._hookComboPopupWheel(profileCombo, urlList)
+                                // displayText / delegate Label both default to
+                                // Text.AutoText in Plasma's Breeze ComboBox
+                                // style. `rows[].display` interpolates raw
+                                // `p.name` + `p.username` from imported JSON,
+                                // so AutoText auto-promotes `<img src=…>` to
+                                // StyledText → QQmlEngine NAM beacon (same
+                                // class as 0137f84/5388f75/b50b83f/3705728).
+                                contentItem: QQC.Label {
+                                    text: profileCombo.displayText
+                                    textFormat: Text.PlainText
+                                    elide: Text.ElideRight
+                                    verticalAlignment: Text.AlignVCenter
+                                    leftPadding: Kirigami.Units.smallSpacing
+                                    rightPadding: Kirigami.Units.smallSpacing
+                                }
+                                delegate: QQC.ItemDelegate {
+                                    width: profileCombo.width
+                                    highlighted: profileCombo.highlightedIndex === index
+                                    contentItem: QQC.Label {
+                                        text: modelData.display
+                                        textFormat: Text.PlainText
+                                        elide: Text.ElideRight
+                                        verticalAlignment: Text.AlignVCenter
+                                    }
+                                }
                             }
                             // currentIndex via Binding so it survives the
                             // ComboBox's internal write on user click —
