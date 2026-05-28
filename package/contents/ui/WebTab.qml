@@ -624,6 +624,11 @@ Item {
             error.rejectCertificate();
         }
 
+        onJavaScriptConsoleMessage: function(level, message, lineNumber, sourceID) {
+            const safe = String(message || "").replace(/[\x00-\x1f\x7f]/g, '?').slice(0, 512);
+            console.info("iframe-plasma[popup-console] " + safe);
+        }
+
         // Defense-in-depth: deny every page-driven permission upgrade. The
         // widget is a passive dashboard viewer with no UX path to surface a
         // permission prompt, so a panel that calls getUserMedia / geolocation
