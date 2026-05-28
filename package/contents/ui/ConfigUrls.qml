@@ -702,6 +702,22 @@ KCM.SimpleKCM {
         standardButtons: QQC.Dialog.Cancel | QQC.Dialog.Ok
         width: Math.min(parent.width * 0.9, Kirigami.Units.gridUnit * 42)
 
+        // Pin PlainText on the title-rendering Label. The default QQC.Dialog
+        // header is a Label whose `textFormat` is `Text.AutoText`; `editingLabel`
+        // is sourced from a tab card's `label` field (set by openForEdit:955),
+        // which RowSchema.normaliseTabRow passes verbatim from imported-backup
+        // JSON — same attacker-controllable beacon class closed in 0137f84,
+        // 5388f75, b50b83f for sibling QQC.Label sinks.
+        header: QQC.Label {
+            text: grafanaHelper.title
+            textFormat: Text.PlainText
+            elide: Text.ElideRight
+            horizontalAlignment: Text.AlignHCenter
+            font.bold: true
+            padding: Kirigami.Units.largeSpacing
+            visible: text.length > 0
+        }
+
         // Reset editingIndex on any close so the next open() starts fresh.
         // Without this, OK in Edit mode would leave editingIndex set and a
         // subsequent "From Grafana URL…" click would still be in Edit mode.
