@@ -102,9 +102,17 @@ jobs:
             libkf6wallet-dev libkf6kcmutils-dev libkf6coreaddons-dev \
             libkf6i18n-dev libkf6package-dev libplasma-dev \
             qt6-webengine-dev qt6-webengine-dev-tools \
-            nodejs npm \
             python3-dbusmock python3-dbus \
             xvfb
+
+      # Node from setup-node, NOT apt: jammy/neon ship nodejs 12.22, but the
+      # tests/js suite runs `node --test` (the built-in test runner), which
+      # only exists on Node 18+. setup-node prepends its Node to PATH before
+      # Configure, so cmake's `find_program(NODEJS …)` resolves to this one.
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
 
       - name: Cache ccache
         uses: actions/cache@v4
