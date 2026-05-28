@@ -97,6 +97,7 @@ jobs:
           apt-get update
           apt-get -y full-upgrade
           apt-get install -y --no-install-recommends --allow-downgrades \
+            build-essential \
             cmake extra-cmake-modules gettext ccache \
             libkf6wallet-dev libkf6kcmutils-dev libkf6coreaddons-dev \
             libkf6i18n-dev libkf6package-dev libplasma-dev \
