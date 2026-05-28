@@ -25,8 +25,13 @@ repos:
     hooks:
       - id: shellcheck
 
+  # cmake-format is intentionally omitted: every config setting we tried
+  # rewrote the codebase's grouped/column-aligned `ecm_add_test` and
+  # `qt_add_qml_module` blocks into either one-arg-per-line stacks or
+  # 200-col single-line walls. cmake-lint catches the real bugs (long
+  # lines, missing docstrings) and respects the local .cmake-format.py
+  # config without touching file contents.
   - repo: https://github.com/cheshirekow/cmake-format-precommit
     rev: v0.6.13
     hooks:
-      - id: cmake-format
       - id: cmake-lint
