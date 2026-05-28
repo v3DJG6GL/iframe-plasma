@@ -510,6 +510,7 @@ KCM.SimpleKCM {
             QQC.Label {
                 Layout.fillWidth: true
                 text: deleteConfirm.referencing.map(s => "• " + s).join("\n")
+                textFormat: Text.PlainText
                 wrapMode: Text.WordWrap
             }
         }

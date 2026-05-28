@@ -69,6 +69,7 @@ Rectangle {
         QQC.Label {
             anchors.verticalCenter: parent.verticalCenter
             text: chip.value.length > 0 ? chip.value : chip.emptyText
+            textFormat: Text.PlainText
             font.family: Theme.fontBody
             font.pixelSize: 9
             color: chip.value.length > 0 ? Theme.fg : Theme.fgDim
