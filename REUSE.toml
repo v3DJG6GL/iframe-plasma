@@ -26,7 +26,7 @@ SPDX-FileCopyrightText = "2026 v3DJG6GL <72495210+v3DJG6GL@users.noreply.github.
 SPDX-License-Identifier = "AGPL-3.0-or-later"
 
 [[annotations]]
-path = [".gitignore", "CHANGELOG.md", "README.md", "SIMPLIFY_NOTES.md", "SECURITY-REVIEW_NOTES.md", "docs/**", "data/**.svg"]
+path = [".gitignore", "CHANGELOG.md", "README.md", "SIMPLIFY_NOTES.md", "SECURITY-REVIEW_NOTES.md", "docs/**", "data/**.svg", ".github/renovate.json"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 v3DJG6GL <72495210+v3DJG6GL@users.noreply.github.com>"
 SPDX-License-Identifier = "AGPL-3.0-or-later"
