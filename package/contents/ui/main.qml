@@ -1311,6 +1311,13 @@ PlasmoidItem {
                                 const explicit = t.thumbText || "";
                                 return explicit.length > 0 ? explicit : (t.label || "");
                             }
+                            // Pin the renderer — thumbText and label both
+                            // flow from imported JSON without HTML strip;
+                            // AutoText would auto-promote `<img src=…>` to
+                            // StyledText and beacon via the QQmlEngine NAM
+                            // (same SSRF class as 5388f75, but worse here
+                            // because the panel-slot is always visible).
+                            textFormat: Text.PlainText
                             color: Kirigami.Theme.textColor
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
@@ -1769,6 +1776,10 @@ PlasmoidItem {
                     rightMargin: thumbLabel.horizontalPadding
                 }
                 text: (compact.previewTab && compact.previewTab.label) || ""
+                // Pin PlainText: the label comes from imported JSON with no
+                // HTML strip (RowSchema.normalize passes it through), and
+                // AutoText would let `<img src=…>` beacon via the NAM.
+                textFormat: Text.PlainText
                 color: Theme.fg
                 elide: Text.ElideRight
                 verticalAlignment: Text.AlignVCenter

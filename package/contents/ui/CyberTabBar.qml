@@ -148,6 +148,11 @@ Rectangle {
                     // inside this Row the `elide` would never trigger.
                     width: Math.min(implicitWidth, Kirigami.Units.gridUnit * 10)
                     text: tabDel.modelData.label || tabDel.modelData.url || i18n("Tab %1", tabDel.index + 1)
+                    // PlainText pins the renderer so Qt's mightBeRichText
+                    // heuristic can't promote an imported-JSON label like
+                    // `<img src=…>` to StyledText and beacon out via the
+                    // QQmlEngine NAM (same SSRF class as 5388f75).
+                    textFormat: Text.PlainText
                     elide: Text.ElideRight
                     font.family: Theme.fontHeader
                     font.pixelSize: 11
