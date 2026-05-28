@@ -1,0 +1,43 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "customManagers:githubActionsVersions",
+    ":semanticCommits",
+    ":dependencyDashboard",
+    ":pinDigestsDisabled"
+  ],
+  "timezone": "Etc/UTC",
+  "labels": ["dependencies"],
+  "rangeStrategy": "bump",
+  "automerge": true,
+  "automergeStrategy": "squash",
+  "platformAutomerge": true,
+  "pre-commit": {
+    "enabled": true
+  },
+  "packageRules": [
+    {
+      "description": "Group all GitHub Actions bumps into one PR.",
+      "matchManagers": ["github-actions"],
+      "groupName": "github-actions"
+    },
+    {
+      "description": "Group all pre-commit hook bumps into one PR. Covers pre-commit-hooks, reuse-tool, shellcheck-py, cmake-format-precommit in .pre-commit-config.yaml.",
+      "matchManagers": ["pre-commit"],
+      "groupName": "pre-commit"
+    },
+    {
+      "description": "Pin kdeneon/plasma by digest. The image is the only mainstream source of working Qt6.7+/KF6/plasma-workspace/qt6-webengine-dev; the CI workflow explicitly tracks it by sha256 to keep upstream image churn from silently breaking builds. Renovate auto-PRs digest bumps so we don't have to run the docker inspect dance by hand.",
+      "matchPackageNames": ["kdeneon/plasma"],
+      "pinDigests": true,
+      "groupName": "kdeneon-plasma-image"
+    },
+    {
+      "description": "Major bumps require manual review — surface as checkboxes on the Dependency Dashboard, do not open the PR automatically, do not auto-merge. Minor/patch still flow through automerge gated by CI.",
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+      "dependencyDashboardApproval": true
+    }
+  ]
+}
