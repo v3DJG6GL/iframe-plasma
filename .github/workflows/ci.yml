@@ -74,8 +74,19 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install build + test deps
+        # `full-upgrade` first: the pinned kdeneon/plasma image carries
+        # libgpgmepp6 1.16 / libharfbuzz0b 2.7 / libgdk-pixbuf 2.36 from
+        # jammy main, but neon's unstable repo has since moved kf6-kwallet
+        # and friends to libgpgmepp6 >= 1.23, harfbuzz 6.x, etc.  Without
+        # a full upgrade, the targeted `apt-get install` below hits
+        # "unmet dependencies: kf6-kwallet : Depends: libgpgmepp6 (>= 1.23.2)
+        # but 1.16.0-1.2ubuntu4.2 is to be installed" and exits 100 before
+        # CMake ever runs.  Upgrading the neon-rebased base packages
+        # resolves the libjpeg-dev / libgdk-pixbuf-2.0-dev / libharfbuzz-dev
+        # / libgpgmepp6 conflicts in one pass.
         run: |
           apt-get update
+          apt-get -y full-upgrade
           apt-get install -y --no-install-recommends \
             cmake extra-cmake-modules gettext ccache \
             libkf6wallet-dev libkf6kcmutils-dev libkf6coreaddons-dev \
