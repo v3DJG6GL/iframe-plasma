@@ -11,7 +11,11 @@
 
 using namespace Qt::Literals::StringLiterals;
 
-static constexpr auto kFolder = u"io.github.v3DJG6GL.iframe-plasma";
+// `QString(const char16_t*)` is implicit on Qt 6.8+ but missing on 6.7.2
+// (which neon-unstable still ships in CI). Declare as `QString` via the
+// `_s` UDL so the existing `QString(kFolder)` call sites are no-op
+// copy-constructs that compile on both.
+static const QString kFolder = u"io.github.v3DJG6GL.iframe-plasma"_s;
 
 static std::unique_ptr<FakeWallet> makeWallet()
 {
