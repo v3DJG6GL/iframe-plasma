@@ -418,21 +418,21 @@ KCM.SimpleKCM {
                                 NoWheel {}
                                 property bool _popupWheelHooked: false
                                 Component.onCompleted: page._hookComboPopupWheel(profileCombo, urlList)
-                                // displayText / delegate Label both default to
-                                // Text.AutoText in Plasma's Breeze ComboBox
-                                // style. `rows[].display` interpolates raw
-                                // `p.name` + `p.username` from imported JSON,
-                                // so AutoText auto-promotes `<img src=…>` to
-                                // StyledText → QQmlEngine NAM beacon (same
-                                // class as 0137f84/5388f75/b50b83f/3705728).
-                                contentItem: QQC.Label {
-                                    text: profileCombo.displayText
-                                    textFormat: Text.PlainText
-                                    elide: Text.ElideRight
-                                    verticalAlignment: Text.AlignVCenter
-                                    leftPadding: Kirigami.Units.smallSpacing
-                                    rightPadding: Kirigami.Units.smallSpacing
-                                }
+                                // Only the popup delegate Label needs the
+                                // explicit Text.PlainText: it defaults to
+                                // Text.AutoText, and `rows[].display`
+                                // interpolates raw `p.name` + `p.username` from
+                                // imported JSON, so AutoText would auto-promote
+                                // `<img src=…>` to StyledText → QQmlEngine NAM
+                                // beacon (same class as
+                                // 0137f84/5388f75/b50b83f/3705728).
+                                // The closed-combo display is painted natively
+                                // by the org.kde.desktop StyleItem background as
+                                // a plain QString (no HTML engine, no beacon),
+                                // so a custom contentItem Label is unnecessary —
+                                // and an always-visible one draws a second text
+                                // layer over the native paint (doubled/blurry
+                                // selected text).
                                 delegate: QQC.ItemDelegate {
                                     width: profileCombo.width
                                     highlighted: profileCombo.highlightedIndex === index
