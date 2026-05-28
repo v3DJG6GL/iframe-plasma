@@ -84,10 +84,19 @@ jobs:
         # CMake ever runs.  Upgrading the neon-rebased base packages
         # resolves the libjpeg-dev / libgdk-pixbuf-2.0-dev / libharfbuzz-dev
         # / libgpgmepp6 conflicts in one pass.
+        #
+        # `--allow-downgrades` on the install step: after the full-upgrade,
+        # harfbuzz0b / libjpeg-turbo8 / libraqm0 are at neon-unstable's
+        # newer rebase, but jammy-main's `libharfbuzz-dev` / `libjpeg-dev`
+        # (pulled in transitively by qt6-webengine-dev → libcupsimage2-dev /
+        # libtiff-dev / libgtk-3-dev) depend on the older versions, so apt
+        # wants to step those runtime libs back down to match. Without the
+        # flag apt exits 100 with "Packages were downgraded and -y was used
+        # without --allow-downgrades".
         run: |
           apt-get update
           apt-get -y full-upgrade
-          apt-get install -y --no-install-recommends \
+          apt-get install -y --no-install-recommends --allow-downgrades \
             cmake extra-cmake-modules gettext ccache \
             libkf6wallet-dev libkf6kcmutils-dev libkf6coreaddons-dev \
             libkf6i18n-dev libkf6package-dev libplasma-dev \
