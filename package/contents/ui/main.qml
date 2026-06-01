@@ -690,6 +690,14 @@ PlasmoidItem {
         // soft reload re-navigates to the same URL and lets the page paint
         // at its new natural extent. Per-tab only, no other tabs touched.
         const reloadTabs = [];
+        // Tabs whose exclude-keyword list changed AND that currently hold a
+        // runtime exclusion. Their excluded miniView is frozen/discarded
+        // (desiredActive is gated by previewTabIdx, which this exclusion
+        // forces to -1), so it can never run the CropEngine hit=false scan
+        // that would clear itself — a deadlock. Drop the stale entry here so
+        // the tab rejoins the rotation, revives its renderer, and re-emits
+        // its live keyword state fresh against the new list.
+        let exclusionCleared = false;
         for (let i = 0; i < cur.length; i++) {
             const o = cur[i];
             const n = newArr[i];
@@ -698,6 +706,10 @@ PlasmoidItem {
             const oldPopupMode = o.popupMode || "";
             const newThumbMode = n.thumbMode || "";
             const newPopupMode = n.popupMode || "";
+            const oldKeywords = Array.isArray(o.thumbExcludeKeywords)
+                                ? o.thumbExcludeKeywords.join(" ") : "";
+            const newKeywords = Array.isArray(n.thumbExcludeKeywords)
+                                ? n.thumbExcludeKeywords.join(" ") : "";
             // Copy every metadata field. authProfileId and url are
             // checked structurally above, but copy authProfileId too
             // so the row object stays internally consistent if a
@@ -719,7 +731,14 @@ PlasmoidItem {
             if (oldThumbMode !== newThumbMode || oldPopupMode !== newPopupMode) {
                 reloadTabs.push(i);
             }
+            if (oldKeywords !== newKeywords && root._runtimeExcluded[i]) {
+                delete root._runtimeExcluded[i];
+                exclusionCleared = true;
+                console.info("iframe-plasma[runtime-excl] cleared idx=" + i
+                    + " (exclude-keyword list changed)");
+            }
         }
+        if (exclusionCleared) root._runtimeExclusionSerial++;
         root._tabsMetadataSerial = root._tabsMetadataSerial + 1;
         root._tabsMetadataChanged(-1);
         console.info("iframe-plasma[urls] metadata-only apply rows=" + cur.length
@@ -742,27 +761,26 @@ PlasmoidItem {
     // auto-cycle steps past indices that appear here. NOT persisted; on
     // reload the next CropEngine apply re-emits the live state within ~250ms.
     //
+    // The exclusion is STICKY: an entry stays until the tab's own CropEngine
+    // emits hit=false (keyword cleared) or its keyword config changes. There
+    // is deliberately no TTL re-check — that flapped the tab back into the
+    // rotation every interval showing a placeholder, then could not re-confirm
+    // because the rejoined tab was frozen. Instead an excluded tab is kept
+    // Active-but-invisible (ownIsRuntimeExcluded → desiredActive) so its
+    // CropEngine keeps scanning and reports the keyword clearing on its own.
+    //
     // Plain object {tabIdx: <exclusion timestamp in ms>}. The value is the
-    // Date.now() at which the exclusion was recorded; cycleTimer expires
-    // entries older than _runtimeExclusionRecheckMs (see below). nextCycleTabIndex
-    // only tests truthiness, so the timestamp reads as "excluded" there.
-    // cycleTimer reads imperatively inside its handler, so we do NOT depend
-    // on a binding invalidation here — the auto-generated _runtimeExcludedChanged
-    // NOTIFY exists for QML book-keeping but no consumer subscribes to it.
-    // setRuntimeExcluded mutates the same object in place, which is intentional
-    // and safe because the read path doesn't cache.
+    // Date.now() at which the exclusion was recorded (kept for diagnostics);
+    // both nextCycleTabIndex and previewTabIdx only test truthiness, so the
+    // timestamp reads as "excluded". cycleTimer reads imperatively inside its
+    // handler, so we do NOT depend on a binding invalidation here — the
+    // auto-generated _runtimeExcludedChanged NOTIFY exists for QML book-keeping
+    // but no consumer subscribes to it. setRuntimeExcluded mutates the same
+    // object in place, which is intentional and safe because the read path
+    // doesn't cache.
     property var _runtimeExcluded: ({})
 
-    // A tab that gets excluded stops being the current thumbnail and (after
-    // webViewFreezeDelaySec) freezes, so its CropEngine can no longer emit
-    // hit=false once the keyword clears — left unbounded it would stay
-    // excluded for the whole session. cycleTimer expires an exclusion this
-    // many ms after it was recorded, letting the tab rejoin the rotation,
-    // re-render, and re-emit its live state; if the keyword still matches it
-    // re-excludes after one brief reappearance.
-    readonly property int _runtimeExclusionRecheckMs: 120000
-
-    // Bumped on every _runtimeExcluded mutation (set / clear / TTL expiry).
+    // Bumped on every _runtimeExcluded mutation (set / clear).
     // The map is mutated in place and fires no NOTIFY of its own, so the
     // panel-slot's previewTabIdx binding depends on this serial to drop a
     // tab the instant its keyword matches (and restore it when cleared).
@@ -1136,35 +1154,18 @@ PlasmoidItem {
                  && root.compactObservable
         repeat: true
         onTriggered: {
-            // Expire stale runtime exclusions first: a frozen, non-current
-            // excluded tab can never emit hit=false on its own, so without
-            // this it would stay excluded for the session even after its
-            // keyword clears. Dropping the entry lets the tab rejoin the
-            // rotation and re-emit its live state on re-render (it re-excludes
-            // if the keyword still matches). See _runtimeExclusionRecheckMs.
-            const now = Date.now();
-            const ttl = root._runtimeExclusionRecheckMs;
-            for (const k in root._runtimeExcluded) {
-                if (now - root._runtimeExcluded[k] >= ttl) {
-                    const expiredIdx = parseInt(k, 10);
-                    delete root._runtimeExcluded[k];
-                    root._runtimeExclusionSerial++;
-                    // The expired tab may be a frozen survivor whose injected
-                    // CropEngine still holds lastKeywordHit=true; CropEngine
-                    // emits only on transition, so left to rejoin on its own it
-                    // never re-asserts and would reappear still showing the
-                    // keyword (never re-excluding). Force a soft re-render so it
-                    // re-injects and re-emits live state — re-excludes within
-                    // ~250ms if the keyword persists, rejoins for good if it
-                    // cleared. This is what the comment above actually promises.
-                    root._compactReloadRequested(expiredIdx);
-                }
-            }
-            // Pass the live runtime-exclusion map so any tab whose
-            // configured keyword is currently visible on its rendered
-            // thumbnail is skipped this tick. The map is plain-object
-            // {idx: timestampMs}; UrlUtils duck-types Set vs object and
-            // only tests truthiness.
+            // Pass the live runtime-exclusion map so any tab whose configured
+            // keyword is currently visible on its rendered thumbnail is skipped
+            // this tick — and STAYS skipped while the keyword matches. The
+            // exclusion is sticky: there is no TTL re-check that would drop the
+            // entry and let the tab flap back into the rotation showing a
+            // placeholder. An excluded tab keeps its WebEngineView Active (but
+            // invisible — see ownIsRuntimeExcluded → desiredActive below), so
+            // its CropEngine keeps scanning and emits [ifp-keyword] hit=false
+            // the instant the keyword clears, which clears the entry and lets
+            // the tab rejoin the rotation on its own. The map is plain-object
+            // {idx: timestampMs}; UrlUtils duck-types Set vs object and only
+            // tests truthiness.
             const next = UrlUtils.nextCycleTabIndex(
                 root.currentTabIndex, root.tabs, root._runtimeExcluded);
             if (next >= 0) root.advanceCycleTab(next);
@@ -1211,6 +1212,7 @@ PlasmoidItem {
     // a restart, and bare kcfg write would skip the binding chain.
     function setCurrentTab(idx) {
         root.currentTabIndex = idx;
+        root._currentTabIsAutoCycle = false;
         Plasmoid.configuration.currentTabIndex = idx;
     }
 
@@ -1221,7 +1223,18 @@ PlasmoidItem {
     // persists via setCurrentTab, so session restore keeps working.
     function advanceCycleTab(idx) {
         root.currentTabIndex = idx;
+        root._currentTabIsAutoCycle = true;
     }
+
+    // True when the current tab was reached by the auto-cycle stepper,
+    // false when the user selected it explicitly (popup tab click, Ctrl+Tab,
+    // Ctrl+1..9) or it was restored from config on load. Gates whether a
+    // runtime keyword exclusion HIDES the compact preview: keyword exclusion
+    // exists to skip a tab during rotation, so blanking a tab the user
+    // deliberately opened to a placeholder icon gives no benefit — the user
+    // wants to see exactly what they selected. Defaults false so the
+    // config-restored tab on first load is treated as a user choice.
+    property bool _currentTabIsAutoCycle: false
 
     // Active WebTab reference. Set from inside fullRepresentation's
     // Component.onCompleted (the Repeater's id is scoped to that Component
@@ -1319,7 +1332,13 @@ PlasmoidItem {
             if (idx < 0 || idx >= root.tabs.length) return -1;
             const t = root.tabs[idx];
             if (!t || t.thumbMode === "excluded") return -1;
-            if (root._runtimeExcluded[idx]) return -1;
+            // Runtime keyword exclusion only hides the preview while the
+            // auto-cycle put us on this tab. When the user explicitly
+            // selected it (popup click / Ctrl+Tab / restored on load) show
+            // the live content regardless of a keyword match — they asked to
+            // see this tab, and a placeholder icon helps no one. The cycle
+            // stepper still skips the tab independently via nextCycleTabIndex.
+            if (root._currentTabIsAutoCycle && root._runtimeExcluded[idx]) return -1;
             return idx;
         }
         readonly property var previewTab: previewTabIdx >= 0 ? root.tabs[previewTabIdx] : null
@@ -1587,6 +1606,18 @@ PlasmoidItem {
                 readonly property var ownTab: parent.ownTab
                 readonly property int ownIndex: parent.ownIndex
                 readonly property bool ownIsCurrent: parent.ownIsCurrent
+                // True while THIS tab holds a live keyword exclusion. Keeps the
+                // view Active (but invisible — it is not the StackLayout's
+                // current child) so CropEngine keeps scanning and emits
+                // [ifp-keyword] hit=false the moment the keyword clears,
+                // self-clearing the exclusion. Without this an excluded tab
+                // would freeze and could never report the keyword going away.
+                // Depends on the serial because _runtimeExcluded mutates in
+                // place and fires no NOTIFY (mirrors previewTabIdx).
+                readonly property bool ownIsRuntimeExcluded: {
+                    const _exclTick = root._runtimeExclusionSerial;
+                    return !!root._runtimeExcluded[miniView.ownIndex];
+                }
                 // Read through root._liveRow(ownIndex, ownTab) rather than
                 // the ownTab chain — ownTab → parent.ownTab →
                 // thumbSlot.modelData, and modelData is a Repeater snapshot
@@ -1996,16 +2027,18 @@ PlasmoidItem {
                     }
                 }
 
-                // Per-thumb lifecycle. desiredActive is true ONLY for the
-                // tab the user is currently previewing (popup or auto-cycle
-                // selection) AND when the slot is observable. Non-current
-                // thumbs freeze after freezeDelaySec → discard after
-                // discardDelaySec. Switching back reveals the existing
-                // renderer instantly (no spinner flash) when within
-                // stalenessSec, or reloads on resume after that.
+                // Per-thumb lifecycle. desiredActive is true for the tab the
+                // user is currently previewing (popup or auto-cycle selection),
+                // AND for any tab holding a live keyword exclusion (so it keeps
+                // monitoring for the keyword clearing — see ownIsRuntimeExcluded),
+                // AND only while the slot is observable. Other non-current thumbs
+                // freeze after freezeDelaySec → discard after discardDelaySec.
+                // Switching back reveals the existing renderer instantly (no
+                // spinner flash) when within stalenessSec, or reloads on resume.
                 WebViewLifecycle {
                     target: miniView
-                    desiredActive: miniView.ownIsCurrent && root.compactObservable
+                    desiredActive: (miniView.ownIsCurrent || miniView.ownIsRuntimeExcluded)
+                                   && root.compactObservable
                     freezeDelaySec: Plasmoid.configuration.webViewFreezeDelaySec
                     discardDelaySec: Plasmoid.configuration.webViewDiscardDelaySec
                     stalenessSec: Math.max(5, Plasmoid.configuration.autoCycleIntervalSec)
