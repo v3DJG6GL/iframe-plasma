@@ -14,7 +14,6 @@ KCM.SimpleKCM {
     property alias cfg_showTabBar: tabBarSwitch.checked
     property alias cfg_compactPreviewEnabled: compactSwitch.checked
     property alias cfg_compactPreviewLongAxisPx: longAxisSpin.value
-    property alias cfg_compactPreviewShowLabel: showLabelSwitch.checked
     property alias cfg_autoCycleEnabled: cycleBox.checked
     property alias cfg_autoCycleIntervalSec: cycleSpin.value
 
@@ -79,15 +78,6 @@ KCM.SimpleKCM {
             QQC.ToolTip.visible: hovered
             QQC.ToolTip.delay: 600
             QQC.ToolTip.text: i18n("Long-axis size of the panel slot. Horizontal panel → slot width; vertical panel → slot height. The other axis is fixed by the Plasma panel's thickness. Type any value; the field accepts integers from 16 to 4000.")
-        }
-        QQC.CheckBox {
-            id: showLabelSwitch
-            Kirigami.FormData.label: i18n("Show URL label:")
-            text: i18n("Overlay the tab's label on the panel-slot thumbnail")
-            enabled: compactSwitch.checked
-            QQC.ToolTip.visible: hovered
-            QQC.ToolTip.delay: 600
-            QQC.ToolTip.text: i18n("When enabled, a small semi-transparent bar in the top-left of the thumbnail shows the URL's label (only if the label field is non-empty on the URLs tab).")
         }
         RowLayout {
             Kirigami.FormData.label: i18n("Rotate preview:")

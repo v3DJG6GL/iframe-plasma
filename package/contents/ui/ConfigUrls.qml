@@ -16,7 +16,10 @@ KCM.SimpleKCM {
     id: page
 
     property alias cfg_urlsJson: store.json
-    property alias cfg_currentTabIndex: store.currentIndex
+    // No cfg_currentTabIndex alias — the kcfg key is written exclusively
+    // by main.qml's setCurrentTab on every tab activation, and this page
+    // has no UI for the active tab. The previous alias was dead code,
+    // round-tripping the value through this page for no purpose.
 
     // Wheel forwarder for open ComboBox popups. By default, a wheel landing
     // on an expanded dropdown goes to the popup's internal ListView; if the
@@ -76,9 +79,18 @@ KCM.SimpleKCM {
     // so the user's `property bool _popupWheelHooked: false` declaration owns
     // the one-shot gate; this helper centralises the connect/create plumbing
     // so each ComboBox only needs the property + a Component.onCompleted call.
+    //
+    // We connect to `openedChanged` (not `opened`) because in Qt 6.10
+    // `QQuickPopup::opened` is a bool PROPERTY, not a signal — calling
+    // `.connect(...)` on the boolean value throws
+    // `TypeError: Property 'connect' of object false is not a function`
+    // on every dialog open. Gate the handler body on `combo.popup.opened`
+    // so we only act on the false→true transition and skip the closing
+    // edge.
     function _hookComboPopupWheel(combo, scrollTarget) {
         if (!combo || !combo.popup) return
-        combo.popup.opened.connect(function() {
+        combo.popup.openedChanged.connect(function() {
+            if (!combo.popup.opened) return
             if (combo._popupWheelHooked) return
             popupWheelForwarder.createObject(combo.popup.contentItem,
                                              { combo: combo, scrollTarget: scrollTarget })
@@ -93,6 +105,33 @@ KCM.SimpleKCM {
     function _setRowField(idx, field, val) {
         listModel.setProperty(idx, field, val);
         store.serialize();
+    }
+
+    // Keyword chip-list helpers. The on-row field stores a JSON-string
+    // (see delegate's thumbExcludeKeywords required-property comment),
+    // so add/remove parse-mutate-stringify. Duplicate entries are
+    // silently dropped (matches the chip-list intuition — adding the
+    // same banner text twice does nothing).
+    function _parseKeywordsAt(idx) {
+        try {
+            const v = JSON.parse(listModel.get(idx).thumbExcludeKeywords || "[]");
+            return Array.isArray(v) ? v.slice() : [];
+        } catch (e) { return []; }
+    }
+    function _addKeyword(idx, raw) {
+        const text = String(raw || "").trim();
+        if (text.length === 0) return;
+        const cur = _parseKeywordsAt(idx);
+        if (cur.indexOf(text) >= 0) return;
+        cur.push(text);
+        _setRowField(idx, "thumbExcludeKeywords", JSON.stringify(cur));
+    }
+    function _removeKeyword(idx, text) {
+        const cur = _parseKeywordsAt(idx);
+        const pos = cur.indexOf(text);
+        if (pos < 0) return;
+        cur.splice(pos, 1);
+        _setRowField(idx, "thumbExcludeKeywords", JSON.stringify(cur));
     }
 
     // Raised in two situations, both of which must suppress the
@@ -138,7 +177,13 @@ KCM.SimpleKCM {
                      || (entry && entry.popupMode || "") !== row.popupMode) {
                         mutated = true;
                     }
-                    listModel.append(row);
+                    // Adapt the keywords array → JSON string for
+                    // ListModel storage (see delegate's required-
+                    // property comment); serialize() reverses this.
+                    const stored = Object.assign({}, row);
+                    stored.thumbExcludeKeywords =
+                        JSON.stringify(row.thumbExcludeKeywords || []);
+                    listModel.append(stored);
                 }
             }
             if (mutated) {
@@ -159,7 +204,6 @@ KCM.SimpleKCM {
     QtObject {
         id: store
         property string json: "[]"
-        property int currentIndex: 0
 
         // Re-sync listModel when the underlying kcfg JSON changes from
         // outside this page (Backup import on the sibling KCM page, or
@@ -171,6 +215,17 @@ KCM.SimpleKCM {
             const arr = [];
             for (let i = 0; i < listModel.count; i++) {
                 const row = listModel.get(i);
+                // Keywords ride through the ListModel as a JSON string
+                // (see required-property comment in the delegate);
+                // surface them as a plain array on the wire so the on-
+                // disk urlsJson shape matches RowSchema's contract.
+                let kw = [];
+                try {
+                    const parsed = JSON.parse(row.thumbExcludeKeywords || "[]");
+                    if (Array.isArray(parsed)) {
+                        kw = parsed.filter(s => typeof s === "string" && s.length > 0);
+                    }
+                } catch (e) { /* corrupt → empty */ }
                 arr.push({
                     label: row.label,
                     url: row.url,
@@ -180,6 +235,9 @@ KCM.SimpleKCM {
                     thumbText: row.thumbText || "",
                     thumbIconName: row.thumbIconName || "",
                     thumbTimeRange: row.thumbTimeRange || "",
+                    thumbScaleMode: row.thumbScaleMode || "fit",
+                    thumbExcludeKeywords: kw,  /* plain Array<string> on disk */
+                    thumbShowLabel: row.thumbShowLabel === true,
                     popupMode: row.popupMode || "fullPanel",
                     popupSelector: row.popupSelector || ""
                 });
@@ -209,6 +267,25 @@ KCM.SimpleKCM {
     // only had to land in one place).
     function isGrafanaEmbed(u) {
         return UrlUtils.isGrafanaEmbed(u);
+    }
+
+    // Human display name for a stored thumbMode token, used by the card
+    // header + the Thumbnail section's collapsed summary. `presets` is the
+    // delegate-scoped, Grafana-aware `thumbModePresets` array (already i18n'd
+    // in QML scope — the lookup MUST stay here, not in a .js singleton, since
+    // KCM's engine context has no KLocalizedContext for i18n()). Falls back to
+    // the raw token if it isn't in the filtered set (a Grafana-only preset
+    // shown on a non-Grafana URL) — same edge the combo's currentIndex handles.
+    function _displayForThumbMode(presets, value) {
+        for (const p of presets) if (p.value === value) return p.display;
+        return value;
+    }
+    // Human display name for a popupMode token. Static two-entry set mirroring
+    // the delegate's popupModePresets; kept as a QML function so the i18n()
+    // calls evaluate in KCM's KLocalizedContext.
+    function _displayForPopupMode(value) {
+        return value === "custom" ? i18n("Custom CSS selector…")
+                                  : i18n("Full page (no crop)");
     }
 
     // Mirror of main.qml's resolveIconSource for the per-card preview.
@@ -282,7 +359,7 @@ KCM.SimpleKCM {
                 text: i18n("Add URL")
                 icon.name: "list-add"
                 onClicked: {
-                    listModel.append({ label: "", url: "https://", authProfileId: "", thumbMode: "chartOnly", thumbSelector: "", thumbText: "", thumbIconName: "", thumbTimeRange: "", popupMode: "fullPanel", popupSelector: "" });
+                    listModel.append({ label: "", url: "https://", authProfileId: "", thumbMode: "chartOnly", thumbSelector: "", thumbText: "", thumbIconName: "", thumbTimeRange: "", thumbScaleMode: "fit", thumbExcludeKeywords: "[]", thumbShowLabel: false, popupMode: "fullPanel", popupSelector: "" });
                     store.serialize();
                     urlList.currentIndex = listModel.count - 1;
                 }
@@ -315,6 +392,7 @@ KCM.SimpleKCM {
             ScrollForwardingWheelHandler {}
 
             delegate: Kirigami.AbstractCard {
+                id: urlRow
                 required property int index
                 required property string label
                 required property string url
@@ -325,6 +403,28 @@ KCM.SimpleKCM {
                 required property string thumbIconName
                 required property string popupMode
                 required property string popupSelector
+                // Per-row scale mode for the panel-slot thumbnail —
+                // engaged only when thumbMode === "custom". Values:
+                // "fit" (aspect-preserving upscale of intrinsically
+                // small content), "original" (no size override), or
+                // "stretch" (legacy outer-box-fills-viewport).
+                required property string thumbScaleMode
+                // Live keyword exclusion list (substring or /regex/).
+                // CropEngine scans the thumbnail's scope (selector
+                // subtree or <body>) and emits hit transitions; the
+                // auto-cycle skips this URL while a keyword is on
+                // screen. Stored as a JSON-stringified array of strings
+                // INSIDE the ListModel because QML's default ListModel
+                // (no dynamicRoles) cannot round-trip nested arrays
+                // cleanly. parseKeywords()/stringifyKeywords() do the
+                // adapter dance at the load/save boundary.
+                required property string thumbExcludeKeywords
+                // Per-URL opt-IN for the panel-slot label overlay.
+                // The old global compactPreviewShowLabel toggle is gone;
+                // each row decides on its own whether to paint the URL's
+                // label as a semi-transparent bar across the top of the
+                // thumbnail. Default false → no overlay.
+                required property bool thumbShowLabel
                 // Thumbnail-mode presets shown in the combo. Grafana embeds
                 // get the uPlot-specific chartOnly/chartWithAxes presets in
                 // addition to the generic options; non-Grafana URLs see only
@@ -346,19 +446,110 @@ KCM.SimpleKCM {
                     ].concat(generic);
                 }
 
+                // Popup-mode presets, hoisted to delegate scope so BOTH the
+                // collapsed card-header summary and the popup ComboBox read
+                // one source. i18n() lives in QML scope (KCM lacks
+                // KLocalizedContext, so it cannot move to a .js singleton).
+                readonly property var popupModePresets: [
+                    { value: "fullPanel", display: i18n("Full page (no crop)") },
+                    { value: "custom",    display: i18n("Custom CSS selector…") }
+                ]
+
+                // Concise host+path subtitle for the card header — scheme,
+                // query string and fragment stripped (the query is the long,
+                // low-signal part that ran off the card). The Thumbnail/Popup
+                // mode names are NOT repeated here: they show in their own
+                // section rows just below. `url` is attacker-controllable from
+                // imported JSON, so the painting Label pins Text.PlainText.
+                readonly property string cardSummary: UrlUtils.displayUrl(url)
+
                 width: ListView.view.width
 
-                contentItem: RowLayout {
+                // Rich card header: index, the tab's label (bold, elided), a
+                // muted one-line summary, and the reorder/delete actions. Frees
+                // the contentItem to be a single grouped column. `label`/`url`
+                // are attacker-controllable → PlainText on every sink (beacon
+                // class 0137f84/5388f75/b50b83f).
+                header: RowLayout {
                     spacing: Kirigami.Units.smallSpacing
 
-                    Kirigami.ListSectionHeader {
+                    QQC.Label {
                         text: "#" + (index + 1)
-                        Layout.preferredWidth: Kirigami.Units.gridUnit * 2
+                        color: Kirigami.Theme.disabledTextColor
+                        Layout.alignment: Qt.AlignTop
                     }
-
                     ColumnLayout {
                         Layout.fillWidth: true
+                        spacing: 0
+                        Kirigami.Heading {
+                            Layout.fillWidth: true
+                            level: 4
+                            text: label.length > 0 ? label : i18n("(untitled)")
+                            textFormat: Text.PlainText
+                            elide: Text.ElideRight
+                            font.italic: label.length === 0
+                        }
+                        QQC.Label {
+                            Layout.fillWidth: true
+                            visible: text.length > 0
+                            text: cardSummary
+                            textFormat: Text.PlainText
+                            elide: Text.ElideRight
+                            color: Kirigami.Theme.disabledTextColor
+                            font.pixelSize: Kirigami.Theme.defaultFont.pixelSize - 1
+                        }
+                    }
+                    QQC.ToolButton {
+                        icon.name: "go-up"
+                        enabled: index > 0
+                        onClicked: { listModel.move(index, index - 1, 1); store.serialize() }
+                        QQC.ToolTip.visible: hovered
+                        QQC.ToolTip.delay: 400
+                        QQC.ToolTip.text: i18n("Move up")
+                    }
+                    QQC.ToolButton {
+                        icon.name: "go-down"
+                        enabled: index < listModel.count - 1
+                        onClicked: { listModel.move(index, index + 1, 1); store.serialize() }
+                        QQC.ToolTip.visible: hovered
+                        QQC.ToolTip.delay: 400
+                        QQC.ToolTip.text: i18n("Move down")
+                    }
+                    QQC.ToolButton {
+                        icon.name: "edit-delete"
+                        onClicked: { listModel.remove(index); store.serialize() }
+                        QQC.ToolTip.visible: hovered
+                        QQC.ToolTip.delay: 400
+                        QQC.ToolTip.text: i18n("Remove this URL")
+                    }
+                }
+
+                // Wrap the grouped column in a plain Item. A QtQuick.Layouts
+                // ColumnLayout used DIRECTLY as a Card/Control contentItem races
+                // the Card's own sizing of its contentItem, producing an
+                // implicitHeight binding loop. The loop "settles" by dropping a
+                // child's height — which is exactly why expanding one card's
+                // section made OTHER cards clip their last (Widget) section. The
+                // Item decouples them: Item.implicitHeight follows the column
+                // one-way, the Card sizes the Item, and the column sizes itself
+                // by width-anchors only. (KDE's AbstractCard docs recommend this
+                // very wrap.)
+                contentItem: Item {
+                    implicitHeight: contentCol.implicitHeight
+
+                    ColumnLayout {
+                        id: contentCol
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
                         spacing: Kirigami.Units.smallSpacing
+
+                    // ---- Source group (always visible) ----
+                    Kirigami.Heading {
+                        Layout.fillWidth: true
+                        level: 5
+                        text: i18n("Source")
+                    }
                         QQC.TextField {
                             Layout.fillWidth: true
                             placeholderText: i18n("Label (e.g. CPU load)")
@@ -477,19 +668,29 @@ KCM.SimpleKCM {
                             }
                         }
 
-                        // Thumbnail mode. Applied ONLY to the panel-slot
-                        // mini-view, NOT the popup. Preset list comes from
-                        // the delegate-scoped `thumbModePresets` binding,
-                        // which filters out the uPlot-specific chartOnly /
-                        // chartWithAxes presets when the URL doesn't look
-                        // like a Grafana embed.
+                    Kirigami.Separator {
+                        Layout.fillWidth: true
+                        // Between-group rhythm (KDE FormHeader): more air above
+                        // (separating from the previous group), tighter below
+                        // (the separator belongs to the section header under it).
+                        Layout.topMargin: Kirigami.Units.largeSpacing
+                        Layout.bottomMargin: Kirigami.Units.smallSpacing
+                    }
+
+                    // ---- Thumbnail group (collapsible, collapsed by default).
+                    // Applied ONLY to the panel-slot mini-view, NOT the popup.
+                    // Preset list comes from the delegate-scoped
+                    // `thumbModePresets` binding, which filters out the
+                    // uPlot-specific chartOnly / chartWithAxes presets when the
+                    // URL doesn't look like a Grafana embed. ----
+                    CollapsibleSection {
+                        Layout.fillWidth: true
+                        title: i18n("Thumbnail (panel slot)")
+                        summary: page._displayForThumbMode(thumbModePresets, thumbMode)
+
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: Kirigami.Units.smallSpacing
-                            QQC.Label {
-                                text: i18n("Thumbnail (panel slot):")
-                                color: Kirigami.Theme.disabledTextColor
-                            }
                             QQC.ComboBox {
                                 id: thumbModeCombo
                                 Layout.fillWidth: true
@@ -549,6 +750,296 @@ KCM.SimpleKCM {
                             placeholderText: i18n("e.g. .u-wrap, canvas, [data-testid='data-testid panel content']")
                             text: thumbSelector
                             onEditingFinished: page._setRowField(index, "thumbSelector", text)
+                            // Swallow Return/Enter so the KCM dialog's
+                            // default-button (Apply + Close) doesn't
+                            // dismiss the window mid-edit. Same fix as
+                            // newKeywordField; numpad Enter raises
+                            // Qt.Key_Enter separately from the main
+                            // Return key, so both must be handled.
+                            Keys.onReturnPressed: (event) => {
+                                page._setRowField(index, "thumbSelector", text);
+                                event.accepted = true;
+                            }
+                            Keys.onEnterPressed: (event) => {
+                                page._setRowField(index, "thumbSelector", text);
+                                event.accepted = true;
+                            }
+                        }
+
+                        // Scale mode for the matched element. Engaged
+                        // only for custom-selector mode; the Grafana
+                        // canvas-blit and fullPanel paths handle sizing
+                        // implicitly and would be broken by a transform
+                        // (uPlot redraw + blurry-pixel artefacts).
+                        // See main.qml:applyThumbCrop for the
+                        // mode-gated forwarding.
+                        RowLayout {
+                            Layout.fillWidth: true
+                            visible: thumbMode === "custom"
+                            spacing: Kirigami.Units.smallSpacing
+                            QQC.Label {
+                                text: i18n("Scale:")
+                                color: Kirigami.Theme.disabledTextColor
+                            }
+                            QQC.ComboBox {
+                                id: scaleModeCombo
+                                Layout.fillWidth: true
+                                readonly property var presets: [
+                                    { value: "fit",      display: i18n("Fit (contain) — upscale smaller content") },
+                                    { value: "original", display: i18n("Original size — show element at natural size") },
+                                    { value: "stretch",  display: i18n("Stretch (fill) — outer box fills the slot") }
+                                ]
+                                model: presets
+                                textRole: "display"
+                                valueRole: "value"
+                                currentIndex: {
+                                    const idx = presets.findIndex(x => x.value === thumbScaleMode);
+                                    return idx >= 0 ? idx : 0;
+                                }
+                                onActivated: _ => page._setRowField(index, "thumbScaleMode", presets[currentIndex].value)
+                                QQC.ToolTip.visible: hovered
+                                QQC.ToolTip.delay: 600
+                                QQC.ToolTip.text: i18n(
+                                    "How the matched element is sized in the panel slot.\n\n"
+                                  + "  • Fit       — measure intrinsic size; upscale aspect-preserved\n"
+                                  + "                until it fills the slot. Skipped when content\n"
+                                  + "                already overflows (let overflow:auto scroll).\n"
+                                  + "  • Original  — element rendered at its natural size, top-left\n"
+                                  + "                anchored. Siblings still hidden.\n"
+                                  + "  • Stretch   — element's outer box sized 100vw × 100vh. Best\n"
+                                  + "                for responsive widgets like Grafana panels.")
+                                NoWheel {}
+                                property bool _popupWheelHooked: false
+                                Component.onCompleted: page._hookComboPopupWheel(scaleModeCombo, urlList)
+                            }
+                        }
+
+                        // Live keyword-exclusion chip list. CropEngine
+                        // scans the thumbnail's scope on every observer
+                        // tick + 3s safety poll and emits hit transitions
+                        // (main.qml setRuntimeExcluded). The cycle skips
+                        // this URL while a chip's pattern is on screen.
+                        // Visible whenever the row renders live content;
+                        // hidden for text / icon / excluded.
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            visible: thumbMode === "chartOnly"
+                                  || thumbMode === "chartWithAxes"
+                                  || thumbMode === "custom"
+                                  || thumbMode === "fullPanel"
+                            spacing: Kirigami.Units.smallSpacing
+                            QQC.Label {
+                                text: i18n("Exclude from rotation when present:")
+                                color: Kirigami.Theme.disabledTextColor
+                            }
+                            // Parsed JS array from the JSON-stringified
+                            // ListModel field. Recomputed on every
+                            // thumbExcludeKeywords write so add/remove
+                            // re-renders the chip list immediately.
+                            readonly property var parsedKeywords: {
+                                try {
+                                    const v = JSON.parse(thumbExcludeKeywords || "[]");
+                                    return Array.isArray(v) ? v : [];
+                                } catch (e) { return []; }
+                            }
+                            Flow {
+                                Layout.fillWidth: true
+                                spacing: Kirigami.Units.largeSpacing
+                                Repeater {
+                                    model: parent.parent.parsedKeywords
+                                    delegate: Rectangle {
+                                        id: chip
+                                        // The chip-repeater's index shadows
+                                        // urlRow.index, so anything that
+                                        // needs the URL-row index must use
+                                        // `urlRow.index` explicitly. Without
+                                        // that, _removeKeyword/_addKeyword
+                                        // operate on the WRONG row (the
+                                        // chip's position in the array).
+                                        required property int index
+                                        required property string modelData
+                                        readonly property bool editHover: bodyMA.containsMouse
+                                        readonly property bool deleteHover: deleteMA.containsMouse
+                                        radius: Kirigami.Units.smallSpacing
+                                        color: deleteHover
+                                            ? Qt.rgba(Kirigami.Theme.negativeTextColor.r,
+                                                      Kirigami.Theme.negativeTextColor.g,
+                                                      Kirigami.Theme.negativeTextColor.b, 0.18)
+                                            : editHover
+                                              ? Qt.rgba(Kirigami.Theme.highlightColor.r,
+                                                        Kirigami.Theme.highlightColor.g,
+                                                        Kirigami.Theme.highlightColor.b, 0.32)
+                                              : Qt.rgba(Kirigami.Theme.highlightColor.r,
+                                                        Kirigami.Theme.highlightColor.g,
+                                                        Kirigami.Theme.highlightColor.b, 0.18)
+                                        border.color: Kirigami.Theme.highlightColor
+                                        border.width: 1
+                                        // Height pinned to chipLabel's font line plus ~6px of
+                                        // vertical padding each side, so the chip reads as a
+                                        // comfortable pill rather than a tight outline. Width =
+                                        // label + × box + (8px left pad, ~8px gap before the ×,
+                                        // 4px right pad).
+                                        implicitHeight: chipLabel.implicitHeight
+                                                      + Kirigami.Units.largeSpacing + Kirigami.Units.smallSpacing
+                                        implicitWidth: chipLabel.implicitWidth
+                                                     + deleteBtn.implicitWidth
+                                                     + Kirigami.Units.largeSpacing * 2
+                                                     + Kirigami.Units.smallSpacing
+                                        // Edit hint
+                                        QQC.ToolTip.visible: bodyMA.containsMouse && !deleteHover
+                                        QQC.ToolTip.delay: 600
+                                        QQC.ToolTip.text: i18n("Click to edit (loads the pattern into the input below); click × to delete.")
+                                        // Edit-zone hit target: covers the
+                                        // label, NOT the × button. Clicking
+                                        // copies the chip's text into the
+                                        // sibling input field and removes
+                                        // the chip — the user types over
+                                        // their edit and re-adds.
+                                        MouseArea {
+                                            id: bodyMA
+                                            anchors.left: parent.left
+                                            anchors.top: parent.top
+                                            anchors.bottom: parent.bottom
+                                            anchors.right: deleteBtn.left
+                                            hoverEnabled: true
+                                            cursorShape: Qt.IBeamCursor
+                                            onClicked: {
+                                                // Safety net: if the user
+                                                // had typed something in
+                                                // the input before
+                                                // clicking, commit it
+                                                // first so click-to-edit
+                                                // doesn't silently drop
+                                                // their work. Duplicate
+                                                // entries are a no-op in
+                                                // _addKeyword.
+                                                if (newKeywordField.text.length > 0
+                                                    && newKeywordField.text !== modelData) {
+                                                    page._addKeyword(urlRow.index, newKeywordField.text);
+                                                }
+                                                newKeywordField.text = modelData;
+                                                newKeywordField.forceActiveFocus();
+                                                newKeywordField.cursorPosition = newKeywordField.text.length;
+                                                page._removeKeyword(urlRow.index, modelData);
+                                            }
+                                        }
+                                        // The label sits inside the edit
+                                        // zone so its visible bounds match
+                                        // the hit area.
+                                        QQC.Label {
+                                            id: chipLabel
+                                            anchors.left: parent.left
+                                            anchors.leftMargin: Kirigami.Units.largeSpacing
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            text: modelData
+                                            textFormat: Text.PlainText
+                                            color: Kirigami.Theme.textColor
+                                            font.family: "monospace"
+                                            verticalAlignment: Text.AlignVCenter
+                                        }
+                                        // Delete-zone: a plain × glyph in
+                                        // an Item with its own MouseArea.
+                                        // Plain text avoids icon-theme
+                                        // dependency (the prior
+                                        // edit-delete-remove icon name
+                                        // isn't on every theme — silent
+                                        // miss = the ugly placeholder you
+                                        // saw in the screenshot).
+                                        Item {
+                                            id: deleteBtn
+                                            anchors.right: parent.right
+                                            anchors.top: parent.top
+                                            anchors.bottom: parent.bottom
+                                            anchors.rightMargin: Kirigami.Units.smallSpacing
+                                            implicitWidth: Kirigami.Units.iconSizes.smallMedium
+                                            QQC.Label {
+                                                anchors.centerIn: parent
+                                                text: "×"
+                                                color: chip.deleteHover
+                                                    ? Kirigami.Theme.negativeTextColor
+                                                    : Kirigami.Theme.disabledTextColor
+                                                font.pixelSize: Math.round(chipLabel.font.pixelSize * 1.4)
+                                                font.bold: chip.deleteHover
+                                            }
+                                            MouseArea {
+                                                id: deleteMA
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: page._removeKeyword(urlRow.index, modelData)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: Kirigami.Units.smallSpacing
+                                QQC.TextField {
+                                    id: newKeywordField
+                                    Layout.fillWidth: true
+                                    placeholderText: i18n("e.g. No active streams  or  /^Error: \\d+/i")
+                                    // Swallow the Return/Enter key in the
+                                    // TextField scope so it adds the chip
+                                    // WITHOUT propagating to the KCM dialog
+                                    // (whose default button is Apply &
+                                    // Close — Enter would otherwise commit
+                                    // the whole dialog and dismiss the
+                                    // window). `event.accepted = true`
+                                    // stops the bubble. Both onReturnPressed
+                                    // and onEnterPressed are needed —
+                                    // numeric-keypad Enter raises Qt.Key_Enter
+                                    // separately from the main Return key.
+                                    Keys.onReturnPressed: (event) => {
+                                        if (text.length > 0) {
+                                            page._addKeyword(urlRow.index, text);
+                                            text = "";
+                                        }
+                                        event.accepted = true;
+                                    }
+                                    Keys.onEnterPressed: (event) => {
+                                        if (text.length > 0) {
+                                            page._addKeyword(urlRow.index, text);
+                                            text = "";
+                                        }
+                                        event.accepted = true;
+                                    }
+                                }
+                                QQC.ToolButton {
+                                    text: i18n("Add")
+                                    icon.name: "list-add"
+                                    display: QQC.AbstractButton.TextBesideIcon
+                                    enabled: newKeywordField.text.length > 0
+                                    onClicked: {
+                                        page._addKeyword(urlRow.index, newKeywordField.text);
+                                        newKeywordField.text = "";
+                                    }
+                                }
+                            }
+                            QQC.Label {
+                                Layout.fillWidth: true
+                                text: i18n("Substring match by default (case-insensitive). Wrap in /…/ for regex; trailing flags supported (e.g. /down|offline/i). Click a chip to edit it.")
+                                wrapMode: Text.WordWrap
+                                color: Kirigami.Theme.disabledTextColor
+                                font.pixelSize: Kirigami.Theme.defaultFont.pixelSize - 1
+                            }
+                        }
+
+                        // Per-URL opt-IN for the panel-slot label overlay
+                        // (replaces the old Display-tab global toggle + per-
+                        // URL "Hide tab label" double-negative). Visible for
+                        // every mode whose thumbnail can carry the overlay
+                        // (i.e. anything except `excluded`, which has no
+                        // slot content at all).
+                        QQC.CheckBox {
+                            Layout.fillWidth: true
+                            visible: thumbMode !== "excluded"
+                            text: i18n("Display tab label on this thumbnail")
+                            checked: thumbShowLabel
+                            onToggled: page._setRowField(index, "thumbShowLabel", checked)
+                            QQC.ToolTip.visible: hovered
+                            QQC.ToolTip.delay: 600
+                            QQC.ToolTip.text: i18n("When enabled, the URL's label is overlaid as a small semi-transparent bar in the top-left of this tab's panel-slot thumbnail. Leave off for tabs whose visual is self-explanatory (a Grafana panel that already paints its own title, a single-icon mode, etc.).")
                         }
 
                         // `text` mode follow-up: the panel slot renders this
@@ -619,37 +1110,44 @@ KCM.SimpleKCM {
                             color: Kirigami.Theme.disabledTextColor
                             font.pixelSize: Kirigami.Theme.defaultFont.pixelSize - 1
                         }
+                    }
 
-                        // Widget (popup) crop. Independent of the thumbnail
-                        // selector — same engine (CropEngine.js generic
-                        // isolation path), different scope. Use for sites
-                        // where the popup should show one panel/card from a
-                        // larger dashboard. Grafana presets are thumbnail-
-                        // only (canvas-pixel-blit doesn't help an
-                        // interactive popup), so the popup combo offers just
-                        // "Full page" vs "Custom CSS selector".
+                    Kirigami.Separator {
+                        Layout.fillWidth: true
+                        // Between-group rhythm (KDE FormHeader): more air above
+                        // (separating from the previous group), tighter below
+                        // (the separator belongs to the section header under it).
+                        Layout.topMargin: Kirigami.Units.largeSpacing
+                        Layout.bottomMargin: Kirigami.Units.smallSpacing
+                    }
+
+                    // ---- Popup group (collapsible, collapsed by default).
+                    // Widget (popup) crop, independent of the thumbnail
+                    // selector — same engine (CropEngine.js generic isolation
+                    // path), different scope. Use for sites where the popup
+                    // should show one panel/card from a larger dashboard.
+                    // Grafana presets are thumbnail-only (canvas-pixel-blit
+                    // doesn't help an interactive popup), so the popup combo
+                    // offers just "Full page" vs "Custom CSS selector". ----
+                    CollapsibleSection {
+                        Layout.fillWidth: true
+                        title: i18n("Widget (popup)")
+                        summary: page._displayForPopupMode(popupMode)
+
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: Kirigami.Units.smallSpacing
-                            QQC.Label {
-                                text: i18n("Widget (popup):")
-                                color: Kirigami.Theme.disabledTextColor
-                            }
                             QQC.ComboBox {
                                 id: popupModeCombo
                                 Layout.fillWidth: true
-                                readonly property var presets: [
-                                    { value: "fullPanel", display: i18n("Full page (no crop)") },
-                                    { value: "custom",    display: i18n("Custom CSS selector…") }
-                                ]
-                                model: presets
+                                model: popupModePresets
                                 textRole: "display"
                                 valueRole: "value"
                                 currentIndex: {
-                                    const idx = presets.findIndex(x => x.value === popupMode);
+                                    const idx = popupModePresets.findIndex(x => x.value === popupMode);
                                     return idx >= 0 ? idx : 0;
                                 }
-                                onActivated: _ => page._setRowField(index, "popupMode", presets[currentIndex].value)
+                                onActivated: _ => page._setRowField(index, "popupMode", popupModePresets[currentIndex].value)
                                 QQC.ToolTip.visible: hovered
                                 QQC.ToolTip.delay: 600
                                 QQC.ToolTip.text: i18n(
@@ -670,24 +1168,19 @@ KCM.SimpleKCM {
                             placeholderText: i18n("e.g. .mb-8, [data-testid='dashboard'], #main")
                             text: popupSelector
                             onEditingFinished: page._setRowField(index, "popupSelector", text)
+                            // See customThumbSelector for the Enter-swallow
+                            // rationale — KCM dialog otherwise closes on
+                            // Return.
+                            Keys.onReturnPressed: (event) => {
+                                page._setRowField(index, "popupSelector", text);
+                                event.accepted = true;
+                            }
+                            Keys.onEnterPressed: (event) => {
+                                page._setRowField(index, "popupSelector", text);
+                                event.accepted = true;
+                            }
                         }
                     }
-
-                    ColumnLayout {
-                        QQC.ToolButton {
-                            icon.name: "go-up"
-                            enabled: index > 0
-                            onClicked: { listModel.move(index, index - 1, 1); store.serialize() }
-                        }
-                        QQC.ToolButton {
-                            icon.name: "go-down"
-                            enabled: index < listModel.count - 1
-                            onClicked: { listModel.move(index, index + 1, 1); store.serialize() }
-                        }
-                        QQC.ToolButton {
-                            icon.name: "edit-delete"
-                            onClicked: { listModel.remove(index); store.serialize() }
-                        }
                     }
                 }
             }
@@ -725,7 +1218,13 @@ KCM.SimpleKCM {
         anchors.centerIn: parent
         modal: true
         standardButtons: QQC.Dialog.Cancel | QQC.Dialog.Ok
-        width: Math.min(parent.width * 0.9, Kirigami.Units.gridUnit * 42)
+        // Guard against the binding evaluating before `parent` is installed
+        // — without the null check Qt fires
+        // `TypeError: Cannot read property 'width' of null` during early
+        // KCM layout. The fallback width matches the upper cap so the math
+        // still produces a sensible value when parent isn't ready yet.
+        width: Math.min((parent ? parent.width : Kirigami.Units.gridUnit * 42) * 0.9,
+                        Kirigami.Units.gridUnit * 42)
 
         // Pin PlainText on the title-rendering Label. The default QQC.Dialog
         // header is a Label whose `textFormat` is `Text.AutoText`; `editingLabel`

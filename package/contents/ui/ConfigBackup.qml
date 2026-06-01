@@ -29,7 +29,6 @@ KCM.SimpleKCM {
     property alias cfg_themeMode: _themeMode.text
     property alias cfg_showTabBar: _showTabBar.checked
     property alias cfg_compactPreviewEnabled: _compactEnabled.checked
-    property alias cfg_compactPreviewShowLabel: _compactLabel.checked
     property alias cfg_compactPreviewLongAxisPx: _compactAxis.value
     property alias cfg_popupPinned: _popupPinned.checked
     property alias cfg_authProfilesJson: _authProfiles.text
@@ -42,6 +41,11 @@ KCM.SimpleKCM {
     // payload re-triggers main.qml's one-shot migrations cleanly).
     property alias cfg_compactPreviewMigrated: _previewMigrated.checked
     property alias cfg_authProfilesPreemptMigrated: _preemptMigrated.checked
+    property alias cfg_thumbLabelMigrated: _thumbLabelMigrated.checked
+    // DEPRECATED-0.6.0 alias kept only so a legacy backup that carries
+    // the key can still write into the (now read-only) main.xml entry —
+    // migrateThumbShowLabel reads it on next widget load. Not exported.
+    property alias cfg_compactPreviewShowLabel: _compactLabel.checked
 
     // Off-screen scratch items that own the alias backing values. Using
     // hidden controls (rather than `property var`) lets the KCM treat
@@ -67,6 +71,7 @@ KCM.SimpleKCM {
         QQC.SpinBox      { id: _discard;        from: 1;     to: 86400 }
         QQC.CheckBox     { id: _previewMigrated }
         QQC.CheckBox     { id: _preemptMigrated }
+        QQC.CheckBox     { id: _thumbLabelMigrated }
     }
 
     // Build a flat key->value map from the current alias state. This is
@@ -82,7 +87,6 @@ KCM.SimpleKCM {
             themeMode:                 cfg_themeMode,
             showTabBar:                cfg_showTabBar,
             compactPreviewEnabled:     cfg_compactPreviewEnabled,
-            compactPreviewShowLabel:   cfg_compactPreviewShowLabel,
             compactPreviewLongAxisPx:  cfg_compactPreviewLongAxisPx,
             popupPinned:               cfg_popupPinned,
             authProfilesJson:          cfg_authProfilesJson,
@@ -106,6 +110,7 @@ KCM.SimpleKCM {
         // main.qml's one-shot migrations on next widget load.
         page.cfg_compactPreviewMigrated = false;
         page.cfg_authProfilesPreemptMigrated = false;
+        page.cfg_thumbLabelMigrated = false;
     }
 
     FileDialog {
