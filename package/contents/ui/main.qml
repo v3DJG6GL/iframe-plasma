@@ -742,13 +742,25 @@ PlasmoidItem {
     // auto-cycle steps past indices that appear here. NOT persisted; on
     // reload the next CropEngine apply re-emits the live state within ~250ms.
     //
-    // Plain object {tabIdx: true}. cycleTimer reads imperatively inside
-    // its handler, so we do NOT depend on a binding invalidation here —
-    // the auto-generated _runtimeExcludedChanged NOTIFY exists for QML
-    // book-keeping but no consumer subscribes to it. setRuntimeExcluded
-    // mutates the same object in place, which is intentional and safe
-    // because the read path doesn't cache.
+    // Plain object {tabIdx: <exclusion timestamp in ms>}. The value is the
+    // Date.now() at which the exclusion was recorded; cycleTimer expires
+    // entries older than _runtimeExclusionRecheckMs (see below). nextCycleTabIndex
+    // only tests truthiness, so the timestamp reads as "excluded" there.
+    // cycleTimer reads imperatively inside its handler, so we do NOT depend
+    // on a binding invalidation here — the auto-generated _runtimeExcludedChanged
+    // NOTIFY exists for QML book-keeping but no consumer subscribes to it.
+    // setRuntimeExcluded mutates the same object in place, which is intentional
+    // and safe because the read path doesn't cache.
     property var _runtimeExcluded: ({})
+
+    // A tab that gets excluded stops being the current thumbnail and (after
+    // webViewFreezeDelaySec) freezes, so its CropEngine can no longer emit
+    // hit=false once the keyword clears — left unbounded it would stay
+    // excluded for the whole session. cycleTimer expires an exclusion this
+    // many ms after it was recorded, letting the tab rejoin the rotation,
+    // re-render, and re-emit its live state; if the keyword still matches it
+    // re-excludes after one brief reappearance.
+    readonly property int _runtimeExclusionRecheckMs: 120000
 
     // Idempotent setter for the runtime-exclusion map. Called from each
     // miniView's onJavaScriptConsoleMessage handler when the
@@ -761,7 +773,7 @@ PlasmoidItem {
         const was = !!root._runtimeExcluded[tabIdx];
         if (was === !!hit) return;
         if (hit) {
-            root._runtimeExcluded[tabIdx] = true;
+            root._runtimeExcluded[tabIdx] = Date.now();
         } else {
             delete root._runtimeExcluded[tabIdx];
         }
@@ -1115,10 +1127,23 @@ PlasmoidItem {
                  && root.compactObservable
         repeat: true
         onTriggered: {
+            // Expire stale runtime exclusions first: a frozen, non-current
+            // excluded tab can never emit hit=false on its own, so without
+            // this it would stay excluded for the session even after its
+            // keyword clears. Dropping the entry lets the tab rejoin the
+            // rotation and re-emit its live state on re-render (it re-excludes
+            // if the keyword still matches). See _runtimeExclusionRecheckMs.
+            const now = Date.now();
+            const ttl = root._runtimeExclusionRecheckMs;
+            for (const k in root._runtimeExcluded) {
+                if (now - root._runtimeExcluded[k] >= ttl)
+                    delete root._runtimeExcluded[k];
+            }
             // Pass the live runtime-exclusion map so any tab whose
             // configured keyword is currently visible on its rendered
             // thumbnail is skipped this tick. The map is plain-object
-            // {idx: true}; UrlUtils duck-types Set vs object.
+            // {idx: timestampMs}; UrlUtils duck-types Set vs object and
+            // only tests truthiness.
             const next = UrlUtils.nextCycleTabIndex(
                 root.currentTabIndex, root.tabs, root._runtimeExcluded);
             if (next >= 0) root.advanceCycleTab(next);

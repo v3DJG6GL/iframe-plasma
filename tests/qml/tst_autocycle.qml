@@ -98,6 +98,15 @@ TestCase {
         const live = { 1: true };  // tab 1 currently shows a keyword
         compare(U.nextCycleTabIndex(0, tabs, live), 2);
     }
+    function test_runtimeExcluded_timestampValue_skipsLiveExcluded() {
+        // main.qml stores the exclusion time as the map value
+        // ({idx: Date.now()}) so cycleTimer can expire stale entries;
+        // nextCycleTabIndex only tests truthiness, so a millisecond
+        // timestamp must read as "excluded" exactly like `true`.
+        const tabs = [_ok("a"), _ok("b"), _ok("c")];
+        const live = { 1: 1717200000000 };  // ms timestamp, truthy
+        compare(U.nextCycleTabIndex(0, tabs, live), 2);
+    }
     function test_runtimeExcluded_setShape_skipsLiveExcluded() {
         // Set form — duck-typed via `.has`.
         const tabs = [_ok("a"), _ok("b"), _ok("c")];
