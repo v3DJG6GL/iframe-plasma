@@ -1247,10 +1247,30 @@ KCM.SimpleKCM {
             visible: text.length > 0
         }
 
-        // Reset editingIndex on any close so the next open() starts fresh.
+        // Reset all dialog state on any close so the next open() starts fresh.
         // Without this, OK in Edit mode would leave editingIndex set and a
         // subsequent "From Grafana URL…" click would still be in Edit mode.
-        onClosed: { editingIndex = -1; editingLabel = ""; }
+        // openForEdit imperatively assigns the embed controls below (which
+        // permanently breaks their declarative default bindings in QML), so a
+        // subsequent Add would inherit the previous Edit's time range / kiosk /
+        // theme / refresh / branding state instead of the intended defaults.
+        // The paste fields likewise persist across a cancelled or
+        // validation-failed Add. Restore every control to its declared default
+        // and clear the paste fields here, on the single shared dialog.
+        onClosed: {
+            editingIndex = -1;
+            editingLabel = "";
+            pastedUrl.text = "";
+            pastedLabel.text = "";
+            convertDSolo.checked     = true;
+            timeRangeCombo.currentIndex = 7;   // 24h (Last 24 hours)
+            addKiosk.checked         = true;
+            addTheme.checked         = true;
+            addRefresh.checked       = true;
+            refreshInterval.value    = 30;
+            addHideLogo.checked      = true;
+            addHidePanelMenu.checked = true;
+        }
 
         // Time-range presets — see https://grafana.com/docs/grafana/latest/dashboards/time-range-controls/
         readonly property var timeRangePresets: [
@@ -1551,7 +1571,8 @@ KCM.SimpleKCM {
             const lbl = deriveLabel(vpMatch ? vpMatch[1] : null);
             listModel.append({ label: lbl, url: out, authProfileId: "", thumbMode: "chartOnly", thumbSelector: "", thumbText: "", thumbIconName: "", thumbTimeRange: "", thumbScaleMode: "fit", thumbExcludeKeywords: "[]", thumbShowLabel: false, popupMode: "fullPanel", popupSelector: "" });
             store.serialize();
-            pastedUrl.text = ""; pastedLabel.text = "";
+            // Paste fields + control defaults are reset centrally in onClosed
+            // (accept() closes the dialog), covering this path and cancel alike.
         }
     }
 }
