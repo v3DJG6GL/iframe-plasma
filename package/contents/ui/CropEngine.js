@@ -36,9 +36,111 @@
  */
 .pragma library
 
+// Shared teardown sequence inlined verbatim by _CLEAR_BODY (sole job:
+// tear down) and prepended into _APPLY_BODY (idempotent re-apply: clean
+// any prior install before laying down a new one). Per-line try/catch on
+// observer disconnects so a stale-ref failure doesn't abort the rest of
+// the teardown. `var` (not `let`/`const`) so each enclosing IIFE can
+// redeclare these names without TDZ surprises in nested scopes.
+//
+// Declared at the TOP of the file (above _APPLY_BODY) so the template
+// literal that builds _APPLY_BODY can substitute it — moving the apply
+// path to a "clear-then-install" idiom that's safe to re-call without
+// fighting a previous install's observers / data-ifp-* / inline styles.
+const _TEARDOWN_BODY = `
+    if (window.__ifpThumbObserver)     try { window.__ifpThumbObserver.disconnect(); }     catch(e) {}
+    if (window.__ifpThumbWrapObserver) try { window.__ifpThumbWrapObserver.disconnect(); } catch(e) {}
+    if (window.__ifpThumbResize)       try { window.__ifpThumbResize.disconnect(); }       catch(e) {}
+    if (window.__ifpThumbInterval)     clearInterval(window.__ifpThumbInterval);
+    // Cancel any rAF queued by schedule() — disconnecting the observer
+    // that scheduled it does NOT cancel an already-queued frame. Without
+    // this, the queued callback fires AFTER teardown, calls apply(), and
+    // re-sets data-ifp-isolate ("page flashes full then snaps back").
+    if (window.__ifpThumbRaf) { try { cancelAnimationFrame(window.__ifpThumbRaf); } catch(e) {} }
+    window.__ifpThumbObserver = null;
+    window.__ifpThumbWrapObserver = null;
+    window.__ifpThumbResize = null;
+    window.__ifpThumbInterval = null;
+    window.__ifpThumbRaf = 0;
+    window.__ifpThumbSchedule = null;
+    document.documentElement.removeAttribute('data-ifp-thumb');
+    document.documentElement.removeAttribute('data-ifp-isolate');
+    document.documentElement.removeAttribute('data-ifp-scale');
+    // Restore the fit-mode target's inline styles so a clear leaves the
+    // original page visually intact (no half-scaled element after the
+    // user wipes the selector).
+    var _ifpFit = window.__ifpFitTarget;
+    if (_ifpFit && _ifpFit.style) {
+        try {
+            _ifpFit.style.transform = '';
+            _ifpFit.style.transformOrigin = '';
+            _ifpFit.style.width = '';
+            _ifpFit.style.height = '';
+        } catch (e) {}
+    }
+    window.__ifpFitTarget = null;
+    var _ifpKeeps = document.querySelectorAll('[data-ifp-keep="1"]');
+    for (var _ifpKI = 0; _ifpKI < _ifpKeeps.length; _ifpKI++) _ifpKeeps[_ifpKI].removeAttribute('data-ifp-keep');
+    var _ifpTargets = document.querySelectorAll('[data-ifp-target="1"]');
+    for (var _ifpTI = 0; _ifpTI < _ifpTargets.length; _ifpTI++) _ifpTargets[_ifpTI].removeAttribute('data-ifp-target');
+    // (Keyword hit=false emit lives in _CLEAR_BODY, not here — _APPLY_BODY
+    // also inlines this teardown for idempotent re-apply, and re-emitting
+    // hit=false there would flap the runtime exclusion state and break
+    // tests that assert "empty keywords list emits no [ifp-keyword] log".
+    // _APPLY_BODY's own keyword scan re-emits hit=true|false fresh.)
+    var _ifpRmById = function(id) {
+        var n = document.getElementById(id);
+        if (n && n.parentNode) n.parentNode.removeChild(n);
+    };
+    _ifpRmById('ifp-thumb-display');
+    _ifpRmById('ifp-thumb-style');
+    _ifpRmById('ifp-miss-banner');
+`;
+
 // The IIFE body is selector-agnostic; only the trailing call-args
 // string is appended per invocation. Built once per import.
-const _APPLY_BODY = `(function(sel){
+//
+// Signature: function(sel, opts). \`opts\` is optional — when absent the
+// IIFE behaves identically to the legacy single-arg form (stretch
+// scaling, no keyword scan). Recognised opts fields:
+//   scaleMode: "fit" | "original" | "stretch"   (default "stretch")
+//   keywords:  Array<string>                    (default [])
+// Both are forwarded verbatim from buildApplyJs(selector, opts).
+const _APPLY_BODY = `(function(sel, opts){
+  // Tear down any previous CropEngine state on this page BEFORE installing
+  // the new selector. Without this, re-applying with a different selector
+  // (picker save with a new pick, KCM Apply that swaps from selector A to
+  // selector B) leaves the OLD MutationObserver + ResizeObserver + interval
+  // running — they keep re-isolating to the OLD element, fighting the new
+  // selector's isolation, and the thumbnail visibly sticks at the OLD crop.
+  // _TEARDOWN_BODY uses \`var\` (not let/const) so it's safe to inline at the
+  // top of the IIFE without TDZ surprises in the apply body below. No-op
+  // when there's no prior state to tear down (idempotent + cheap).
+  try {${_TEARDOWN_BODY}} catch (e) { /* defensive: never abort the apply */ }
+  opts = opts || {};
+  // Normalise scale mode. Unknown/missing → "stretch" (legacy behavior).
+  var scaleMode = (opts.scaleMode === 'fit' || opts.scaleMode === 'original') ? opts.scaleMode : 'stretch';
+  // Compile keyword entries. Each entry is either:
+  //   { kind: 'regex', re: RegExp }      ← /pattern/flags? input
+  //   { kind: 'sub',   text: lc string } ← case-insensitive substring
+  // Malformed /regex/ falls through to literal substring so a typo doesn't
+  // silently disable the whole list.
+  var compiledKeywords = (function(){
+    var src = Array.isArray(opts.keywords) ? opts.keywords : [];
+    var out = [];
+    for (var i = 0; i < src.length; i++) {
+      var raw = String(src[i] || '').trim();
+      if (!raw) continue;
+      var m = raw.match(/^\\/(.+)\\/([gimsuy]*)$/);
+      if (m) {
+        try { out.push({ kind: 'regex', re: new RegExp(m[1], m[2]) }); continue; }
+        catch (e) { console.warn('[ifp-keyword] bad regex "' + raw + '": ' + e.message); }
+      }
+      out.push({ kind: 'sub', text: raw.toLowerCase() });
+    }
+    return out;
+  })();
+
   function ensureStyle() {
     if (document.getElementById('ifp-thumb-style')) return;
     const s = document.createElement('style');
@@ -61,7 +163,26 @@ const _APPLY_BODY = `(function(sel){
       'html[data-ifp-isolate="1"]{margin:0!important;padding:0!important;background:#181b1f!important;}',
       'html[data-ifp-isolate="1"] body{margin:0!important;padding:0!important;background:#181b1f!important;overflow:hidden!important;}',
       'html[data-ifp-isolate="1"] body > *:not([data-ifp-keep="1"]):not([data-ifp-target="1"]),html[data-ifp-isolate="1"] [data-ifp-keep="1"] > *:not([data-ifp-keep="1"]):not([data-ifp-target="1"]){display:none!important;}',
-      'html[data-ifp-isolate="1"] [data-ifp-target="1"]{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:100vw!important;max-height:100vh!important;margin:0!important;z-index:2147483647!important;overflow:auto!important;}'
+      // Target placement: three scale-mode variants. The element is
+      // always positioned fixed at the viewport top-left and elevated
+      // above the (hidden) sibling DOM via z-index.
+      //   • "stretch" (default / legacy) — outer box sized to viewport.
+      //     Responsive widgets like uPlot redraw to fit.
+      //   • "fit" — no width/height in CSS; JS measures intrinsic
+      //     content size and writes inline transform: scale(s) plus an
+      //     inverse width/height so the scaled box still covers the
+      //     viewport. Clear overflow rules so anything bigger than the
+      //     viewport stays scrollable.
+      //   • "original" — no size override; element stays at its
+      //     natural intrinsic size, anchored top-left. Operator-opt-in
+      //     for "show me what's there, don't manipulate".
+      // Legacy callers (no data-ifp-scale attr) fall through to the
+      // stretch rule via the trailing :not([data-ifp-scale]) clause,
+      // preserving identical behavior for the single-arg buildApplyJs
+      // call shape that existing JS tests assert.
+      'html[data-ifp-scale="stretch"] [data-ifp-target="1"],html[data-ifp-isolate="1"]:not([data-ifp-scale]) [data-ifp-target="1"]{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:100vw!important;max-height:100vh!important;margin:0!important;z-index:2147483647!important;overflow:auto!important;}',
+      'html[data-ifp-scale="fit"] [data-ifp-target="1"]{position:fixed!important;top:0!important;left:0!important;margin:0!important;z-index:2147483647!important;overflow:auto!important;}',
+      'html[data-ifp-scale="original"] [data-ifp-target="1"]{position:fixed!important;top:0!important;left:0!important;margin:0!important;z-index:2147483647!important;overflow:auto!important;}'
     ].join('');
     (document.head||document.documentElement).appendChild(s);
   }
@@ -154,6 +275,118 @@ const _APPLY_BODY = `(function(sel){
     }
     el.setAttribute('data-ifp-target', '1');
     document.documentElement.setAttribute('data-ifp-isolate', '1');
+    document.documentElement.setAttribute('data-ifp-scale', scaleMode);
+  }
+
+  // Fit-mode visual scaling. After isolation, measure the matched
+  // element's intrinsic content extent and apply a CSS transform that
+  // scales it up to fill the viewport, aspect-preserved. Skips when
+  // content already overflows (s <= 1) so overflow:auto stays useful.
+  //
+  // Cached on window.__ifpFitTarget so teardown can clear the inline
+  // styles on the right node even after the IIFE closure is gone.
+  // Idempotent re-runs (mutation observer → schedule → apply →
+  // applyFitTransform) re-measure each time; React re-renders or
+  // ResizeObserver-driven repaints adapt automatically.
+  function applyFitTransform(el) {
+    if (!el) return;
+    // Reset prior inline styles so measurement reflects intrinsic content,
+    // not a previous frame's scaled box.
+    el.style.transform = '';
+    el.style.transformOrigin = '';
+    el.style.width = '';
+    el.style.height = '';
+    // Force layout so scrollWidth/scrollHeight reflect post-reset state.
+    void el.offsetWidth;
+    var cw = el.scrollWidth;
+    var ch = el.scrollHeight;
+    var vw = window.innerWidth;
+    var vh = window.innerHeight;
+    if (cw <= 0 || ch <= 0 || vw <= 0 || vh <= 0) return;
+    var s = Math.min(vw / cw, vh / ch);
+    if (s <= 1.0001) {
+      // Content already overflows or matches the viewport — leave the
+      // element at its natural box; overflow:auto on the CSS rule will
+      // surface scrollbars on the rare oversize case.
+      window.__ifpFitTarget = el;
+      return;
+    }
+    el.style.transformOrigin = '0 0';
+    el.style.transform = 'scale(' + s + ')';
+    // Counter-size so the scaled element's visible box covers the viewport
+    // (a scale of s makes a w×h element appear (w*s)×(h*s); we want
+    // viewport-sized output, so the pre-scale box is viewport/s).
+    el.style.width  = (vw / s) + 'px';
+    el.style.height = (vh / s) + 'px';
+    window.__ifpFitTarget = el;
+    // Help responsive widgets (uPlot's ResizeObserver, embedded iframes)
+    // redraw at the post-scale CSS box. Cheap; no-op when nothing listens.
+    try { window.dispatchEvent(new Event('resize')); } catch (e) {}
+  }
+
+  // Compose the scope text for keyword scanning. Prefers the matched
+  // element's innerText so CSS-hidden banners do not falsely match;
+  // falls back to <body> when there is no matched element (e.g. mode
+  // is fullPanel or selector hasn't resolved yet). Concatenates the
+  // \`aria-label\` of any descendant carrying one so screen-reader-only
+  // states (e.g. "Alert: stream offline") are also detectable.
+  // innerText respects CSS visibility (preferred — hidden banners
+  // don't false-match in real Chromium WebEngine). Some environments
+  // (jsdom < ~22, detached / pre-layout nodes) return undefined/null
+  // instead; fall back to textContent there so the scan still works.
+  // Empty-string innerText IS respected (means the rendered content is
+  // genuinely empty, e.g. a banner intentionally hidden via display:none).
+  function getScanText() {
+    var root = matchedEl || document.body;
+    if (!root) return '';
+    var txt = '';
+    try {
+      var it = root.innerText;
+      if (typeof it !== 'string') txt = root.textContent || '';
+      else txt = it;
+    } catch (e) {
+      try { txt = root.textContent || ''; } catch (e2) { txt = ''; }
+    }
+    try {
+      var aria = root.querySelectorAll('[aria-label]');
+      for (var i = 0; i < aria.length; i++) {
+        var a = aria[i].getAttribute('aria-label');
+        if (a) txt += '\\n' + a;
+      }
+    } catch (e) {}
+    return txt;
+  }
+
+  // Last reported keyword-hit state. \`null\` means "no scan has run yet"
+  // — the first scan after apply always emits, so QML's _runtimeExcluded
+  // map gets seeded even when the first state is false. Closure-scoped
+  // so re-invocations of buildApplyJs reset transparently.
+  var lastKeywordHit = null;
+  function runKeywordScan() {
+    if (compiledKeywords.length === 0) {
+      // Keyword list empty (either initial state or user cleared it
+      // between applies). Emit a hit=false transition once if the
+      // previous state was true so QML drops the runtime exclusion.
+      if (lastKeywordHit === true) {
+        lastKeywordHit = false;
+        console.info('[ifp-keyword] hit=false');
+      }
+      return;
+    }
+    var text = getScanText();
+    var lc = text.toLowerCase();
+    var hit = false;
+    for (var i = 0; i < compiledKeywords.length; i++) {
+      var k = compiledKeywords[i];
+      if (k.kind === 'regex' ? k.re.test(text) : lc.indexOf(k.text) >= 0) {
+        hit = true;
+        break;
+      }
+    }
+    if (hit !== lastKeywordHit) {
+      lastKeywordHit = hit;
+      console.info('[ifp-keyword] hit=' + hit);
+    }
   }
 
   // Last matched element from apply(). schedule()'s rAF callback reads
@@ -186,6 +419,10 @@ const _APPLY_BODY = `(function(sel){
       cropAxes(el);
     } else {
       isolateElement(el);
+      // Fit-mode scaling runs after isolation so the element is in its
+      // post-isolation layout context (siblings hidden, parent kept).
+      // No-op for stretch/original modes — those rely on CSS alone.
+      if (scaleMode === 'fit') applyFitTransform(el);
     }
     matchedEl = el;
     return 'matched';
@@ -249,6 +486,11 @@ const _APPLY_BODY = `(function(sel){
         missStreak = 0;
         hideMissBanner();
       }
+      // Keyword scan rides on the same rAF tick — debounced naturally by
+      // the existing rAF coalescer + 3 s setInterval, so an SPA's burst
+      // re-renders collapse into a single scan. No-op when keywords are
+      // empty; transitions emit '[ifp-keyword] hit=…' for QML to consume.
+      runKeywordScan();
       const el = matchedEl;
       if (r === 'matched' && el && el !== lastEl) {
         lastEl = el;
@@ -294,49 +536,21 @@ const _APPLY_BODY = `(function(sel){
   return first === 'matched' ? 'matched-and-observing' : 'observing';
 })`;
 
-// Shared teardown sequence inlined verbatim by _CLEAR_BODY (sole job:
-// tear down) and the picker-start IIFE below (which then sets up the
-// picker overlay on a clean page). Per-line try/catch on observer
-// disconnects so a stale-ref failure doesn't abort the rest of the
-// teardown. `var` (not `let`/`const`) so each enclosing IIFE can
-// redeclare these names without TDZ surprises in nested scopes.
-const _TEARDOWN_BODY = `
-    if (window.__ifpThumbObserver)     try { window.__ifpThumbObserver.disconnect(); }     catch(e) {}
-    if (window.__ifpThumbWrapObserver) try { window.__ifpThumbWrapObserver.disconnect(); } catch(e) {}
-    if (window.__ifpThumbResize)       try { window.__ifpThumbResize.disconnect(); }       catch(e) {}
-    if (window.__ifpThumbInterval)     clearInterval(window.__ifpThumbInterval);
-    // Cancel any rAF queued by schedule() — disconnecting the observer
-    // that scheduled it does NOT cancel an already-queued frame. Without
-    // this, the queued callback fires AFTER teardown, calls apply(), and
-    // re-sets data-ifp-isolate ("page flashes full then snaps back").
-    if (window.__ifpThumbRaf) { try { cancelAnimationFrame(window.__ifpThumbRaf); } catch(e) {} }
-    window.__ifpThumbObserver = null;
-    window.__ifpThumbWrapObserver = null;
-    window.__ifpThumbResize = null;
-    window.__ifpThumbInterval = null;
-    window.__ifpThumbRaf = 0;
-    window.__ifpThumbSchedule = null;
-    document.documentElement.removeAttribute('data-ifp-thumb');
-    document.documentElement.removeAttribute('data-ifp-isolate');
-    var _ifpKeeps = document.querySelectorAll('[data-ifp-keep="1"]');
-    for (var _ifpKI = 0; _ifpKI < _ifpKeeps.length; _ifpKI++) _ifpKeeps[_ifpKI].removeAttribute('data-ifp-keep');
-    var _ifpTargets = document.querySelectorAll('[data-ifp-target="1"]');
-    for (var _ifpTI = 0; _ifpTI < _ifpTargets.length; _ifpTI++) _ifpTargets[_ifpTI].removeAttribute('data-ifp-target');
-    var _ifpRmById = function(id) {
-        var n = document.getElementById(id);
-        if (n && n.parentNode) n.parentNode.removeChild(n);
-    };
-    _ifpRmById('ifp-thumb-display');
-    _ifpRmById('ifp-thumb-style');
-    _ifpRmById('ifp-miss-banner');
-`;
-
 // Tears down all crop state (data attributes, observers, timers,
 // the overlay display canvas). Used when the popup-view selector
 // is cleared to restore the original page without a reload.
+// (The `_TEARDOWN_BODY` template literal it inlines lives at the top
+// of this file so `_APPLY_BODY` can also use it for idempotent
+// re-apply.)
 const _CLEAR_BODY = `(function(){
   try {
 ${_TEARDOWN_BODY}
+    // Emit a final keyword hit=false so QML drops any stale runtime
+    // exclusion for this tab; cheap and idempotent if no scan ran. Only
+    // here in _CLEAR_BODY (not in _TEARDOWN_BODY itself) — _APPLY_BODY
+    // also inlines the teardown for idempotent re-apply but does its own
+    // keyword scan that re-emits the correct hit state fresh.
+    try { console.info('[ifp-keyword] hit=false'); } catch (e) {}
     return 'cleared';
   } catch (e) { return 'clear-error: ' + e.message; }
 })()`;
@@ -556,8 +770,25 @@ ${_TEARDOWN_BODY}
 const _PICKER_POLL_BODY = "(window.__ifpPicked === undefined ? null : window.__ifpPicked)";
 const _PICKER_CLEAR_BODY = "(function(){ const v = window.__ifpPicked; window.__ifpPicked = null; return v; })()";
 
-function buildApplyJs(selector) {
-    return _APPLY_BODY + "(" + JSON.stringify(selector) + ")";
+// buildApplyJs(selector)             — legacy single-arg call shape.
+//                                       Emits `(IIFE)("sel")`; the IIFE
+//                                       parses opts as {} (stretch mode,
+//                                       no keyword scan). Preserved verbatim
+//                                       for the existing JS tests that
+//                                       assert the trailing call shape.
+// buildApplyJs(selector, opts)       — pass-through for {scaleMode,
+//                                       keywords}. Both fields are
+//                                       JSON-serialised at the boundary
+//                                       so no string interpolation lands
+//                                       in the IIFE body — same security
+//                                       posture as the single-arg form.
+function buildApplyJs(selector, opts) {
+    var call = "(" + JSON.stringify(selector);
+    if (opts !== undefined && opts !== null) {
+        call += "," + JSON.stringify(opts);
+    }
+    call += ")";
+    return _APPLY_BODY + call;
 }
 
 function buildClearJs() {

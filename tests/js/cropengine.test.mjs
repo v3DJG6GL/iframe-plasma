@@ -45,7 +45,9 @@ const ce = loadCropEngine();
 
 test("buildApplyJs returns IIFE-shaped JS appending selector arg", () => {
     const js = ce.buildApplyJs(".u-wrap > canvas");
-    assert.ok(js.startsWith("(function(sel){"));
+    // Signature is function(sel, opts) — opts is omitted from the call
+    // tail when the single-arg form is used (legacy parity).
+    assert.ok(js.startsWith("(function(sel, opts){"));
     assert.ok(js.endsWith('(".u-wrap > canvas")'),
         `expected to end with selector arg, got: ${js.slice(-60)}`);
 });
@@ -260,6 +262,241 @@ test("picker: poll returns null when nothing picked yet", () => {
     const polled = dom.window.eval(ce.buildPickerPollJs());
     assert.equal(polled, null);
 });
+
+// ============================================================
+// 3. Two-arg buildApplyJs(selector, opts) — feature 1 + 2 plumbing
+// ============================================================
+
+test("buildApplyJs: legacy single-arg shape unchanged (no opts)", () => {
+    // Pin the existing call shape: single-arg form emits `("sel")`
+    // with NO trailing opts. The IIFE inside treats missing opts as
+    // an empty object — stretch mode, no keyword scan.
+    const js = ce.buildApplyJs(".x");
+    assert.ok(js.endsWith('(".x")'),
+        `expected single-arg call, got: ${js.slice(-30)}`);
+});
+
+test("buildApplyJs: two-arg form appends JSON opts", () => {
+    const js = ce.buildApplyJs(".x", { scaleMode: "fit", keywords: ["No data"] });
+    assert.ok(js.includes('"scaleMode":"fit"'));
+    assert.ok(js.includes('"keywords":["No data"]'));
+    assert.ok(js.endsWith(")"));
+});
+
+test("buildApplyJs: opts with special chars are JSON-escaped", () => {
+    const js = ce.buildApplyJs(".x", { keywords: ['Error "503"', "/^x/"] });
+    // The full opts JSON is embedded as a literal — quotes inside
+    // are escaped per JSON, not concatenated.
+    assert.ok(js.includes('Error \\"503\\"'),
+        `expected JSON-escaped double-quote, got: ${js.slice(-200)}`);
+});
+
+test("apply: stretch is default scale mode for legacy callers", () => {
+    // No opts → data-ifp-scale should be "stretch" (legacy parity).
+    const { dom } = runApply(
+        "<!doctype html><html><body><div id='t'>x</div></body></html>",
+        "#t");
+    const scale = dom.window.document.documentElement.getAttribute("data-ifp-scale");
+    assert.equal(scale, "stretch");
+});
+
+test("apply: fit scale mode is recorded on <html>", () => {
+    const dom = new JSDOM(
+        "<!doctype html><html><body><div id='t'>x</div></body></html>",
+        { runScripts: "outside-only" });
+    dom.window.MutationObserver = class { observe() {} disconnect() {} };
+    dom.window.ResizeObserver = class { observe() {} disconnect() {} };
+    dom.window.requestAnimationFrame = (cb) => 0;
+    dom.window.cancelAnimationFrame = () => {};
+    dom.window.setInterval = () => 0;
+    dom.window.clearInterval = () => {};
+    dom.window.eval(`(${ce.buildApplyJs("#t", { scaleMode: "fit" })})`);
+    assert.equal(dom.window.document.documentElement.getAttribute("data-ifp-scale"), "fit");
+});
+
+test("apply: original scale mode is recorded on <html>", () => {
+    const dom = new JSDOM(
+        "<!doctype html><html><body><div id='t'>x</div></body></html>",
+        { runScripts: "outside-only" });
+    dom.window.MutationObserver = class { observe() {} disconnect() {} };
+    dom.window.ResizeObserver = class { observe() {} disconnect() {} };
+    dom.window.requestAnimationFrame = (cb) => 0;
+    dom.window.cancelAnimationFrame = () => {};
+    dom.window.setInterval = () => 0;
+    dom.window.clearInterval = () => {};
+    dom.window.eval(`(${ce.buildApplyJs("#t", { scaleMode: "original" })})`);
+    assert.equal(dom.window.document.documentElement.getAttribute("data-ifp-scale"), "original");
+});
+
+test("apply: unknown scale mode falls back to stretch", () => {
+    const dom = new JSDOM(
+        "<!doctype html><html><body><div id='t'>x</div></body></html>",
+        { runScripts: "outside-only" });
+    dom.window.MutationObserver = class { observe() {} disconnect() {} };
+    dom.window.ResizeObserver = class { observe() {} disconnect() {} };
+    dom.window.requestAnimationFrame = (cb) => 0;
+    dom.window.cancelAnimationFrame = () => {};
+    dom.window.setInterval = () => 0;
+    dom.window.clearInterval = () => {};
+    dom.window.eval(`(${ce.buildApplyJs("#t", { scaleMode: "garbage" })})`);
+    assert.equal(dom.window.document.documentElement.getAttribute("data-ifp-scale"), "stretch");
+});
+
+test("keyword scan: empty keywords list emits no [ifp-keyword] log", () => {
+    const dom = new JSDOM(
+        "<!doctype html><html><body><div id='t'>hello world</div></body></html>",
+        { runScripts: "outside-only" });
+    dom.window.MutationObserver = class { observe() {} disconnect() {} };
+    dom.window.ResizeObserver = class { observe() {} disconnect() {} };
+    dom.window.requestAnimationFrame = (cb) => 0;
+    dom.window.cancelAnimationFrame = () => {};
+    dom.window.setInterval = () => 0;
+    dom.window.clearInterval = () => {};
+    const logs = [];
+    dom.window.console = { info: (m) => logs.push(String(m)), warn: () => {}, error: () => {} };
+    dom.window.eval(`(${ce.buildApplyJs("#t", { keywords: [] })})`);
+    const kwLogs = logs.filter(l => l.indexOf("[ifp-keyword]") !== -1);
+    assert.equal(kwLogs.length, 0,
+        `expected no keyword logs when list is empty, got: ${kwLogs.join(",")}`);
+});
+
+test("keyword scan: substring match emits hit=true on apply", () => {
+    // The keyword scan runs inside schedule()'s rAF — we stub rAF to
+    // fire synchronously so the scan runs before assertion.
+    const dom = new JSDOM(
+        "<!doctype html><html><body><div id='t'>No active streams</div></body></html>",
+        { runScripts: "outside-only" });
+    dom.window.MutationObserver = class { observe() {} disconnect() {} };
+    dom.window.ResizeObserver = class { observe() {} disconnect() {} };
+    dom.window.requestAnimationFrame = (cb) => { cb(); return 0; };
+    dom.window.cancelAnimationFrame = () => {};
+    dom.window.setInterval = () => 0;
+    dom.window.clearInterval = () => {};
+    const logs = [];
+    dom.window.console = { info: (m) => logs.push(String(m)), warn: () => {}, error: () => {} };
+    // Schedule needs at least one trigger; the apply() call inside the
+    // IIFE does not by itself run schedule. Inject a fake mutation by
+    // calling __ifpThumbSchedule (set by the IIFE after install).
+    dom.window.eval(`(${ce.buildApplyJs("#t", { keywords: ["No active streams"] })})`);
+    if (typeof dom.window.__ifpThumbSchedule === "function") {
+        dom.window.__ifpThumbSchedule();
+    }
+    const kwLogs = logs.filter(l => l.indexOf("[ifp-keyword]") !== -1);
+    assert.ok(kwLogs.some(l => l.indexOf("hit=true") !== -1),
+        `expected a hit=true emission, got: ${kwLogs.join(" | ")}`);
+});
+
+test("keyword scan: text without match emits hit=false (or no transition)", () => {
+    const dom = new JSDOM(
+        "<!doctype html><html><body><div id='t'>everything fine</div></body></html>",
+        { runScripts: "outside-only" });
+    dom.window.MutationObserver = class { observe() {} disconnect() {} };
+    dom.window.ResizeObserver = class { observe() {} disconnect() {} };
+    dom.window.requestAnimationFrame = (cb) => { cb(); return 0; };
+    dom.window.cancelAnimationFrame = () => {};
+    dom.window.setInterval = () => 0;
+    dom.window.clearInterval = () => {};
+    const logs = [];
+    dom.window.console = { info: (m) => logs.push(String(m)), warn: () => {}, error: () => {} };
+    dom.window.eval(`(${ce.buildApplyJs("#t", { keywords: ["No active streams"] })})`);
+    if (typeof dom.window.__ifpThumbSchedule === "function") {
+        dom.window.__ifpThumbSchedule();
+    }
+    const hitTrues = logs.filter(l => l.indexOf("[ifp-keyword] hit=true") !== -1);
+    assert.equal(hitTrues.length, 0,
+        `expected no hit=true on clean text, got: ${hitTrues.join(" | ")}`);
+});
+
+test("keyword scan: regex form /pattern/flags matches", () => {
+    const dom = new JSDOM(
+        "<!doctype html><html><body><div id='t'>Error: 503 Service Unavailable</div></body></html>",
+        { runScripts: "outside-only" });
+    dom.window.MutationObserver = class { observe() {} disconnect() {} };
+    dom.window.ResizeObserver = class { observe() {} disconnect() {} };
+    dom.window.requestAnimationFrame = (cb) => { cb(); return 0; };
+    dom.window.cancelAnimationFrame = () => {};
+    dom.window.setInterval = () => 0;
+    dom.window.clearInterval = () => {};
+    const logs = [];
+    dom.window.console = { info: (m) => logs.push(String(m)), warn: () => {}, error: () => {} };
+    // In the JS source, `\\d` is the string `\d` (single backslash + d);
+    // JSON.stringify escapes it again so the emitted IIFE sees `\d`
+    // verbatim and builds the regex /^Error: \d+/ correctly.
+    dom.window.eval(`(${ce.buildApplyJs("#t", { keywords: ["/^Error: \\d+/"] })})`);
+    if (typeof dom.window.__ifpThumbSchedule === "function") {
+        dom.window.__ifpThumbSchedule();
+    }
+    const kwLogs = logs.filter(l => l.indexOf("[ifp-keyword]") !== -1);
+    assert.ok(kwLogs.some(l => l.indexOf("hit=true") !== -1),
+        `expected regex hit=true, got: ${kwLogs.join(" | ")}`);
+});
+
+test("keyword scan: malformed regex falls through to literal substring", () => {
+    // The literal "/[unclosed" substring should match itself in the page
+    // text even though the regex parse fails — graceful degradation.
+    const dom = new JSDOM(
+        "<!doctype html><html><body><div id='t'>see /[unclosed for details</div></body></html>",
+        { runScripts: "outside-only" });
+    dom.window.MutationObserver = class { observe() {} disconnect() {} };
+    dom.window.ResizeObserver = class { observe() {} disconnect() {} };
+    dom.window.requestAnimationFrame = (cb) => { cb(); return 0; };
+    dom.window.cancelAnimationFrame = () => {};
+    dom.window.setInterval = () => 0;
+    dom.window.clearInterval = () => {};
+    const logs = [];
+    const warns = [];
+    dom.window.console = {
+        info: (m) => logs.push(String(m)),
+        warn: (m) => warns.push(String(m)),
+        error: () => {},
+    };
+    // "/[unclosed/" — the IIFE detects the /…/ shape, fails the
+    // RegExp construction, warns, and stores as substring "/[unclosed/".
+    dom.window.eval(`(${ce.buildApplyJs("#t", { keywords: ["/[unclosed/"] })})`);
+    if (typeof dom.window.__ifpThumbSchedule === "function") {
+        dom.window.__ifpThumbSchedule();
+    }
+    assert.ok(warns.some(w => w.indexOf("[ifp-keyword] bad regex") !== -1),
+        "expected bad-regex warning");
+});
+
+test("clear: emits final [ifp-keyword] hit=false", () => {
+    const dom = new JSDOM(
+        "<!doctype html><html><body><div id='t'>hi</div></body></html>",
+        { runScripts: "outside-only" });
+    dom.window.MutationObserver = class { observe() {} disconnect() {} };
+    dom.window.ResizeObserver = class { observe() {} disconnect() {} };
+    dom.window.requestAnimationFrame = (cb) => 0;
+    dom.window.cancelAnimationFrame = () => {};
+    dom.window.setInterval = () => 0;
+    dom.window.clearInterval = () => {};
+    const logs = [];
+    dom.window.console = { info: (m) => logs.push(String(m)), warn: () => {}, error: () => {} };
+    dom.window.eval(`(${ce.buildApplyJs("#t")})`);
+    dom.window.eval(ce.buildClearJs());
+    const finalHits = logs.filter(l => l.indexOf("[ifp-keyword] hit=false") !== -1);
+    assert.ok(finalHits.length >= 1,
+        "teardown must emit a final hit=false to drop stale runtime exclusions");
+});
+
+test("clear: removes data-ifp-scale attribute", () => {
+    const dom = new JSDOM(
+        "<!doctype html><html><body><div id='t'>hi</div></body></html>",
+        { runScripts: "outside-only" });
+    dom.window.MutationObserver = class { observe() {} disconnect() {} };
+    dom.window.ResizeObserver = class { observe() {} disconnect() {} };
+    dom.window.requestAnimationFrame = (cb) => 0;
+    dom.window.cancelAnimationFrame = () => {};
+    dom.window.setInterval = () => 0;
+    dom.window.clearInterval = () => {};
+    dom.window.eval(`(${ce.buildApplyJs("#t", { scaleMode: "fit" })})`);
+    dom.window.eval(ce.buildClearJs());
+    assert.equal(dom.window.document.documentElement.getAttribute("data-ifp-scale"), null);
+});
+
+// ============================================================
+// 4. Picker tests (existing) continue below
+// ============================================================
 
 test("picker: clear returns prior value and resets to null", () => {
     const dom = new JSDOM("<!doctype html><html><body/></html>",
