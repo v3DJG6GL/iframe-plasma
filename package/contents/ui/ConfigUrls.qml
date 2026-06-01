@@ -216,31 +216,37 @@ KCM.SimpleKCM {
             for (let i = 0; i < listModel.count; i++) {
                 const row = listModel.get(i);
                 // Keywords ride through the ListModel as a JSON string
-                // (see required-property comment in the delegate);
-                // surface them as a plain array on the wire so the on-
-                // disk urlsJson shape matches RowSchema's contract.
+                // (see required-property comment in the delegate); decode
+                // them to a plain Array here so serialiseTabRow — which owns
+                // the canonical on-disk field shape and the keyword/icon/
+                // scale-mode sanitisers — receives the contract it expects.
                 let kw = [];
                 try {
                     const parsed = JSON.parse(row.thumbExcludeKeywords || "[]");
                     if (Array.isArray(parsed)) {
-                        kw = parsed.filter(s => typeof s === "string" && s.length > 0);
+                        kw = parsed;  // _normaliseKeywords filters inside the pure fn
                     }
                 } catch (e) { /* corrupt → empty */ }
-                arr.push({
+                // Explicit field copy: listModel.get(i) returns a model
+                // object, not a plain JS object, so spread/Object.assign is
+                // unreliable. serialiseTabRow re-applies the same defaults
+                // and sanitisers as normaliseTabRow, so the two directions
+                // cannot drift (tst_serialize_urls.qml pins the parity).
+                arr.push(RowSchema.serialiseTabRow({
                     label: row.label,
                     url: row.url,
-                    authProfileId: row.authProfileId || "",
-                    thumbMode: row.thumbMode || "chartOnly",
-                    thumbSelector: row.thumbSelector || "",
-                    thumbText: row.thumbText || "",
-                    thumbIconName: row.thumbIconName || "",
-                    thumbTimeRange: row.thumbTimeRange || "",
-                    thumbScaleMode: row.thumbScaleMode || "fit",
-                    thumbExcludeKeywords: kw,  /* plain Array<string> on disk */
-                    thumbShowLabel: row.thumbShowLabel === true,
-                    popupMode: row.popupMode || "fullPanel",
-                    popupSelector: row.popupSelector || ""
-                });
+                    authProfileId: row.authProfileId,
+                    thumbMode: row.thumbMode,
+                    thumbSelector: row.thumbSelector,
+                    thumbText: row.thumbText,
+                    thumbIconName: row.thumbIconName,
+                    thumbTimeRange: row.thumbTimeRange,
+                    thumbScaleMode: row.thumbScaleMode,
+                    thumbExcludeKeywords: kw,
+                    thumbShowLabel: row.thumbShowLabel,
+                    popupMode: row.popupMode,
+                    popupSelector: row.popupSelector
+                }));
             }
             // Gate the self-write: onJsonChanged would otherwise fire
             // repopulate() against the same data we just serialized,

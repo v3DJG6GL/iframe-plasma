@@ -76,6 +76,19 @@ function _normaliseKeywords(v) {
     return out;
 }
 
+// Canonical, ordered field set for a tab row — the single declared
+// contract that normaliseTabRow (deserialize) and serialiseTabRow
+// (serialize) must both satisfy. tests/qml/tst_serialize_urls.qml asserts
+// Object.keys(normaliseTabRow({})) === Object.keys(serialiseTabRow({})) ===
+// TAB_FIELDS, so a field added to one direction but not the other (the
+// f831b02 drift class — three thumb* fields silently dropped on serialize)
+// fails CI instead of silently corrupting every save.
+const TAB_FIELDS = [
+    "label", "url", "authProfileId", "thumbMode", "thumbSelector",
+    "thumbText", "thumbIconName", "thumbTimeRange", "thumbScaleMode",
+    "thumbExcludeKeywords", "thumbShowLabel", "popupMode", "popupSelector",
+];
+
 function normaliseTabRow(entry) {
     entry = entry || {};
     const sel = entry.thumbSelector || "";
@@ -105,6 +118,39 @@ function normaliseTabRow(entry) {
         popupSelector:        psel,
     };
 }
+
+// Pure serialise of ONE already-normalised tab row to its on-disk shape.
+// Mirror of normaliseTabRow's return, reusing the SAME sanitisers
+// (sanitizeIconName / _normaliseScaleMode / _normaliseKeywords) so the two
+// directions cannot drift and serialise is defence-in-depth-equal to
+// normalise. `row.thumbExcludeKeywords` MUST already be an Array — the
+// ListModel JSON-string boundary is resolved by the caller (ConfigUrls).
+// Pure; does not mutate `row`. Returns the canonical TAB_FIELDS object.
+function serialiseTabRow(row) {
+    row = row || {};
+    return {
+        label:                row.label || "",
+        url:                  row.url || "",
+        authProfileId:        row.authProfileId || "",
+        thumbMode:            row.thumbMode || "chartOnly",
+        thumbSelector:        row.thumbSelector || "",
+        thumbText:            row.thumbText || "",
+        thumbIconName:        sanitizeIconName(row.thumbIconName),
+        thumbTimeRange:       row.thumbTimeRange || "",
+        thumbScaleMode:       _normaliseScaleMode(row.thumbScaleMode),
+        thumbExcludeKeywords: _normaliseKeywords(row.thumbExcludeKeywords),
+        thumbShowLabel:       row.thumbShowLabel === true,
+        popupMode:            row.popupMode || "fullPanel",
+        popupSelector:        row.popupSelector || "",
+    };
+}
+
+// Canonical, ordered field set for an auth-profile row. Declared contract
+// for normaliseAuthProfileRow(...).row and serialiseAuthProfileRow — the
+// auth-side twin of TAB_FIELDS (see comment there).
+const AUTH_FIELDS = [
+    "id", "name", "authType", "username", "autheliaHost", "preempt",
+];
 
 function normaliseAuthProfileRow(entry, uuidGen) {
     entry = entry || {};
@@ -136,5 +182,24 @@ function normaliseAuthProfileRow(entry, uuidGen) {
             preempt:      preempt,
         },
         synthesized: synthesized,
+    };
+}
+
+// Pure serialise of ONE already-normalised auth-profile row to its on-disk
+// shape. Mirror of normaliseAuthProfileRow's `row` (the 6 AUTH_FIELDS); the
+// row is already normalised by the time it is serialised, so preempt is a
+// plain `=== true` rather than the authType-derived default normalise
+// applies on the way in. autheliaHost sanitisation deliberately stays a
+// repopulate-time concern (sanitizeAutheliaHost lives in ConfigAuth, not
+// here) to keep this a behaviour-preserving refactor. Pure; no mutation.
+function serialiseAuthProfileRow(row) {
+    row = row || {};
+    return {
+        id:           row.id || "",
+        name:         row.name || "",
+        authType:     row.authType || "basic",
+        username:     row.username || "",
+        autheliaHost: row.autheliaHost || "",
+        preempt:      row.preempt === true,
     };
 }

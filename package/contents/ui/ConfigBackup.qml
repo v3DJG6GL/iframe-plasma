@@ -132,14 +132,34 @@ KCM.SimpleKCM {
             const path = page._urlToPath(selectedFile);
             const result = IframePlasma.BackupBridge.importFromFile(path, page._collectConfig());
             if (result.ok) {
+                // Snapshot current values BEFORE applying so we can tell
+                // whether the import actually changes anything. Re-importing
+                // a backup identical to the live config (e.g. export then
+                // immediately import) writes no new values, so KCM never
+                // marks the page dirty and Apply stays disabled — correct,
+                // but the old unconditional "Click Apply" text misled the
+                // user into hunting for a greyed-out button.
+                const before = page._collectConfig();
                 page._applyConfig(result.config);
+                let changed = false;
+                for (const k in result.config) {
+                    if (page.hasOwnProperty("cfg_" + k) && before[k] !== result.config[k]) {
+                        changed = true;
+                        break;
+                    }
+                }
                 const backup = IframePlasma.BackupBridge.lastBackupPath();
-                let msg = i18n("Configuration imported. Click Apply to persist.");
+                let msg = changed
+                    ? i18n("Configuration imported. Click Apply to persist.")
+                    : i18n("Imported file matches the current configuration — nothing to apply.");
                 if (backup) {
                     msg += " " + i18n("Previous configuration saved to %1.", backup);
                 }
                 if (result.skipped && result.skipped.length) {
-                    msg += " " + i18np("%1 unknown key skipped.", "%1 unknown keys skipped.",
+                    // "skipped" now covers both unknown keys (forward-compat)
+                    // and known keys with a wrong-typed value (rejected by
+                    // the import type guard), so the wording stays generic.
+                    msg += " " + i18np("%1 key skipped.", "%1 keys skipped.",
                                        result.skipped.length);
                 }
                 if (result.warning) {

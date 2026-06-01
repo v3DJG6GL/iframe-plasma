@@ -32,6 +32,12 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 KCFG = ROOT / "package" / "contents" / "config" / "main.xml"
 TESTS = ROOT / "tests"
 LIBS = ROOT / "package" / "contents" / "ui"
+CONFIG_BACKUP = LIBS / "ConfigBackup.qml"
+
+# Keys deliberately NOT round-tripped through Backup export/import. Keep in
+# sync with the kSchema comment in src/backupbridge.cpp and the kExcluded
+# set in tests/cpp/tst_backupbridge.cpp's schema guard.
+BACKUP_EXCLUDE = {"authProfilesSecretsSerial"}
 
 # Entries this script does NOT require to appear in a test. Each line
 # must justify why — the gate exists to force contributors to think,
@@ -71,7 +77,53 @@ def find_references(name: str) -> list[pathlib.Path]:
     return hits
 
 
-def main() -> int:
+def check_backup_lists() -> int:
+    """Guard the Backup KCM page's two hand-maintained key lists against
+    main.xml. The real ConfigBackup.qml can't be loaded under the bare
+    qmltests harness (it pulls org.kde.kcmutils + the C++ plugin), and KCM
+    dirty-tracking requires literal named cfg_<key> aliases — so the lists
+    can't be generated and are guarded by static extraction instead.
+
+    Asserts: (C) the `property alias cfg_<key>` set, (D) the _collectConfig()
+    object-literal key set, and (A) main.xml's entries minus BACKUP_EXCLUDE
+    are all identical. A key added to main.xml + kSchema but forgotten in
+    either QML list would otherwise silently never export."""
+    text = CONFIG_BACKUP.read_text()
+
+    aliases = set(re.findall(r"property\s+alias\s+cfg_(\w+)\s*:", text))
+
+    collect_match = re.search(r"_collectConfig\s*\(\)\s*\{(.*?)\n\s*\}", text, re.S)
+    if not collect_match:
+        print("FAIL: could not locate _collectConfig() literal in ConfigBackup.qml",
+              file=sys.stderr)
+        return 1
+    collected = set(re.findall(r"^\s*(\w+)\s*:", collect_match.group(1), re.M))
+
+    expected = set(collect_entry_names()) - BACKUP_EXCLUDE
+
+    problems = []
+    if aliases != expected:
+        problems.append(("cfg_ aliases vs main.xml schema", aliases ^ expected))
+    if collected != expected:
+        problems.append(("_collectConfig keys vs main.xml schema", collected ^ expected))
+    if aliases != collected:
+        problems.append(("cfg_ aliases vs _collectConfig keys", aliases ^ collected))
+
+    if problems:
+        print("ConfigBackup.qml backup lists are out of sync:", file=sys.stderr)
+        for label, diff in problems:
+            print(f"  - {label}: differ by {sorted(diff)}", file=sys.stderr)
+        print("\nEvery backup key must appear in main.xml, the cfg_ aliases, and",
+              "_collectConfig() (minus BACKUP_EXCLUDE). Update the missing list.",
+              file=sys.stderr)
+        return 1
+
+    print(f"backup list consistency OK — {len(expected)} keys mirrored across "
+          f"main.xml, cfg_ aliases, and _collectConfig.")
+    return 0
+
+
+def check_coverage() -> int:
     names = collect_entry_names()
     if not names:
         print("FAIL: no kcfg entries found — main.xml moved or empty?", file=sys.stderr)
@@ -100,6 +152,15 @@ def main() -> int:
           f"{len(ALLOWLIST)} allowlisted, "
           f"{len(names) - len(ALLOWLIST)} with explicit test references.")
     return 0
+
+
+def main() -> int:
+    # Run both gates and report all failures (don't short-circuit) so a
+    # contributor sees every problem in one run. Non-zero if either fails.
+    rc = 0
+    rc |= check_coverage()
+    rc |= check_backup_lists()
+    return rc
 
 
 if __name__ == "__main__":

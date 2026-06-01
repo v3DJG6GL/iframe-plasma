@@ -10,9 +10,11 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonValue>
+#include <QSet>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QXmlStreamReader>
 
 using namespace Qt::Literals::StringLiterals;
 
@@ -39,6 +41,21 @@ QVariantMap fullSchemaSeed()
     m.insert(u"webViewFreezeDelaySec"_s, 45);
     m.insert(u"webViewDiscardDelaySec"_s, 900);
     return m;
+}
+
+// Write `content` to dir/name and return the absolute path. Mirrors the
+// inline open/write/close pattern the import tests already use; factored
+// out so the type-validation cases below stay readable.
+QString writeFile(const QTemporaryDir &dir, const QString &name, const char *content)
+{
+    const QString path = dir.filePath(name);
+    QFile f(path);
+    if (!f.open(QIODevice::WriteOnly)) {
+        return QString{}; // caller's import will fail visibly on an empty path
+    }
+    f.write(content);
+    f.close();
+    return path;
 }
 
 } // namespace
@@ -417,6 +434,161 @@ private Q_SLOTS:
         QVERIFY(!applied.contains(u"urlsJson"_s));
         // Sibling non-null key still applies.
         QCOMPARE(applied.value(u"currentTabIndex"_s).toInt(), 3);
+    }
+
+    // ----- import: strict per-key type validation -------------------
+    //
+    // A schema key whose JSON value kind doesn't match the kcfg type
+    // (e.g. a string for an Int) would reach a typed QML alias in
+    // _applyConfig and be silently coerced/clamped (a SpinBox turns
+    // "abc" into 0 → clamped to `from`). importFromFile routes such
+    // mismatches to `skipped` instead, exactly like the null path.
+
+    void import_stringForIntKey_reportedInSkippedAndExcluded()
+    {
+        const QString path = writeFile(m_xdg, u"ti_strForInt.json"_s, R"({
+            "version": 1,
+            "config": { "Display": { "zoomFactor": "abc" } }
+        })");
+        BackupBridge b;
+        const QVariantMap result = b.importFromFile(path, {});
+        QCOMPARE(result.value(u"ok"_s).toBool(), true);
+        QVERIFY(result.value(u"skipped"_s).toStringList().contains(u"zoomFactor"_s));
+        QVERIFY(!result.value(u"config"_s).toMap().contains(u"zoomFactor"_s));
+    }
+
+    void import_boolForIntKey_reportedInSkipped()
+    {
+        const QString path = writeFile(m_xdg, u"ti_boolForInt.json"_s, R"({
+            "version": 1,
+            "config": { "General": { "currentTabIndex": true } }
+        })");
+        BackupBridge b;
+        const QVariantMap result = b.importFromFile(path, {});
+        QVERIFY(result.value(u"skipped"_s).toStringList().contains(u"currentTabIndex"_s));
+        QVERIFY(!result.value(u"config"_s).toMap().contains(u"currentTabIndex"_s));
+    }
+
+    void import_numberForBoolKey_reportedInSkipped()
+    {
+        // Strict: 0/1 for a Bool key is rejected (never produced by our
+        // own export, which always emits JSON true/false).
+        const QString path = writeFile(m_xdg, u"ti_numForBool.json"_s, R"({
+            "version": 1,
+            "config": { "Display": { "showTabBar": 1 } }
+        })");
+        BackupBridge b;
+        const QVariantMap result = b.importFromFile(path, {});
+        QVERIFY(result.value(u"skipped"_s).toStringList().contains(u"showTabBar"_s));
+        QVERIFY(!result.value(u"config"_s).toMap().contains(u"showTabBar"_s));
+    }
+
+    void import_numberForStringKey_reportedInSkipped()
+    {
+        const QString path = writeFile(m_xdg, u"ti_numForStr.json"_s, R"({
+            "version": 1,
+            "config": { "Display": { "themeMode": 5 } }
+        })");
+        BackupBridge b;
+        const QVariantMap result = b.importFromFile(path, {});
+        QVERIFY(result.value(u"skipped"_s).toStringList().contains(u"themeMode"_s));
+        QVERIFY(!result.value(u"config"_s).toMap().contains(u"themeMode"_s));
+    }
+
+    void import_fractionalDoubleForIntKey_reportedInSkipped()
+    {
+        // Reject (do NOT floor) — flooring would silently apply a value
+        // the user never wrote.
+        const QString path = writeFile(m_xdg, u"ti_fracForInt.json"_s, R"({
+            "version": 1,
+            "config": { "Advanced": { "webViewFreezeDelaySec": 30.7 } }
+        })");
+        BackupBridge b;
+        const QVariantMap result = b.importFromFile(path, {});
+        QVERIFY(result.value(u"skipped"_s).toStringList().contains(u"webViewFreezeDelaySec"_s));
+        QVERIFY(!result.value(u"config"_s).toMap().contains(u"webViewFreezeDelaySec"_s));
+    }
+
+    void import_integralDoubleForIntKey_applied()
+    {
+        // JSON has no int/double split; an integral double is the on-wire
+        // shape of every exported Int, so it MUST round-trip cleanly.
+        const QString path = writeFile(m_xdg, u"ti_intDouble.json"_s, R"({
+            "version": 1,
+            "config": { "Display": { "zoomFactor": 125.0 } }
+        })");
+        BackupBridge b;
+        const QVariantMap result = b.importFromFile(path, {});
+        QVERIFY(!result.value(u"skipped"_s).toStringList().contains(u"zoomFactor"_s));
+        QCOMPARE(result.value(u"config"_s).toMap().value(u"zoomFactor"_s).toInt(), 125);
+    }
+
+    void import_correctlyTypedValues_allApplied()
+    {
+        // Guard against an over-eager validator rejecting valid input.
+        const QString path = writeFile(m_xdg, u"ti_allValid.json"_s, R"({
+            "version": 1,
+            "config": {
+                "Display": { "themeMode": "dark", "zoomFactor": 150, "showTabBar": false }
+            }
+        })");
+        BackupBridge b;
+        const QVariantMap result = b.importFromFile(path, {});
+        QVERIFY(result.value(u"skipped"_s).toStringList().isEmpty());
+        const QVariantMap applied = result.value(u"config"_s).toMap();
+        QCOMPARE(applied.value(u"themeMode"_s).toString(), u"dark"_s);
+        QCOMPARE(applied.value(u"zoomFactor"_s).toInt(), 150);
+        QCOMPARE(applied.value(u"showTabBar"_s).toBool(), false);
+    }
+
+    void import_wrongTypeWithValidSibling_partialApply()
+    {
+        // One bad field must not poison the whole import.
+        const QString path = writeFile(m_xdg, u"ti_partial.json"_s, R"({
+            "version": 1,
+            "config": { "Display": { "zoomFactor": "oops", "themeMode": "light" } }
+        })");
+        BackupBridge b;
+        const QVariantMap result = b.importFromFile(path, {});
+        QCOMPARE(result.value(u"ok"_s).toBool(), true);
+        QVERIFY(result.value(u"skipped"_s).toStringList().contains(u"zoomFactor"_s));
+        const QVariantMap applied = result.value(u"config"_s).toMap();
+        QVERIFY(!applied.contains(u"zoomFactor"_s));
+        QCOMPARE(applied.value(u"themeMode"_s).toString(), u"light"_s);
+    }
+
+    // ----- schema guard: kSchema == main.xml minus exclusions -------
+
+    void schema_matchesMainXmlMinusExclusions()
+    {
+        // Catches a kcfg entry added to main.xml but forgotten in kSchema
+        // (or vice-versa) — the drift the four-list backup design risks.
+        // Keep this exclusion set in sync with the comment at
+        // backupbridge.cpp's kSchema and BACKUP_EXCLUDE in
+        // tests/fixtures/check_kcfg_coverage.py.
+        const QSet<QString> kExcluded = {u"authProfilesSecretsSerial"_s};
+
+        const QString xmlPath =
+            QStringLiteral(IFRAME_SOURCE_DIR "/package/contents/config/main.xml");
+        QFile f(xmlPath);
+        QVERIFY2(f.open(QIODevice::ReadOnly), qPrintable(xmlPath));
+
+        QSet<QString> xmlKeys;
+        QXmlStreamReader xml(&f);
+        while (!xml.atEnd()) {
+            if (xml.readNext() == QXmlStreamReader::StartElement && xml.name() == u"entry") {
+                const QString name = xml.attributes().value(u"name").toString();
+                if (!name.isEmpty() && !kExcluded.contains(name)) {
+                    xmlKeys.insert(name);
+                }
+            }
+        }
+        QVERIFY2(!xml.hasError(), qPrintable(xml.errorString()));
+
+        BackupBridge b;
+        const QStringList sk = b.schemaKeys();
+        const QSet<QString> schema(sk.cbegin(), sk.cend());
+        QCOMPARE(schema, xmlKeys);
     }
 
     // ----- suggestedExportName --------------------------------------

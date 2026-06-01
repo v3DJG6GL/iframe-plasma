@@ -52,6 +52,14 @@ public:
 
     Q_INVOKABLE QString lastBackupPath() const;
 
+    // The backup schema's kcfg keys, in main.xml order. Exposed so a
+    // regression test can assert this set equals main.xml's entry set
+    // minus the documented exclusions (authProfilesSecretsSerial) — the
+    // guard that keeps kSchema from silently drifting away from main.xml.
+    // Returns raw key strings only (no i18n), so it is safe on a
+    // QML_SINGLETON despite the KCM engine's missing KLocalizedContext.
+    Q_INVOKABLE QStringList schemaKeys() const;
+
     // Set by the most recent exportToFile() call when the write itself
     // succeeded but a non-fatal post-condition didn't — currently only
     // setPermissions() returning false on FAT/exFAT/SMB filesystems that
