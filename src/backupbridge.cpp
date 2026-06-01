@@ -9,11 +9,15 @@
 #include <QFile>
 #include <QFileDevice>
 #include <QFileInfo>
+#include <QHash>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QSaveFile>
 #include <QStandardPaths>
+
+#include <cmath>
+#include <limits>
 
 using namespace Qt::Literals::StringLiterals;
 
@@ -25,28 +29,61 @@ namespace {
 //   * authProfilesSecretsSerial — transient session counter ConfigAuth
 //     uses to notify main.qml of KWallet writes across the dialog/widget
 //     engine boundary; never exported.
+// Mirrors main.xml's type= attribute. Used on import to reject a JSON
+// value whose kind doesn't match the kcfg type (e.g. a string for an Int
+// key) before it reaches a typed QML alias and gets silently coerced/
+// clamped. Export ignores this field.
+enum class Kind { String, Int, Bool };
+
 struct Entry
 {
     const char *group;
     const char *key;
+    Kind type;
 };
 constexpr Entry kSchema[] = {
-    {"General", "urlsJson"},
-    {"General", "currentTabIndex"},
-    {"General", "autoCycleEnabled"},
-    {"General", "autoCycleIntervalSec"},
-    {"Display", "zoomFactor"},
-    {"Display", "themeMode"},
-    {"Display", "showTabBar"},
-    {"Display", "compactPreviewEnabled"},
-    {"Display", "compactPreviewLongAxisPx"},
-    {"Display", "popupPinned"},
-    {"Auth", "authProfilesJson"},
-    {"Advanced", "userAgentOverride"},
-    {"Advanced", "remoteDebuggingPort"},
-    {"Advanced", "webViewFreezeDelaySec"},
-    {"Advanced", "webViewDiscardDelaySec"},
+    {"General", "urlsJson", Kind::String},
+    {"General", "currentTabIndex", Kind::Int},
+    {"General", "autoCycleEnabled", Kind::Bool},
+    {"General", "autoCycleIntervalSec", Kind::Int},
+    {"Display", "zoomFactor", Kind::Int},
+    {"Display", "themeMode", Kind::String},
+    {"Display", "showTabBar", Kind::Bool},
+    {"Display", "compactPreviewEnabled", Kind::Bool},
+    {"Display", "compactPreviewLongAxisPx", Kind::Int},
+    {"Display", "popupPinned", Kind::Bool},
+    {"Auth", "authProfilesJson", Kind::String},
+    {"Advanced", "userAgentOverride", Kind::String},
+    {"Advanced", "remoteDebuggingPort", Kind::Int},
+    {"Advanced", "webViewFreezeDelaySec", Kind::Int},
+    {"Advanced", "webViewDiscardDelaySec", Kind::Int},
 };
+
+// Strict kind check: a JSON value is accepted only if its kind matches the
+// kcfg type. JSON has no int/double split, so Int additionally accepts a
+// double that is integral and within int range; a fractional double, a
+// numeric-looking string, a 0/1-for-Bool, or a bool-for-Int are all
+// rejected. Our own exportToFile always emits the exact kind, so a
+// rejection only ever flags malformed or foreign input — which the caller
+// surfaces via `skipped` rather than silently corrupting a live property.
+bool kindMatches(const QJsonValue &v, Kind k)
+{
+    switch (k) {
+    case Kind::String:
+        return v.isString();
+    case Kind::Bool:
+        return v.isBool();
+    case Kind::Int: {
+        if (!v.isDouble()) {
+            return false;
+        }
+        const double d = v.toDouble();
+        return std::trunc(d) == d && d >= double(std::numeric_limits<int>::min())
+            && d <= double(std::numeric_limits<int>::max());
+    }
+    }
+    return false;
+}
 
 constexpr int kSchemaVersion = 1;
 
@@ -176,9 +213,9 @@ QVariantMap BackupBridge::importFromFile(const QString &path, const QVariantMap 
     // Build the schema-filtered map. Anything in the file but not in
     // kSchema is reported in `skipped` (forward-compat for files
     // exported from a future applet version that added entries).
-    QSet<QString> schemaKeys;
+    QHash<QString, Kind> schemaKinds;
     for (const auto &e : kSchema) {
-        schemaKeys.insert(QString::fromLatin1(e.key));
+        schemaKinds.insert(QString::fromLatin1(e.key), e.type);
     }
     QVariantMap toApply;
     QStringList skipped;
@@ -189,7 +226,8 @@ QVariantMap BackupBridge::importFromFile(const QString &path, const QVariantMap 
         const QJsonObject groupObj = gIt.value().toObject();
         for (auto kIt = groupObj.constBegin(); kIt != groupObj.constEnd(); ++kIt) {
             const QString k = kIt.key();
-            if (!schemaKeys.contains(k)) {
+            const auto kindIt = schemaKinds.constFind(k);
+            if (kindIt == schemaKinds.constEnd()) {
                 skipped.append(k);
                 continue;
             }
@@ -199,6 +237,14 @@ QVariantMap BackupBridge::importFromFile(const QString &path, const QVariantMap 
             // KConfig on Apply. Surface them via `skipped` so the QML
             // side knows the import was partial.
             if (kIt.value().isNull() || kIt.value().isUndefined()) {
+                skipped.append(k);
+                continue;
+            }
+            // Same hazard for a wrong-typed value: e.g. a JSON string for
+            // an Int key would reach a SpinBox alias in _applyConfig and be
+            // coerced to 0 then clamped to the SpinBox's `from`, silently
+            // corrupting the value. Reject via `skipped` rather than apply.
+            if (!kindMatches(kIt.value(), kindIt.value())) {
                 skipped.append(k);
                 continue;
             }
@@ -246,6 +292,15 @@ QVariantMap BackupBridge::importFromFile(const QString &path, const QVariantMap 
 QString BackupBridge::lastBackupPath() const
 {
     return m_lastBackupPath;
+}
+
+QStringList BackupBridge::schemaKeys() const
+{
+    QStringList keys;
+    for (const auto &e : kSchema) {
+        keys << QString::fromLatin1(e.key);
+    }
+    return keys;
 }
 
 QString BackupBridge::lastExportWarning() const

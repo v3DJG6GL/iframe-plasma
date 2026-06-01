@@ -58,14 +58,18 @@ KCM.SimpleKCM {
             const arr = [];
             for (let i = 0; i < listModel.count; i++) {
                 const row = listModel.get(i);
-                arr.push({
+                // Explicit field copy (listModel.get(i) is a model object,
+                // not a plain JS object). serialiseAuthProfileRow owns the
+                // canonical on-disk shape so this direction can't drift from
+                // normaliseAuthProfileRow (tst_serialize_authprofiles pins it).
+                arr.push(RowSchema.serialiseAuthProfileRow({
                     id: row.id,
                     name: row.name,
                     authType: row.authType,
-                    username: row.username || "",
-                    autheliaHost: row.autheliaHost || "",
-                    preempt: row.preempt === true
-                });
+                    username: row.username,
+                    autheliaHost: row.autheliaHost,
+                    preempt: row.preempt
+                }));
             }
             // Gate the self-write so onJsonChanged doesn't re-enter
             // repopulate() and recycle every delegate on each keystroke

@@ -181,4 +181,43 @@ TestCase {
         compare(rows[2].preempt, false);  // explicit
         verify(synthesizedAny);
     }
+
+    // ===== serialise ↔ normalise parity (anti-drift guard) ==========
+    //
+    // ConfigAuth.serialize() delegates to Schema.serialiseAuthProfileRow so
+    // the write path can't drop a profile field the read path produces.
+    // These pin serialise keys, normalise's row keys, and AUTH_FIELDS to one
+    // set, and assert a serialise of an already-normalised row is a no-op.
+    function test_serialise_keySetMatchesNormaliseRow() {
+        const sKeys = Object.keys(Schema.serialiseAuthProfileRow({})).sort();
+        const nKeys = Object.keys(Schema.normaliseAuthProfileRow({}, _gen).row).sort();
+        compare(sKeys, nKeys);
+    }
+    function test_serialise_keySetMatchesAuthFields() {
+        const sKeys = Object.keys(Schema.serialiseAuthProfileRow({})).sort();
+        compare(sKeys, Schema.AUTH_FIELDS.slice().sort());
+    }
+    function test_serialise_normalise_roundTripIdempotent_data() {
+        return [
+            { tag: "basicExplicitId", e: { id: "x", name: "N", authType: "basic",
+                                           username: "u", preempt: false } },
+            { tag: "bearer",          e: { id: "y", name: "B", authType: "bearer",
+                                           autheliaHost: "auth.example", preempt: true } },
+            { tag: "raw",             e: { id: "z", authType: "raw", preempt: true } },
+        ];
+    }
+    function test_serialise_normalise_roundTripIdempotent(d) {
+        const row = Schema.normaliseAuthProfileRow(d.e, _gen).row;
+        compare(Schema.serialiseAuthProfileRow(row), row);
+    }
+    function test_serialise_defaultsOnEmptyRow() {
+        const out = Schema.serialiseAuthProfileRow({});
+        compare(out.authType, "basic");
+        compare(out.preempt, false);
+        compare(out.id, "");
+    }
+    function test_serialise_strictBooleanPreempt() {
+        compare(Schema.serialiseAuthProfileRow({ preempt: 1 }).preempt, false);
+        compare(Schema.serialiseAuthProfileRow({ preempt: true }).preempt, true);
+    }
 }

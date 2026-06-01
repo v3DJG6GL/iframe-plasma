@@ -267,4 +267,64 @@ TestCase {
         compare(rows[1].thumbMode, "chartOnly");   // default; selector kept
         compare(rows[1].thumbSelector, ".u-wrap");
     }
+
+    // ===== serialise ↔ normalise parity (anti-drift guard) ==========
+    //
+    // ConfigUrls.serialize() delegates to Schema.serialiseTabRow so the
+    // write path can never silently drop a field the read path produces
+    // (the f831b02 class: three thumb* fields added to normaliseTabRow but
+    // missing from serialize() for two commits → data loss on every save).
+    // These pin all three to the same field set.
+    function test_serialise_keySetMatchesNormalise() {
+        const sKeys = Object.keys(Schema.serialiseTabRow({})).sort();
+        const nKeys = Object.keys(Schema.normaliseTabRow({})).sort();
+        compare(sKeys, nKeys);
+    }
+    function test_serialise_keySetMatchesTabFields() {
+        const sKeys = Object.keys(Schema.serialiseTabRow({})).sort();
+        compare(sKeys, Schema.TAB_FIELDS.slice().sort());
+    }
+    function test_serialise_normalise_roundTripIdempotent_data() {
+        return [
+            { tag: "empty",        x: {} },
+            { tag: "fullyPopulated", x: {
+                label: "L", url: "https://x", authProfileId: "uuid-1",
+                thumbMode: "custom", thumbSelector: ".u-wrap",
+                thumbText: "TXT", thumbIconName: "bundled:cpu",
+                thumbTimeRange: "7d", thumbScaleMode: "original",
+                thumbExcludeKeywords: ["a", "b"], thumbShowLabel: true,
+                popupMode: "custom", popupSelector: "section.app",
+            } },
+            { tag: "junkScaleMode", x: { thumbScaleMode: "junk" } },
+            { tag: "httpIcon",      x: { thumbIconName: "http://attacker/p?h=KIOSK" } },
+            { tag: "dirtyKeywords", x: { thumbExcludeKeywords: ["", "ok", 42, null] } },
+            { tag: "truthyShowLabel", x: { thumbShowLabel: 1 } },
+        ];
+    }
+    function test_serialise_normalise_roundTripIdempotent(d) {
+        // serialiseTabRow of an already-normalised row must equal that
+        // normalised row — both funnel through the same sanitisers, so the
+        // on-disk shape a save writes is exactly what a load would produce.
+        const normalised = Schema.normaliseTabRow(d.x);
+        compare(Schema.serialiseTabRow(normalised), normalised);
+    }
+
+    // ===== serialise re-applies the sanitisers (closed asymmetries) ==
+    // The old hand-rolled serialize() passed thumbIconName/thumbScaleMode
+    // through raw; delegating to serialiseTabRow re-runs the allow-lists on
+    // write, matching normalise. These assert that hardening directly.
+    function test_serialise_dropsBeaconIcon() {
+        compare(Schema.serialiseTabRow({ thumbIconName: "http://attacker/x" }).thumbIconName, "");
+    }
+    function test_serialise_coercesJunkScaleMode() {
+        compare(Schema.serialiseTabRow({ thumbScaleMode: "junk" }).thumbScaleMode, "fit");
+    }
+    function test_serialise_filtersKeywords() {
+        compare(Schema.serialiseTabRow({ thumbExcludeKeywords: ["", "ok", 42] }).thumbExcludeKeywords,
+                ["ok"]);
+    }
+    function test_serialise_strictBooleanShowLabel() {
+        compare(Schema.serialiseTabRow({ thumbShowLabel: 1 }).thumbShowLabel, false);
+        compare(Schema.serialiseTabRow({ thumbShowLabel: true }).thumbShowLabel, true);
+    }
 }
