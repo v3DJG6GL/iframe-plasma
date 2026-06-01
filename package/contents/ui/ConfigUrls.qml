@@ -1549,7 +1549,7 @@ KCM.SimpleKCM {
             const [vpBase, _vpFrag] = splitFragment(pastedUrl.text);
             const vpMatch = vpBase.match(/[?&]viewPanel=panel-(\d+)/);
             const lbl = deriveLabel(vpMatch ? vpMatch[1] : null);
-            listModel.append({ label: lbl, url: out, authProfileId: "", thumbMode: "chartOnly", thumbSelector: "", thumbText: "", thumbIconName: "", thumbTimeRange: "", popupMode: "fullPanel", popupSelector: "" });
+            listModel.append({ label: lbl, url: out, authProfileId: "", thumbMode: "chartOnly", thumbSelector: "", thumbText: "", thumbIconName: "", thumbTimeRange: "", thumbScaleMode: "fit", thumbExcludeKeywords: "[]", thumbShowLabel: false, popupMode: "fullPanel", popupSelector: "" });
             store.serialize();
             pastedUrl.text = ""; pastedLabel.text = "";
         }
