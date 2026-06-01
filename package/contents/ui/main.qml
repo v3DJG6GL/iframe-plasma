@@ -762,6 +762,14 @@ PlasmoidItem {
     // re-excludes after one brief reappearance.
     readonly property int _runtimeExclusionRecheckMs: 120000
 
+    // Bumped on every _runtimeExcluded mutation (set / clear / TTL expiry).
+    // The map is mutated in place and fires no NOTIFY of its own, so the
+    // panel-slot's previewTabIdx binding depends on this serial to drop a
+    // tab the instant its keyword matches (and restore it when cleared).
+    // Mirrors the _tabsMetadataSerial pattern. cycleTimer still reads the
+    // map imperatively and does not need it.
+    property int _runtimeExclusionSerial: 0
+
     // Idempotent setter for the runtime-exclusion map. Called from each
     // miniView's onJavaScriptConsoleMessage handler when the
     // [ifp-keyword] hit boolean transitions. Skips the mutation when
@@ -777,6 +785,7 @@ PlasmoidItem {
         } else {
             delete root._runtimeExcluded[tabIdx];
         }
+        root._runtimeExclusionSerial++;
         console.info("iframe-plasma[runtime-excl] idx=" + tabIdx + " hit=" + hit);
     }
 
@@ -1136,8 +1145,20 @@ PlasmoidItem {
             const now = Date.now();
             const ttl = root._runtimeExclusionRecheckMs;
             for (const k in root._runtimeExcluded) {
-                if (now - root._runtimeExcluded[k] >= ttl)
+                if (now - root._runtimeExcluded[k] >= ttl) {
+                    const expiredIdx = parseInt(k, 10);
                     delete root._runtimeExcluded[k];
+                    root._runtimeExclusionSerial++;
+                    // The expired tab may be a frozen survivor whose injected
+                    // CropEngine still holds lastKeywordHit=true; CropEngine
+                    // emits only on transition, so left to rejoin on its own it
+                    // never re-asserts and would reappear still showing the
+                    // keyword (never re-excluding). Force a soft re-render so it
+                    // re-injects and re-emits live state — re-excludes within
+                    // ~250ms if the keyword persists, rejoins for good if it
+                    // cleared. This is what the comment above actually promises.
+                    root._compactReloadRequested(expiredIdx);
+                }
             }
             // Pass the live runtime-exclusion map so any tab whose
             // configured keyword is currently visible on its rendered
@@ -1286,11 +1307,19 @@ PlasmoidItem {
             // so depend on the serial to re-evaluate after a metadata
             // Apply switches a tab to thumbMode="excluded".
             const _tick = root._tabsMetadataSerial;
+            // Also re-evaluate when a runtime keyword exclusion is recorded
+            // or cleared for the current tab. Without this the slot keeps
+            // painting excluded content the moment its keyword matches, and
+            // if every other tab is excluded too nextCycleTabIndex returns -1,
+            // so the cycle never advances off it and the excluded tab stays
+            // pinned on screen for the rest of the session.
+            const _exclTick = root._runtimeExclusionSerial;
             if (root.tabs.length === 0) return -1;
             const idx = root.currentTabIndex;
             if (idx < 0 || idx >= root.tabs.length) return -1;
             const t = root.tabs[idx];
             if (!t || t.thumbMode === "excluded") return -1;
+            if (root._runtimeExcluded[idx]) return -1;
             return idx;
         }
         readonly property var previewTab: previewTabIdx >= 0 ? root.tabs[previewTabIdx] : null
