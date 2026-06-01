@@ -133,7 +133,11 @@ const _APPLY_BODY = `(function(sel, opts){
       if (!raw) continue;
       var m = raw.match(/^\\/(.+)\\/([gimsuy]*)$/);
       if (m) {
-        try { out.push({ kind: 'regex', re: new RegExp(m[1], m[2]) }); continue; }
+        // Strip g/y: the scan only ever calls .test() for membership, and a
+        // stateful (global/sticky) RegExp advances lastIndex between calls, so
+        // the same object reused across scans would flap true/false on
+        // unchanged page text.
+        try { out.push({ kind: 'regex', re: new RegExp(m[1], m[2].replace(/[gy]/g, '')) }); continue; }
         catch (e) { console.warn('[ifp-keyword] bad regex "' + raw + '": ' + e.message); }
       }
       out.push({ kind: 'sub', text: raw.toLowerCase() });
@@ -365,9 +369,11 @@ const _APPLY_BODY = `(function(sel, opts){
   function runKeywordScan() {
     if (compiledKeywords.length === 0) {
       // Keyword list empty (either initial state or user cleared it
-      // between applies). Emit a hit=false transition once if the
-      // previous state was true so QML drops the runtime exclusion.
-      if (lastKeywordHit === true) {
+      // between applies). Emit hit=false unless we already reported it, so
+      // QML drops any runtime exclusion — including the case where a prior
+      // script instance excluded this tab and the user then cleared the last
+      // keyword (fresh injection starts at lastKeywordHit===null).
+      if (lastKeywordHit !== false) {
         lastKeywordHit = false;
         console.info('[ifp-keyword] hit=false');
       }
