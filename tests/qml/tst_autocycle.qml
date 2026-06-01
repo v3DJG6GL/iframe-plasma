@@ -89,4 +89,44 @@ TestCase {
         // -1 normalises to 2; next is 0.
         compare(U.nextCycleTabIndex(-1, tabs), 0);
     }
+
+    // ===== Runtime exclusion (live keyword hits) ====================
+    function test_runtimeExcluded_objectShape_skipsLiveExcluded() {
+        // {idx: true} object form — what main.qml uses for
+        // _runtimeExcluded so QML bindings detect mutations.
+        const tabs = [_ok("a"), _ok("b"), _ok("c")];
+        const live = { 1: true };  // tab 1 currently shows a keyword
+        compare(U.nextCycleTabIndex(0, tabs, live), 2);
+    }
+    function test_runtimeExcluded_setShape_skipsLiveExcluded() {
+        // Set form — duck-typed via `.has`.
+        const tabs = [_ok("a"), _ok("b"), _ok("c")];
+        const live = new Set([1]);
+        compare(U.nextCycleTabIndex(0, tabs, live), 2);
+    }
+    function test_runtimeExcluded_combinedWithStaticExcluded() {
+        // Tab 1 marked thumbMode=excluded, tab 2 is runtime-excluded
+        // → wrap to 3.
+        const tabs = [_ok("a"), _excluded("b"), _ok("c"), _ok("d")];
+        const live = { 2: true };
+        compare(U.nextCycleTabIndex(0, tabs, live), 3);
+    }
+    function test_runtimeExcluded_allOthersExcluded_returnsMinus1() {
+        const tabs = [_ok("a"), _ok("b"), _ok("c")];
+        const live = { 1: true, 2: true };
+        compare(U.nextCycleTabIndex(0, tabs, live), -1);
+    }
+    function test_runtimeExcluded_nullParam_treatedAsNoLiveCheck() {
+        // Back-compat: existing callers that pass no third arg keep
+        // working unchanged.
+        const tabs = [_ok("a"), _ok("b"), _ok("c")];
+        compare(U.nextCycleTabIndex(0, tabs, null), 1);
+        compare(U.nextCycleTabIndex(0, tabs, undefined), 1);
+        compare(U.nextCycleTabIndex(0, tabs), 1);
+    }
+    function test_runtimeExcluded_emptySetFallsThroughUntouched() {
+        const tabs = [_ok("a"), _ok("b"), _ok("c")];
+        compare(U.nextCycleTabIndex(0, tabs, new Set()), 1);
+        compare(U.nextCycleTabIndex(0, tabs, {}), 1);
+    }
 }

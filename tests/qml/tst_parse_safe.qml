@@ -109,4 +109,34 @@ TestCase {
         // pass even when a `#section=...` fragment is appended.
         verify(U.isGrafanaEmbed("https://grafana.example.com/d/abc/slug?orgId=1#section=2"));
     }
+
+    // ----- displayUrl (concise card-header subtitle) -----
+    function test_displayUrl_stripsSchemeQueryFragment() {
+        // The query string is the long, low-signal part — it must go.
+        compare(U.displayUrl("https://grafana.example.com/d-solo/abc/dash?orgId=1&panelId=27&kiosk#x"),
+                "grafana.example.com/d-solo/abc/dash");
+    }
+    function test_displayUrl_keepsHostAndPath() {
+        compare(U.displayUrl("https://streamystats.example.com/servers/1/dashboard"),
+                "streamystats.example.com/servers/1/dashboard");
+    }
+    function test_displayUrl_stripsHttp() {
+        compare(U.displayUrl("http://x.example/path"), "x.example/path");
+    }
+    function test_displayUrl_dropsTrailingSlash() {
+        compare(U.displayUrl("https://example.com/"), "example.com");
+    }
+    function test_displayUrl_placeholderCollapsesToEmpty() {
+        // The "Add URL" default is the bare scheme placeholder; subtitle
+        // must collapse to "" so the caller hides it.
+        compare(U.displayUrl("https://"), "");
+    }
+    function test_displayUrl_handlesNullish() {
+        compare(U.displayUrl(null), "");
+        compare(U.displayUrl(undefined), "");
+        compare(U.displayUrl(""), "");
+    }
+    function test_displayUrl_queryOnlyNoFragment() {
+        compare(U.displayUrl("https://h.example/p?a=1"), "h.example/p");
+    }
 }

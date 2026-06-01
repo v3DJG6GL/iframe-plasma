@@ -88,21 +88,92 @@ function isGrafanaEmbed(u) {
     return /\/d(-solo)?\/[A-Za-z0-9_-]+\//.test(base);
 }
 
+// Concise display form of a tab URL for the config-card header subtitle:
+// drop the scheme, the query string, and the #fragment, keeping host +
+// path. Turns a noisy embed URL
+//   https://grafana.example.com/d-solo/abc/dash?orgId=1&panelId=27&…
+// into a scannable
+//   grafana.example.com/d-solo/abc/dash
+// The query/fragment carry the long, low-signal bits (orgId, theme,
+// refresh, kiosk, var-*, the _ifp_ sentinels), so dropping them is exactly
+// what keeps the subtitle from running off the card on a wide screen.
+// Pure string slicing — no `new URL()`, so a half-typed "https://"
+// placeholder collapses to "" and the caller hides the empty subtitle.
+function displayUrl(u) {
+    let s = String(u || "");
+    const hash = s.indexOf('#');
+    if (hash !== -1) s = s.slice(0, hash);
+    const q = s.indexOf('?');
+    if (q !== -1) s = s.slice(0, q);
+    s = s.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "");   // strip scheme
+    return s.replace(/\/+$/, "");                    // drop trailing slash(es)
+}
+
+// Classifier for urlsJson Apply events. Returns true when `newArr` differs
+// from `oldArr` ONLY in metadata fields (label, thumb*, popup*); false when
+// the change is structural — different length, a row's URL or
+// authProfileId differs, or the rows have been reordered. Structural
+// changes require a Repeater rebuild on the plasmoid side (new
+// WebEngineProfile bindings, fresh URL navigations); metadata-only
+// changes can be applied in place to the live tab objects without
+// destroying any WebEngineView. See main.qml's onUrlsJsonChanged.
+//
+// Treats null/undefined/non-array inputs as structural (caller falls
+// back to the rebuild path, which is safe).
+//
+// Identity by INDEX (positional). A move (swap rows 0 and 1) is
+// structural — the WebTabs at those indices would need to switch
+// profile/URL.
+function isMetadataOnlyTabsChange(oldArr, newArr) {
+    if (!Array.isArray(oldArr) || !Array.isArray(newArr)) return false;
+    if (oldArr.length !== newArr.length) return false;
+    for (let i = 0; i < oldArr.length; i++) {
+        const o = oldArr[i] || {};
+        const n = newArr[i] || {};
+        // The URL string drives navigation. Even a query-string tweak
+        // is a re-navigation, so it counts as structural for delegate
+        // purposes (the WebTab would .load() the new URL anyway).
+        if ((o.url || "") !== (n.url || "")) return false;
+        // authProfileId selects the WebEngineProfile a delegate binds
+        // to. Switching profiles mid-flight isn't supported in our
+        // WebTab — the binding re-evaluates and Chromium re-attaches,
+        // typically losing in-flight requests. Force the rebuild path.
+        if ((o.authProfileId || "") !== (n.authProfileId || "")) return false;
+    }
+    return true;
+}
+
 // Auto-cycle stepper. Given the current tab index and the live `tabs`
 // array, return the next index whose tab is not marked
-// thumbMode="excluded". Returns -1 when no such tab exists (zero/one
-// tab, every non-current tab excluded, etc.). Modulo handles wrap-
-// around so currentIndex==tabs.length-1 still finds tab 0.
-function nextCycleTabIndex(currentIndex, tabs) {
+// thumbMode="excluded" AND not present in the optional
+// `runtimeExcluded` set (live keyword-match exclusions, session-only —
+// see main.qml's _runtimeExcluded map). Returns -1 when no such tab
+// exists (zero/one tab, every non-current tab excluded, etc.). Modulo
+// handles wrap-around so currentIndex==tabs.length-1 still finds tab 0.
+//
+// `runtimeExcluded` accepts a JS Set, a plain object used as
+// {idx: true}, or null/undefined for "no live exclusions". Detection
+// is duck-typed (`.has` for Set, `[idx]` for plain objects) so callers
+// don't need to allocate a Set when an existing map is at hand.
+function nextCycleTabIndex(currentIndex, tabs, runtimeExcluded) {
     if (!Array.isArray(tabs) || tabs.length < 2) return -1;
     const n = tabs.length;
     // Normalise currentIndex (the live binding can briefly be stale
     // after a tab deletion).
     const start = ((currentIndex % n) + n) % n;
+    const hasLiveCheck = runtimeExcluded != null;
+    const setLike = hasLiveCheck && typeof runtimeExcluded.has === "function";
     for (let step = 1; step < n; step++) {
         const candidate = (start + step) % n;
         const t = tabs[candidate];
-        if (t && t.thumbMode !== "excluded") return candidate;
+        if (!t || t.thumbMode === "excluded") continue;
+        if (hasLiveCheck) {
+            const live = setLike
+                ? runtimeExcluded.has(candidate)
+                : !!runtimeExcluded[candidate];
+            if (live) continue;
+        }
+        return candidate;
     }
     return -1;
 }
