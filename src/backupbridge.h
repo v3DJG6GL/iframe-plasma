@@ -25,11 +25,11 @@ public:
     explicit BackupBridge(QObject *parent = nullptr);
 
     // Write `config` (a flat key->value map collected from kcfg_*
-    // aliases) to `path` as a versioned JSON document. Deprecated and
-    // migration-flag keys are stripped here as defence-in-depth even if
-    // the QML caller passes them in. Returns "" on success or a human-
-    // readable error message on failure (file already gone, permissions,
-    // disk full, …).
+    // aliases) to `path` as a versioned JSON document. Only keys in the
+    // export schema are written; any other key the QML caller passes is
+    // dropped (allow-list, as defence-in-depth). Returns "" on success or
+    // a human-readable error message on failure (file already gone,
+    // permissions, disk full, …).
     Q_INVOKABLE QString exportToFile(const QString &path,
                                      const QVariantMap &config);
 

@@ -49,19 +49,6 @@ public:
     {
         return m_passwords.contains(qual(key)) || m_maps.contains(qual(key));
     }
-    int readPassword(const QString &key, QString &value) override
-    {
-        if (m_readWillFail) {
-            return 1;
-        }
-        const auto it = m_passwords.constFind(qual(key));
-        if (it == m_passwords.cend()) {
-            value.clear();
-            return 1;
-        }
-        value = *it;
-        return 0;
-    }
     int readMap(const QString &key, QMap<QString, QString> &value) override
     {
         if (m_readWillFail) {

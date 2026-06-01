@@ -58,10 +58,6 @@ public:
     {
         return m_wallet && m_wallet->hasEntry(key);
     }
-    int readPassword(const QString &key, QString &value) override
-    {
-        return m_wallet ? m_wallet->readPassword(key, value) : -1;
-    }
     int readMap(const QString &key, QMap<QString, QString> &value) override
     {
         return m_wallet ? m_wallet->readMap(key, value) : -1;
@@ -140,18 +136,6 @@ bool SecretsBridge::ensureOpen()
         return false;
     }
     return true;
-}
-
-QString SecretsBridge::get(const QString &key)
-{
-    if (key.isEmpty() || !ensureOpen()) {
-        return QString();
-    }
-    QString value;
-    if (m_wallet->readPassword(key, value) == 0) {
-        return value;
-    }
-    return QString();
 }
 
 bool SecretsBridge::has(const QString &key)

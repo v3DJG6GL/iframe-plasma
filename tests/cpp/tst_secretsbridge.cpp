@@ -36,10 +36,10 @@ private Q_SLOTS:
         QVERIFY(!b.isWalletReady());
     }
 
-    void afterSuccessfulGet_isReady()
+    void afterSuccessfulHas_isReady()
     {
         SecretsBridge b{makeWallet()};
-        b.get(u"k"_s);  // triggers ensureOpen
+        b.has(u"k"_s);  // triggers ensureOpen
         QVERIFY(b.isWalletReady());
     }
 
@@ -48,65 +48,10 @@ private Q_SLOTS:
         auto w = makeWallet();
         auto *raw = w.get();
         SecretsBridge b{std::move(w)};
-        b.get(u"k"_s);
+        b.has(u"k"_s);
         QVERIFY(b.isWalletReady());
         raw->closeForTest();
         QVERIFY(!b.isWalletReady());
-    }
-
-    // ---------------------------------------------------------------
-    // get(): empty key, wallet-not-enabled, wallet-open-fails,
-    //        success, read-fails.
-    // ---------------------------------------------------------------
-    void get_emptyKey_returnsEmpty()
-    {
-        SecretsBridge b{makeWallet()};
-        QCOMPARE(b.get(u""_s), QString());
-    }
-
-    void get_walletNotEnabled_emitsErrorAndReturnsEmpty()
-    {
-        auto w = makeWallet();
-        w->setEnabled(false);
-        SecretsBridge b{std::move(w)};
-        QSignalSpy spy(&b, &SecretsBridge::error);
-        QCOMPARE(b.get(u"key"_s), QString());
-        QCOMPARE(spy.count(), 1);
-    }
-
-    void get_walletOpenFails_emitsErrorAndReturnsEmpty()
-    {
-        auto w = makeWallet();
-        w->setOpenWillFail(true);
-        SecretsBridge b{std::move(w)};
-        QSignalSpy spy(&b, &SecretsBridge::error);
-        QCOMPARE(b.get(u"key"_s), QString());
-        QCOMPARE(spy.count(), 1);
-    }
-
-    void get_walletReadFails_returnsEmpty()
-    {
-        auto w = makeWallet();
-        w->seedPassword(QString(kFolder), u"k"_s, u"v"_s);
-        w->setReadWillFail(true);
-        SecretsBridge b{std::move(w)};
-        QCOMPARE(b.get(u"k"_s), QString());
-    }
-
-    void get_success_returnsValue()
-    {
-        auto w = makeWallet();
-        w->seedPassword(QString(kFolder), u"my-key"_s, u"my-secret"_s);
-        SecretsBridge b{std::move(w)};
-        QCOMPARE(b.get(u"my-key"_s), u"my-secret"_s);
-    }
-
-    void get_unknownKey_returnsEmpty()
-    {
-        auto w = makeWallet();
-        w->seedPassword(QString(kFolder), u"present"_s, u"v"_s);
-        SecretsBridge b{std::move(w)};
-        QCOMPARE(b.get(u"absent"_s), QString());
     }
 
     // ---------------------------------------------------------------
@@ -255,7 +200,7 @@ private Q_SLOTS:
         auto *raw = w.get();
         SecretsBridge b{std::move(w)};
         QVERIFY(!raw->hasFolderForTest(QString(kFolder)));
-        b.get(u"any-key"_s);
+        b.has(u"any-key"_s);
         QVERIFY(raw->hasFolderForTest(QString(kFolder)));
     }
 
@@ -288,13 +233,13 @@ private Q_SLOTS:
         auto w = makeWallet();
         auto *raw = w.get();
         SecretsBridge b{std::move(w)};
-        b.get(u"any-key"_s);  // prime warm-path
+        b.has(u"any-key"_s);  // prime warm-path
         raw->removeFolderForTest(QString(kFolder));
-        // get() must not raise an error signal on the recovery path;
-        // missing key after recreate returns empty without going through
+        // has() must not raise an error signal on the recovery path;
+        // a missing key after recreate returns false without going through
         // the unenabled / open-failed branches.
         QSignalSpy errSpy(&b, &SecretsBridge::error);
-        QCOMPARE(b.get(u"any-key"_s), QString());
+        QVERIFY(!b.has(u"any-key"_s));
         QCOMPARE(errSpy.count(), 0);
         QVERIFY(raw->hasFolderForTest(QString(kFolder)));
     }

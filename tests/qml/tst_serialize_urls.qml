@@ -210,9 +210,12 @@ TestCase {
         compare(Schema.normaliseTabRow({ thumbExcludeKeywords: ["No data", "/Err/"] }).thumbExcludeKeywords,
                 ["No data", "/Err/"]);
     }
-    function test_keywords_singleStringCoercedToArray() {
+    function test_keywords_nonArrayRejectedToEmpty() {
+        // Only a real Array is accepted; a bare string (or any non-array)
+        // normalises to [] rather than being wrapped into a single-element
+        // list. ConfigUrls only ever stores a plain Array on disk.
         compare(Schema.normaliseTabRow({ thumbExcludeKeywords: "lone" }).thumbExcludeKeywords,
-                ["lone"]);
+                []);
     }
     function test_keywords_emptyStringsFiltered() {
         compare(Schema.normaliseTabRow({ thumbExcludeKeywords: ["", "ok", "", null] }).thumbExcludeKeywords,

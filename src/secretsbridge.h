@@ -26,8 +26,9 @@ public:
     explicit SecretsBridge(std::unique_ptr<IWallet> wallet, QObject *parent = nullptr);
     ~SecretsBridge() override;
 
-    // Single-string entries — kept for legacy migration (basic:<host> entries).
-    Q_INVOKABLE QString get(const QString &key);
+    // Existence check for a single wallet key. Named auth profiles use it
+    // (via AuthSupport.has) to show whether a secret is already stored
+    // under `profile:<uuid>`.
     Q_INVOKABLE bool has(const QString &key);
 
     // Multi-field map entries — used by named auth profiles, where a single

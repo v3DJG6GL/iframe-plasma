@@ -43,9 +43,9 @@ QtObject {
         return comp.createObject(support);
     }
 
-    // Read legacy pre-0.4.0 single-string entries (`basic:<host>`) during the
-    // one-shot migration in main.qml. Newer profiles use map entries below.
-    function get(key) { return IframePlasma.SecretsBridge.get(key) }
+    // Existence check for a profile's wallet entry (`profile:<uuid>`).
+    // ConfigAuth uses it to show whether a secret is already stored for a
+    // profile. Newer profiles use the map entries below.
     function has(key) { return IframePlasma.SecretsBridge.has(key) }
 
     // Multi-field map entries for named auth profiles. Wallet key is

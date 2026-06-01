@@ -33,7 +33,6 @@ public:
     virtual bool hasFolder(const QString &folder) = 0;
     virtual bool createFolder(const QString &folder) = 0;
     virtual bool hasEntry(const QString &key) = 0;
-    virtual int readPassword(const QString &key, QString &value) = 0;
     virtual int readMap(const QString &key, QMap<QString, QString> &value) = 0;
     virtual int writeMap(const QString &key, const QMap<QString, QString> &value) = 0;
     virtual int removeEntry(const QString &key) = 0;

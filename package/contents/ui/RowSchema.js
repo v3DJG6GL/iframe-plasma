@@ -59,19 +59,18 @@ function _normaliseScaleMode(v) {
 }
 
 // Coerce a thumbExcludeKeywords value into an Array<string>. Accepts:
-//   - an Array of strings (preferred shape)
-//   - a single string (legacy single-keyword field)
-//   - missing / null / undefined → []
+//   - an Array of strings (the only on-disk shape — ConfigUrls stores it
+//     as a plain Array)
+//   - anything else (missing / null / non-array) → []
 // Empty / non-string entries are filtered. Pure; idempotent. The
 // downstream chip-list editor in ConfigUrls owns the user-visible
 // add/remove flow; CropEngine compiles each entry to a RegExp or a
 // case-insensitive substring at apply time.
 function _normaliseKeywords(v) {
-    if (!v) return [];
-    const arr = Array.isArray(v) ? v : [v];
+    if (!Array.isArray(v)) return [];
     const out = [];
-    for (let i = 0; i < arr.length; i++) {
-        const s = arr[i];
+    for (let i = 0; i < v.length; i++) {
+        const s = v[i];
         if (typeof s === "string" && s.length > 0) out.push(s);
     }
     return out;
