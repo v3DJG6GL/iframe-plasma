@@ -252,6 +252,12 @@ PlasmoidItem {
             // to a different profile, so destroying the delegates is
             // the cheapest correct path.
             root.tabs = newTabs;
+            // Tab indices just shifted; the index-keyed runtime-exclusion map
+            // would now apply stale entries to the wrong tabs. Live thumbnail
+            // miniViews re-emit their hit state on reload, so clearing here is
+            // safe and avoids a non-live (text/icon) tab inheriting a
+            // stale-excluded index and being dropped from the rotation.
+            root._runtimeExcluded = ({});
             if (root.currentTabIndex >= root.tabs.length) {
                 root.setCurrentTab(Math.max(0, root.tabs.length - 1));
             }
@@ -615,6 +621,14 @@ PlasmoidItem {
     // profile-wide clearHttpCache completes; cache-clear is profile-scoped
     // so both views observe the cleared cache on their next fetch.
     signal _tabReloadRequested(int tabIdx, string kind)
+
+    // Soft-reload ONLY the background compact miniView at tabIdx — not the
+    // foreground popup tab. Used after an auth-completion: the popup tab that
+    // fired authSucceeded is already on the authenticated page, but the
+    // compact-rep view at the same index is still parked on the redirected
+    // /login render and needs to re-fetch with the now-valid cookies.
+    // Reusing _tabReloadRequested here would also reload the foreground tab.
+    signal _compactReloadRequested(int tabIdx)
 
     // Monotonic NOTIFY counter for in-place metadata updates to
     // root.tabs[]. When the KCM Apply path detects a metadata-only
@@ -1892,6 +1906,12 @@ PlasmoidItem {
                         on_TabReloadRequested(miniView.ownIndex, "soft");
                     }
 
+                    // Post-auth refresh targeted at the compact view only
+                    // (the popup tab that authenticated is already current).
+                    function on_CompactReloadRequested(tabIdx) {
+                        on_TabReloadRequested(tabIdx, "soft");
+                    }
+
                     // In-place metadata Apply (both KCM Apply path and
                     // picker save) mutated root.tabs[i] fields and bumped
                     // the metadata serial. miniView.ownSelector is a
@@ -2348,7 +2368,7 @@ PlasmoidItem {
                     // detection gates). Re-route through the existing soft
                     // reload broadcast so the miniView re-fetches with the
                     // now-valid cookies on its own.
-                    onAuthSucceeded: root._tabReloadRequested(index, "soft")
+                    onAuthSucceeded: root._compactReloadRequested(index)
 
                     // Broadcast reload from the popup toolbar / shortcuts /
                     // cache-clear. Soft and hard both filter to THIS tab's
