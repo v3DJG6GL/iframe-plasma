@@ -10,7 +10,7 @@ import org.kde.kcmutils as KCM
 import org.kde.kirigami as Kirigami
 import io.github.v3DJG6GL.iframe 1.0 as IframePlasma
 
-// KCM page: configuration backup / restore. Round-trips the 16 active
+// KCM page: configuration backup / restore. Round-trips the 15 active
 // kcfg entries through a versioned JSON file via the C++ BackupBridge
 // singleton. Secrets in KWallet are deliberately omitted — the user
 // re-enters them on the Authentication page after import.
@@ -36,16 +36,6 @@ KCM.SimpleKCM {
     property alias cfg_remoteDebuggingPort: _debugPort.value
     property alias cfg_webViewFreezeDelaySec: _freeze.value
     property alias cfg_webViewDiscardDelaySec: _discard.value
-    // Migration flags — not in the export schema, but exposed here so
-    // an Import can force-reset them to false (so any legacy-shaped
-    // payload re-triggers main.qml's one-shot migrations cleanly).
-    property alias cfg_compactPreviewMigrated: _previewMigrated.checked
-    property alias cfg_authProfilesPreemptMigrated: _preemptMigrated.checked
-    property alias cfg_thumbLabelMigrated: _thumbLabelMigrated.checked
-    // DEPRECATED-0.6.0 alias kept only so a legacy backup that carries
-    // the key can still write into the (now read-only) main.xml entry —
-    // migrateThumbShowLabel reads it on next widget load. Not exported.
-    property alias cfg_compactPreviewShowLabel: _compactLabel.checked
 
     // Off-screen scratch items that own the alias backing values. Using
     // hidden controls (rather than `property var`) lets the KCM treat
@@ -61,7 +51,6 @@ KCM.SimpleKCM {
         QQC.TextField    { id: _themeMode }
         QQC.CheckBox     { id: _showTabBar }
         QQC.CheckBox     { id: _compactEnabled }
-        QQC.CheckBox     { id: _compactLabel }
         QQC.SpinBox      { id: _compactAxis;    from: 16;    to: 4000 }
         QQC.CheckBox     { id: _popupPinned }
         QQC.TextField    { id: _authProfiles }
@@ -69,9 +58,6 @@ KCM.SimpleKCM {
         QQC.SpinBox      { id: _debugPort;      from: 0;     to: 65535 }
         QQC.SpinBox      { id: _freeze;         from: 1;     to: 3600 }
         QQC.SpinBox      { id: _discard;        from: 1;     to: 86400 }
-        QQC.CheckBox     { id: _previewMigrated }
-        QQC.CheckBox     { id: _preemptMigrated }
-        QQC.CheckBox     { id: _thumbLabelMigrated }
     }
 
     // Build a flat key->value map from the current alias state. This is
@@ -106,11 +92,6 @@ KCM.SimpleKCM {
                 page[cfgKey] = m[k];
             }
         }
-        // Reset migration flags so any legacy-shaped payload re-runs
-        // main.qml's one-shot migrations on next widget load.
-        page.cfg_compactPreviewMigrated = false;
-        page.cfg_authProfilesPreemptMigrated = false;
-        page.cfg_thumbLabelMigrated = false;
     }
 
     FileDialog {

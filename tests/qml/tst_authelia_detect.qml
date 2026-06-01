@@ -97,11 +97,9 @@ TestCase {
     }
 
     // Defence-in-depth: ConfigAuth's load-time sanitize covers per-profile
-    // autheliaHost, but two paths still feed this comparison raw — the
-    // deprecated-global fallback in main.qml:2069 and
-    // Migrations.legacyAuthMigration copying the global verbatim into a
-    // synthesised profile. Stripping control bytes at the comparison site
-    // closes both leaks centrally.
+    // autheliaHost, but a hand-edited or imported value could still feed
+    // this comparison raw. Stripping control bytes at the comparison site
+    // closes that leak centrally.
     function test_zeroWidthSpace_stillMatches() {
         // U+200B between the dots — a literal `===` would silently fail.
         verify(Q.isAutheliaHost("https://auth.example.com/",

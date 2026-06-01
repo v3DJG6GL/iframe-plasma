@@ -31,7 +31,6 @@ QVariantMap fullSchemaSeed()
     m.insert(u"themeMode"_s, u"dark"_s);
     m.insert(u"showTabBar"_s, false);
     m.insert(u"compactPreviewEnabled"_s, true);
-    m.insert(u"compactPreviewShowLabel"_s, true);
     m.insert(u"compactPreviewLongAxisPx"_s, 200);
     m.insert(u"popupPinned"_s, true);
     m.insert(u"authProfilesJson"_s, u"[{\"id\":\"abc\",\"name\":\"p\",\"authType\":\"basic\"}]"_s);
@@ -83,7 +82,7 @@ private Q_SLOTS:
         QVERIFY(root.value(u"config"_s).isObject());
     }
 
-    void export_writesAllSixteenWhitelistedKeys()
+    void export_writesAllFifteenWhitelistedKeys()
     {
         BackupBridge b;
         const QString path = m_xdg.filePath(u"export2.json"_s);
@@ -99,7 +98,7 @@ private Q_SLOTS:
         for (auto it = groups.constBegin(); it != groups.constEnd(); ++it) {
             totalKeys += it.value().toObject().size();
         }
-        QCOMPARE(totalKeys, 16);
+        QCOMPARE(totalKeys, 15);
     }
 
     void export_groupsKeysByMainXmlGroup()
@@ -120,39 +119,6 @@ private Q_SLOTS:
         QVERIFY(groups.value(u"Advanced"_s).toObject().contains(u"userAgentOverride"_s));
         // Cross-group leak check
         QVERIFY(!groups.value(u"General"_s).toObject().contains(u"zoomFactor"_s));
-    }
-
-    void export_stripsDeprecatedAndMigrationFlagKeys()
-    {
-        // Caller passes deprecated + migration-flag entries; export must
-        // not include them even though they're valid in main.xml.
-        QVariantMap seed = fullSchemaSeed();
-        seed.insert(u"compactPreviewMode"_s, u"fixed"_s);
-        seed.insert(u"compactPreviewTabIndex"_s, 2);
-        seed.insert(u"compactPreviewMigrated"_s, true);
-        seed.insert(u"autheliaHost"_s, u"auth.example.test"_s);
-        seed.insert(u"useBasicAuthInjection"_s, true);
-        seed.insert(u"authProfilesPreemptMigrated"_s, true);
-
-        BackupBridge b;
-        const QString path = m_xdg.filePath(u"export4.json"_s);
-        QCOMPARE(b.exportToFile(path, seed), QString{});
-
-        QFile f(path);
-        QVERIFY(f.open(QIODevice::ReadOnly));
-        const QJsonObject groups = QJsonDocument::fromJson(f.readAll())
-                                       .object()
-                                       .value(u"config"_s)
-                                       .toObject();
-        for (auto it = groups.constBegin(); it != groups.constEnd(); ++it) {
-            const QJsonObject g = it.value().toObject();
-            QVERIFY(!g.contains(u"compactPreviewMode"_s));
-            QVERIFY(!g.contains(u"compactPreviewTabIndex"_s));
-            QVERIFY(!g.contains(u"compactPreviewMigrated"_s));
-            QVERIFY(!g.contains(u"autheliaHost"_s));
-            QVERIFY(!g.contains(u"useBasicAuthInjection"_s));
-            QVERIFY(!g.contains(u"authProfilesPreemptMigrated"_s));
-        }
     }
 
     void export_tolerantOfPartialInput()
@@ -419,36 +385,6 @@ private Q_SLOTS:
         QVERIFY(skipped.contains(u"anotherFutureKnob"_s));
         // The known key still applies.
         QCOMPARE(result.value(u"config"_s).toMap().value(u"urlsJson"_s).toString(), u"[]"_s);
-    }
-
-    // ----- import: deprecated keys in file are silently dropped ------
-    // (same path as unknown keys — they're outside the schema).
-
-    void import_deprecatedKeysInFile_excludedFromApply()
-    {
-        // A file from a hypothetical "older but same version" export
-        // that still carries the deprecated entries. We never apply
-        // them, and they're not in the schema so they're reported as
-        // skipped (which is fine — they're forward-incompatible).
-        const QString path = m_xdg.filePath(u"legacy.json"_s);
-        QFile f(path);
-        QVERIFY(f.open(QIODevice::WriteOnly));
-        f.write(R"({
-            "version": 1,
-            "config": {
-                "Display": { "compactPreviewMode": "fixed", "themeMode": "dark" },
-                "Auth": { "useBasicAuthInjection": true }
-            }
-        })");
-        f.close();
-
-        BackupBridge b;
-        const QVariantMap result = b.importFromFile(path, {});
-        QCOMPARE(result.value(u"ok"_s).toBool(), true);
-        const QVariantMap applied = result.value(u"config"_s).toMap();
-        QVERIFY(!applied.contains(u"compactPreviewMode"_s));
-        QVERIFY(!applied.contains(u"useBasicAuthInjection"_s));
-        QCOMPARE(applied.value(u"themeMode"_s).toString(), u"dark"_s);
     }
 
     // ----- import: JSON null/undefined values surfaced as skipped ---

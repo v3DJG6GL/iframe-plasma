@@ -9,11 +9,10 @@
  * tests/qml/tst_serialize_authprofiles.qml can drive the contract
  * without instantiating the KCM Dialog tree.
  *
- * normaliseTabRow(entry)     — apply tab defaults + thumbMode/popupMode
- *                              legacy inference. Pure; idempotent.
+ * normaliseTabRow(entry)     — apply tab defaults. Pure; idempotent.
  * normaliseAuthProfileRow(entry, uuidGen)
  *                            — apply profile defaults + synthesise UUID
- *                              when missing + derive preempt from
+ *                              when missing + default preempt from
  *                              authType. uuidGen is a callable so tests
  *                              can inject a deterministic generator.
  *                              Returns { row, synthesized: bool } so
@@ -80,13 +79,11 @@ function _normaliseKeywords(v) {
 
 function normaliseTabRow(entry) {
     entry = entry || {};
-    let mode = entry.thumbMode || "";
     const sel = entry.thumbSelector || "";
-    if (!mode) mode = sel.length > 0 ? "custom" : "chartOnly";
+    const mode = entry.thumbMode || "chartOnly";
 
-    let pmode = entry.popupMode || "";
     const psel = entry.popupSelector || "";
-    if (!pmode) pmode = psel.length > 0 ? "custom" : "fullPanel";
+    const pmode = entry.popupMode || "fullPanel";
 
     return {
         label:                entry.label || "",
@@ -99,15 +96,11 @@ function normaliseTabRow(entry) {
         thumbTimeRange:       entry.thumbTimeRange || "",
         thumbScaleMode:       _normaliseScaleMode(entry.thumbScaleMode),
         thumbExcludeKeywords: _normaliseKeywords(entry.thumbExcludeKeywords),
-        // Per-URL opt-IN for the panel-slot label overlay. The global
-        // compactPreviewShowLabel toggle was removed in 0.6.0; the
-        // overlay now paints only for rows whose user has explicitly
-        // ticked the URLs-tab "Display tab label on this thumbnail"
-        // checkbox. Default false → no overlay; an explicit true →
-        // overlay (provided thumbMode renders a slot at all). On
-        // upgrade, Migrations.thumbShowLabelMigration seeds true on
-        // every existing row so the new control is discoverable; new
-        // rows added via "Add URL" start false.
+        // Per-URL opt-IN for the panel-slot label overlay. The overlay
+        // paints only for rows whose user has explicitly ticked the
+        // URLs-tab "Display tab label on this thumbnail" checkbox.
+        // Default false → no overlay; an explicit true → overlay
+        // (provided thumbMode renders a slot at all).
         thumbShowLabel:       entry.thumbShowLabel === true,
         popupMode:            pmode,
         popupSelector:        psel,
@@ -124,15 +117,14 @@ function normaliseAuthProfileRow(entry, uuidGen) {
     }
     const authType = entry.authType || "basic";
 
-    // Default preempt per type when the field is missing on pre-0.5.0
-    // entries. Bearer/raw MUST pre-empt because Qt's 401 dialog can only
-    // collect user+password, so a token mismatch is otherwise unrecoverable.
+    // Defensive default for preempt when the field is missing or non-bool.
+    // Bearer/raw MUST pre-empt because Qt's 401 dialog can only collect
+    // user+password, so a token mismatch is otherwise unrecoverable.
     let preempt;
     if (typeof entry.preempt === "boolean") {
         preempt = entry.preempt;
     } else {
         preempt = (authType === "bearer" || authType === "raw");
-        synthesized = true;
     }
 
     return {

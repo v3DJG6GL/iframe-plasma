@@ -61,37 +61,38 @@ TestCase {
     function test_thumbMode_icon()           { compare(Schema.normaliseTabRow({ thumbMode: "icon" }).thumbMode, "icon"); }
     function test_thumbMode_excluded()       { compare(Schema.normaliseTabRow({ thumbMode: "excluded" }).thumbMode, "excluded"); }
 
-    // ===== thumbMode legacy inference ================================
-    function test_thumbMode_missingSelectorEmpty_inferChartOnly() {
+    // ===== thumbMode defaults ========================================
+    function test_thumbMode_missingDefaultsChartOnly() {
         compare(Schema.normaliseTabRow({}).thumbMode, "chartOnly");
     }
-    function test_thumbMode_missingSelectorPresent_inferCustom() {
+    function test_thumbMode_selectorWithoutMode_defaultsChartOnly() {
+        // A stray selector no longer promotes the row to "custom" — the
+        // mode defaults to chartOnly while the selector is preserved.
         const out = Schema.normaliseTabRow({ thumbSelector: ".u-wrap" });
-        compare(out.thumbMode, "custom");
-        compare(out.thumbSelector, ".u-wrap");
-    }
-    function test_thumbMode_modePresent_overridesSelectorInference() {
-        // If both fields are set, the explicit mode wins.
-        const out = Schema.normaliseTabRow({
-            thumbMode: "chartOnly", thumbSelector: ".u-wrap",
-        });
         compare(out.thumbMode, "chartOnly");
         compare(out.thumbSelector, ".u-wrap");
     }
+    function test_thumbMode_explicitModeKept() {
+        const out = Schema.normaliseTabRow({
+            thumbMode: "custom", thumbSelector: ".u-wrap",
+        });
+        compare(out.thumbMode, "custom");
+        compare(out.thumbSelector, ".u-wrap");
+    }
 
-    // ===== popupMode enumeration + legacy ============================
+    // ===== popupMode enumeration =====================================
     function test_popupMode_fullPanel() {
         compare(Schema.normaliseTabRow({ popupMode: "fullPanel" }).popupMode, "fullPanel");
     }
     function test_popupMode_custom() {
         compare(Schema.normaliseTabRow({ popupMode: "custom" }).popupMode, "custom");
     }
-    function test_popupMode_missingSelectorEmpty_inferFullPanel() {
+    function test_popupMode_missingDefaultsFullPanel() {
         compare(Schema.normaliseTabRow({}).popupMode, "fullPanel");
     }
-    function test_popupMode_missingSelectorPresent_inferCustom() {
+    function test_popupMode_selectorWithoutMode_defaultsFullPanel() {
         const out = Schema.normaliseTabRow({ popupSelector: "section.app" });
-        compare(out.popupMode, "custom");
+        compare(out.popupMode, "fullPanel");
         compare(out.popupSelector, "section.app");
     }
 
@@ -115,37 +116,16 @@ TestCase {
         compare(out.label, "L");
     }
 
-    // ===== load-time legacy-inference mutation must trigger re-persist
-    //
-    // Pins the invariant ConfigUrls.repopulate() relies on: when
-    // normaliseTabRow infers thumbMode/popupMode from selector presence,
-    // the rendered row's mode differs from the on-disk entry's missing
-    // field. Without the re-persist gate, KCM displays "custom" but the
-    // widget runtime falls back to chartOnly/fullPanel because
-    // main.qml:520 / :2076 read `tab.thumbMode || ...` directly.
-    function test_legacyInference_thumbMode_changesShape() {
-        const entry = { url: "https://x", thumbSelector: ".u-wrap" };
-        const row = Schema.normaliseTabRow(entry);
-        compare(row.thumbMode, "custom");
-        verify((entry.thumbMode || "") !== row.thumbMode);
-    }
-    function test_legacyInference_popupMode_changesShape() {
-        const entry = { url: "https://x", popupSelector: "section.app" };
-        const row = Schema.normaliseTabRow(entry);
-        compare(row.popupMode, "custom");
-        verify((entry.popupMode || "") !== row.popupMode);
-    }
-    function test_legacyInference_cleanRow_unchanged() {
-        // Negative case — the repopulate gate must NOT fire on a row
-        // whose modes are already canonical (else every load thrashes).
+    // ===== canonical row is unchanged by normalisation ==============
+    function test_canonicalRow_modesUnchanged() {
         const entry = {
             url: "https://x",
             thumbMode: "chartOnly", thumbSelector: "",
             popupMode: "fullPanel", popupSelector: "",
         };
         const row = Schema.normaliseTabRow(entry);
-        compare((entry.thumbMode || ""), row.thumbMode);
-        compare((entry.popupMode || ""), row.popupMode);
+        compare(entry.thumbMode, row.thumbMode);
+        compare(entry.popupMode, row.popupMode);
     }
 
     // ===== thumbIconName allow-list ==================================
@@ -264,10 +244,9 @@ TestCase {
         compare(Schema.normaliseTabRow({ thumbShowLabel: null }).thumbShowLabel, false);
     }
     function test_legacyHideLabelField_isStripped() {
-        // The 0.6.0 schema doesn't expose thumbHideLabel — a row that
-        // still carries it (e.g. imported from a pre-migration backup
-        // before main.qml's migrateThumbShowLabel runs) should normalise
-        // to a row without the legacy key.
+        // The schema doesn't expose thumbHideLabel — a row that still
+        // carries it (e.g. from a hand-edited or stale config) should
+        // normalise to a row without the legacy key.
         const row = Schema.normaliseTabRow({ thumbHideLabel: true });
         verify(!("thumbHideLabel" in row),
                "thumbHideLabel should not survive normalisation");
@@ -282,7 +261,7 @@ TestCase {
         compare(rows.length, 2);
         compare(rows[0].thumbMode, "icon");
         compare(rows[0].thumbIconName, "cpu");
-        compare(rows[1].thumbMode, "custom");      // inferred
+        compare(rows[1].thumbMode, "chartOnly");   // default; selector kept
         compare(rows[1].thumbSelector, ".u-wrap");
     }
 }

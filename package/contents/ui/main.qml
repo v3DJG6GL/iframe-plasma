@@ -12,7 +12,6 @@ import org.kde.plasma.plasmoid 2.0
 import org.kde.plasma.core as PlasmaCore
 import org.kde.kirigami as Kirigami
 import "./CropEngine.js" as CropEngine
-import "./Migrations.js" as Migrations
 import "./RowSchema.js" as RowSchema
 import "./UrlUtils.js" as UrlUtils
 
@@ -368,31 +367,8 @@ PlasmoidItem {
         // see the comment there.
         root.tabs = root.parseTabs(Plasmoid.configuration.urlsJson);
 
-        // Run the one-shot legacy-auth migration BEFORE priming the
-        // interceptor — converts per-URL basicAuthUser/rawAuthHeader to
-        // named auth profiles, writes secrets to KWallet under
-        // `profile:<uuid>`, and clears the legacy fields from urlsJson.
+        // Prime the auth interceptor once the initial config is parsed.
         Qt.callLater(function() {
-            root.migrateLegacyAuth();
-            // Per-profile preempt migration: runs once per install. Reads
-            // the old global useBasicAuthInjection to decide defaults, then
-            // marks itself done via authProfilesPreemptMigrated.
-            root.migratePreemptFlag();
-            // Compact-preview migration: translates the old
-            // compactPreviewMode="fixed" + compactPreviewTabIndex setup
-            // into per-URL thumbMode="excluded" markers. One-shot, marked
-            // via compactPreviewMigrated.
-            root.migrateCompactPreview();
-            // Per-URL label-overlay migration: drops the old global
-            // compactPreviewShowLabel + per-URL thumbHideLabel pair and
-            // seeds thumbShowLabel=true on every existing row. One-shot,
-            // marked via thumbLabelMigrated.
-            root.migrateThumbShowLabel();
-            // Re-read authProfiles after the migration may have rewritten
-            // authProfilesJson — the Connections onAuthProfilesJsonChanged
-            // handler also re-parses, but the migration writes before that
-            // signal lands, so refresh defensively.
-            root.authProfiles = root.parseAuthProfiles(Plasmoid.configuration.authProfilesJson);
             const anyAuth = root.tabs.some(t => (t.authProfileId && t.authProfileId.length > 0));
             if (anyAuth) root.primeAuthProfiles();
             root.syncInterceptor();
@@ -814,7 +790,6 @@ PlasmoidItem {
             // interceptor; priming was only called if Component.onCompleted
             // had already run with tabs populated — a race the user can't see.
             root.syncInterceptor();
-            root.migrateLegacyAuth();
             const anyAuth = root.tabs.some(t => (t.authProfileId && t.authProfileId.length > 0));
             if (anyAuth) {
                 root.primeAuthProfiles();
@@ -1106,119 +1081,6 @@ PlasmoidItem {
         } catch (e) {
             console.warn("iframe-plasma[auth] handler error:", e.message);
         }
-    }
-
-    // --- Legacy auth migration (one-shot at startup) -----------------------
-    //
-    // Pre-0.4.0 stored credentials per-URL in `basicAuthUser`/
-    // `basicAuthPasswordPlaintext`/`rawAuthHeader` fields. 0.4.0 introduces
-    // named profiles. This walks `urlsJson`, detects legacy fields, dedupes
-    // by (host, username, rawHeader) signature so multiple tabs sharing the
-    // same credential collapse into one profile, writes the secret to
-    // KWallet under `profile:<uuid>`, and rewrites `urlsJson` to reference
-    // profiles via `authProfileId`. Idempotent: skips tabs that already have
-    // a non-empty authProfileId.
-    function migrateLegacyAuth() {
-        // Plugin must be live: writing secrets to KWallet and stripping legacy
-        // fields without persisting them would silently drop credentials that
-        // existed only in the old `basic:<host>` keys. The onLoaded handler
-        // re-invokes this once authSupport is ready.
-        if (!root.authSupport) return;
-
-        const out = Migrations.legacyAuthMigration(
-            Plasmoid.configuration.urlsJson,
-            Plasmoid.configuration.authProfilesJson,
-            Plasmoid.configuration.autheliaHost || "",
-            function(key) { return root.authSupport.get(key); },
-            root.newUuid);
-
-        for (const w of out.walletWrites) {
-            root.authSupport.setMap(w.key, w.map);
-        }
-        if (out.mutated) {
-            Plasmoid.configuration.authProfilesJson = out.profilesJson;
-            Plasmoid.configuration.urlsJson         = out.urlsJson;
-            console.info("iframe-plasma[migrate] persisted: " + out.walletWrites.length + " wallet write(s)");
-        }
-    }
-
-    // One-shot 0.5.0 migration: the global `useBasicAuthInjection` toggle is
-    // gone; pre-emption is now a per-profile `preempt` bool. Walks every
-    // existing profile and sets `preempt` per type, with the old global as a
-    // hint. Bearer/raw always get true — Qt's 401 dialog can't collect a
-    // token, so any pre-existing bearer/raw profile that had the global OFF
-    // was silently broken and is now repaired. Basic respects the old global.
-    function migratePreemptFlag() {
-        if (Plasmoid.configuration.authProfilesPreemptMigrated) return;
-        const out = Migrations.preemptMigration(
-            Plasmoid.configuration.authProfilesJson,
-            Plasmoid.configuration.useBasicAuthInjection === true);
-        if (out.error) {
-            console.warn("iframe-plasma[preempt-migrate] parse error:", out.error);
-        } else if (out.mutated) {
-            Plasmoid.configuration.authProfilesJson = out.json;
-        }
-        Plasmoid.configuration.authProfilesPreemptMigrated = true;
-        console.info("iframe-plasma[preempt-migrate] done; profilesUpdated="
-            + (out.mutated ? "yes" : "no"));
-    }
-
-    // One-shot 0.5.0 migration: the global "Preview source" dropdown is
-    // gone; panel-slot rendering is now per-URL via thumbMode (with a new
-    // "excluded" value). When the old config had compactPreviewMode="fixed"
-    // + compactPreviewTabIndex=N, mark every OTHER tab as excluded — that
-    // preserves the user's "show only this tab in the panel slot" intent
-    // without needing the deprecated keys. For mode="auto" (or unset),
-    // do nothing: the new default already follows the popup's active tab.
-    function migrateCompactPreview() {
-        if (Plasmoid.configuration.compactPreviewMigrated) return;
-        const out = Migrations.compactPreviewMigration(
-            Plasmoid.configuration.urlsJson,
-            Plasmoid.configuration.compactPreviewMode || "auto",
-            Plasmoid.configuration.compactPreviewTabIndex);
-        if (out.skipped) {
-            console.info("iframe-plasma[compact-migrate] skipped: " + out.reason);
-        } else if (out.mutated) {
-            Plasmoid.configuration.urlsJson = out.json;
-            console.info("iframe-plasma[compact-migrate] " + out.reason);
-        } else {
-            console.info("iframe-plasma[compact-migrate] " + out.reason);
-        }
-        Plasmoid.configuration.compactPreviewMigrated = true;
-    }
-
-    // One-shot 0.6.0 migration: the global "Show URL label" toggle
-    // (compactPreviewShowLabel) is gone; label-overlay visibility is now
-    // per-URL via thumbShowLabel (opt-IN). Loudest-default policy — on
-    // upgrade we seed thumbShowLabel=true on every existing row so the
-    // new control is discoverable, and strip the deprecated per-URL
-    // thumbHideLabel field. Users who don't want labels untick per row.
-    function migrateThumbShowLabel() {
-        if (Plasmoid.configuration.thumbLabelMigrated) return;
-        const out = Migrations.thumbShowLabelMigration(
-            Plasmoid.configuration.urlsJson);
-        if (out.skipped) {
-            console.info("iframe-plasma[thumb-label-migrate] skipped: " + out.reason);
-        } else if (out.mutated) {
-            Plasmoid.configuration.urlsJson = out.json;
-            console.info("iframe-plasma[thumb-label-migrate] " + out.reason);
-        } else {
-            console.info("iframe-plasma[thumb-label-migrate] " + out.reason);
-        }
-        Plasmoid.configuration.thumbLabelMigrated = true;
-    }
-
-    // Simple v4 UUID (sufficient for profile identity — not security-critical).
-    function newUuid() {
-        function hex() { return Math.floor(Math.random() * 16).toString(16); }
-        let s = "";
-        for (let i = 0; i < 32; i++) {
-            if (i === 8 || i === 12 || i === 16 || i === 20) s += "-";
-            if (i === 12) { s += "4"; continue; }
-            if (i === 16) { s += (8 + Math.floor(Math.random() * 4)).toString(16); continue; }
-            s += hex();
-        }
-        return s;
     }
 
     // Auto-cycle through tabs ONLY while the popup is closed — the panel-slot
@@ -2432,11 +2294,10 @@ PlasmoidItem {
                     required property int index
 
                     profile: root.profileForAuthId(modelData.authProfileId)
-                    // Authelia host is now per-profile (0.4.0+). Falls back to
-                    // the deprecated global setting for unmigrated configs.
+                    // Authelia host is per-profile.
                     autheliaHost: {
                         const p = root.profileById(modelData.authProfileId);
-                        return (p && p.autheliaHost) || Plasmoid.configuration.autheliaHost || "";
+                        return (p && p.autheliaHost) || "";
                     }
                     zoomPct: Plasmoid.configuration.zoomFactor
                     // resolveUrl reads only modelData.url, which is a

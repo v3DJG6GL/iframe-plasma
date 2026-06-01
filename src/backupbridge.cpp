@@ -22,12 +22,6 @@ namespace {
 // Single source of truth for which kcfg entries round-trip through the
 // export. Order matches main.xml so a diff between an exported file and
 // main.xml is human-readable. Deliberately omitted:
-//   * compactPreviewMode / compactPreviewTabIndex / autheliaHost (global)
-//     / useBasicAuthInjection — deprecated; only read once by the
-//     one-shot migrations in main.qml's Component.onCompleted.
-//   * compactPreviewMigrated / authProfilesPreemptMigrated — migration
-//     flags. On import we force-reset both to false so any legacy-shaped
-//     data in the imported file re-triggers the migration cleanly.
 //   * authProfilesSecretsSerial — transient session counter ConfigAuth
 //     uses to notify main.qml of KWallet writes across the dialog/widget
 //     engine boundary; never exported.
@@ -45,7 +39,6 @@ constexpr Entry kSchema[] = {
     {"Display", "themeMode"},
     {"Display", "showTabBar"},
     {"Display", "compactPreviewEnabled"},
-    {"Display", "compactPreviewShowLabel"},
     {"Display", "compactPreviewLongAxisPx"},
     {"Display", "popupPinned"},
     {"Auth", "authProfilesJson"},

@@ -40,7 +40,6 @@ ALLOWLIST = {
     "zoomFactor":                  "passthrough property to WebEngineView.zoomFactor",
     "showTabBar":                  "TabBar.visible binding, no decision logic",
     "compactPreviewEnabled":       "compact representation visibility gate",
-    "compactPreviewShowLabel":     "Label.visible binding in panel slot",
     "compactPreviewLongAxisPx":    "passthrough size to compact rep",
     "popupPinned":                 "binding to hideOnWindowDeactivate",
     "userAgentOverride":           "passthrough to WebEngineProfile.httpUserAgent (sanitised in main.qml; sanitiser itself is shared with sanitize.js which is covered)",

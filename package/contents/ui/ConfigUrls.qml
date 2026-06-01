@@ -419,10 +419,9 @@ KCM.SimpleKCM {
                 // cleanly. parseKeywords()/stringifyKeywords() do the
                 // adapter dance at the load/save boundary.
                 required property string thumbExcludeKeywords
-                // Per-URL opt-IN for the panel-slot label overlay.
-                // The old global compactPreviewShowLabel toggle is gone;
-                // each row decides on its own whether to paint the URL's
-                // label as a semi-transparent bar across the top of the
+                // Per-URL opt-IN for the panel-slot label overlay. Each
+                // row decides on its own whether to paint the URL's label
+                // as a semi-transparent bar across the top of the
                 // thumbnail. Default false → no overlay.
                 required property bool thumbShowLabel
                 // Thumbnail-mode presets shown in the combo. Grafana embeds

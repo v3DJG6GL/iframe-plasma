@@ -35,37 +35,6 @@
         <entry name="compactPreviewEnabled" type="Bool">
             <default>true</default>
         </entry>
-        <!-- DEPRECATED in 0.5.0: the Display-tab "Preview source" dropdown
-             is gone; panel-slot rendering is now configured per-URL via
-             `thumbMode` (including a new `excluded` value for tabs that
-             should never appear in the slot). Kept read-only for the
-             one-shot migration in main.qml. Remove in 0.6.0. -->
-        <entry name="compactPreviewMode" type="String">
-            <default>auto</default>
-        </entry>
-        <entry name="compactPreviewTabIndex" type="Int">
-            <default>0</default>
-        </entry>
-        <!-- One-shot flag for the per-URL thumbnail-mode migration. Set
-             true after main.qml has translated old compactPreviewMode=fixed
-             setups into per-URL `excluded` flags. -->
-        <entry name="compactPreviewMigrated" type="Bool">
-            <default>false</default>
-        </entry>
-        <!-- DEPRECATED in 0.6.0: the global label-overlay toggle is gone.
-             Whether the overlay paints is now per-URL via thumbShowLabel
-             (opt-IN). Kept read-only for the one-shot migration in main.qml
-             (Component.onCompleted → migrateThumbShowLabel). Remove in 0.7.0. -->
-        <entry name="compactPreviewShowLabel" type="Bool">
-            <default>false</default>
-        </entry>
-        <!-- One-shot flag for the per-URL label-overlay migration. Set true
-             after main.qml has seeded thumbShowLabel=true on every existing
-             row (loudest-default policy) and stripped the legacy
-             thumbHideLabel field. -->
-        <entry name="thumbLabelMigrated" type="Bool">
-            <default>false</default>
-        </entry>
         <!-- Long-axis size of the panel-slot preview in pixels. On a
              horizontal panel this is the slot's WIDTH (height = panel
              thickness, set by Plasma). On a vertical panel this is the
@@ -90,26 +59,6 @@
              profile by its id in urlsJson.authProfileId. -->
         <entry name="authProfilesJson" type="String">
             <default>[]</default>
-        </entry>
-        <!-- DEPRECATED in 0.4.0: was the global Authelia host, now per-
-             profile. Kept readable so the one-shot migration in main.qml
-             can copy the old value as the default for migrated profiles. -->
-        <entry name="autheliaHost" type="String">
-            <default></default>
-        </entry>
-        <!-- DEPRECATED in 0.5.0: pre-emption is now per-profile, stored as
-             `preempt` in each authProfilesJson entry. Kept read-only for the
-             one-shot migration in main.qml (Component.onCompleted). Remove
-             in 0.6.0. -->
-        <entry name="useBasicAuthInjection" type="Bool">
-            <default>false</default>
-        </entry>
-        <!-- One-shot flag for the per-profile `preempt` migration. Set true
-             after main.qml's migration block has rewritten authProfilesJson
-             with sensible per-type defaults (basic=false, bearer/raw=true
-             when the old global was OFF; all=true when it was ON). -->
-        <entry name="authProfilesPreemptMigrated" type="Bool">
-            <default>false</default>
         </entry>
         <!-- Monotonic counter bumped by ConfigAuth whenever a KWallet
              entry is written or removed. main.qml watches it via the

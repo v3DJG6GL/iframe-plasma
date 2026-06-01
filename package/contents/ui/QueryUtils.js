@@ -109,14 +109,11 @@ function isAutheliaHost(currentUrl, autheliaHost) {
         // silently fail to match and the overlay never engages.
         //
         // Sanitize.strip here as defence-in-depth: ConfigAuth's load-time
-        // sanitize covers per-profile autheliaHost rows but two paths still
-        // feed the comparison raw — the deprecated-global fallback in
-        // main.qml:2069 (`Plasmoid.configuration.autheliaHost || ""`) and
-        // Migrations.legacyAuthMigration copying `autheliaHostFallback`
-        // into a newly-synthesised profile verbatim. Either path can leak
-        // a stray ZWSP/RLO/BOM that the literal `===` / `endsWith` would
-        // silently miss, leaving the overlay disengaged so the operator
-        // types credentials into the bare upstream login page.
+        // sanitize covers per-profile autheliaHost rows, but a stray
+        // ZWSP/RLO/BOM in a hand-edited or imported value would otherwise
+        // make the literal `===` / `endsWith` silently miss, leaving the
+        // overlay disengaged so the operator types credentials into the
+        // bare upstream login page.
         const host = new URL(currentUrl).host;
         const want = Sanitize.strip(String(autheliaHost).toLowerCase());
         if (!want) return false;

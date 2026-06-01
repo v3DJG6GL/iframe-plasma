@@ -37,25 +37,28 @@ TestCase {
     }
 
     // ===== preempt defaults per authType ============================
+    // The default is a defensive value, not a one-time migration, so the
+    // preempt-only path does NOT set the `synthesized` re-persist flag
+    // (only a missing/empty id does).
     function test_preemptDefault_basic_false() {
         const out = Schema.normaliseAuthProfileRow({ id: "i", authType: "basic" }, _gen);
         compare(out.row.preempt, false);
-        verify(out.synthesized);
+        verify(!out.synthesized);
     }
     function test_preemptDefault_bearer_true() {
         const out = Schema.normaliseAuthProfileRow({ id: "i", authType: "bearer" }, _gen);
         compare(out.row.preempt, true);
-        verify(out.synthesized);
+        verify(!out.synthesized);
     }
     function test_preemptDefault_raw_true() {
         const out = Schema.normaliseAuthProfileRow({ id: "i", authType: "raw" }, _gen);
         compare(out.row.preempt, true);
-        verify(out.synthesized);
+        verify(!out.synthesized);
     }
     function test_preemptDefault_none_false() {
         const out = Schema.normaliseAuthProfileRow({ id: "i", authType: "none" }, _gen);
         compare(out.row.preempt, false);
-        verify(out.synthesized);
+        verify(!out.synthesized);
     }
     function test_preemptDefault_missingAuthType_basic() {
         // authType defaults to "basic" → preempt defaults to false.
@@ -83,7 +86,7 @@ TestCase {
         const out = Schema.normaliseAuthProfileRow(
             { id: "i", authType: "basic", preempt: "yes" }, _gen);
         compare(out.row.preempt, false);
-        verify(out.synthesized);
+        verify(!out.synthesized);
     }
 
     // ===== passthrough field defaults ===============================
