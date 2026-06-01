@@ -45,6 +45,39 @@ function sanitizeIconName(name) {
     return "";
 }
 
+// Three explicit modes for how the panel-slot thumbnail sizes the
+// matched element's box and content:
+//   "fit"      → measure intrinsic content size, apply transform: scale
+//                so smaller content fills the viewport aspect-preserved
+//   "original" → no width/height override; the matched element keeps
+//                its natural size, anchored top-left, siblings hidden
+//   "stretch"  → outer box sized to 100vw × 100vh (current/legacy
+//                behavior — good for responsive widgets like uPlot)
+// Unknown values normalise to "fit" so a corrupt backup can't paint
+// "junk" mode all the way to the renderer.
+function _normaliseScaleMode(v) {
+    return (v === "original" || v === "stretch" || v === "fit") ? v : "fit";
+}
+
+// Coerce a thumbExcludeKeywords value into an Array<string>. Accepts:
+//   - an Array of strings (preferred shape)
+//   - a single string (legacy single-keyword field)
+//   - missing / null / undefined → []
+// Empty / non-string entries are filtered. Pure; idempotent. The
+// downstream chip-list editor in ConfigUrls owns the user-visible
+// add/remove flow; CropEngine compiles each entry to a RegExp or a
+// case-insensitive substring at apply time.
+function _normaliseKeywords(v) {
+    if (!v) return [];
+    const arr = Array.isArray(v) ? v : [v];
+    const out = [];
+    for (let i = 0; i < arr.length; i++) {
+        const s = arr[i];
+        if (typeof s === "string" && s.length > 0) out.push(s);
+    }
+    return out;
+}
+
 function normaliseTabRow(entry) {
     entry = entry || {};
     let mode = entry.thumbMode || "";
@@ -56,16 +89,28 @@ function normaliseTabRow(entry) {
     if (!pmode) pmode = psel.length > 0 ? "custom" : "fullPanel";
 
     return {
-        label:          entry.label || "",
-        url:            entry.url || "",
-        authProfileId:  entry.authProfileId || "",
-        thumbMode:      mode,
-        thumbSelector:  sel,
-        thumbText:      entry.thumbText || "",
-        thumbIconName:  sanitizeIconName(entry.thumbIconName),
-        thumbTimeRange: entry.thumbTimeRange || "",
-        popupMode:      pmode,
-        popupSelector:  psel,
+        label:                entry.label || "",
+        url:                  entry.url || "",
+        authProfileId:        entry.authProfileId || "",
+        thumbMode:            mode,
+        thumbSelector:        sel,
+        thumbText:            entry.thumbText || "",
+        thumbIconName:        sanitizeIconName(entry.thumbIconName),
+        thumbTimeRange:       entry.thumbTimeRange || "",
+        thumbScaleMode:       _normaliseScaleMode(entry.thumbScaleMode),
+        thumbExcludeKeywords: _normaliseKeywords(entry.thumbExcludeKeywords),
+        // Per-URL opt-IN for the panel-slot label overlay. The global
+        // compactPreviewShowLabel toggle was removed in 0.6.0; the
+        // overlay now paints only for rows whose user has explicitly
+        // ticked the URLs-tab "Display tab label on this thumbnail"
+        // checkbox. Default false → no overlay; an explicit true →
+        // overlay (provided thumbMode renders a slot at all). On
+        // upgrade, Migrations.thumbShowLabelMigration seeds true on
+        // every existing row so the new control is discoverable; new
+        // rows added via "Add URL" start false.
+        thumbShowLabel:       entry.thumbShowLabel === true,
+        popupMode:            pmode,
+        popupSelector:        psel,
     };
 }
 

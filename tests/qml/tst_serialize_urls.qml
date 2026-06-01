@@ -14,6 +14,8 @@ TestCase {
             label: "", url: "", authProfileId: "",
             thumbMode: "chartOnly", thumbSelector: "",
             thumbText: "", thumbIconName: "", thumbTimeRange: "",
+            thumbScaleMode: "fit", thumbExcludeKeywords: [],
+            thumbShowLabel: false,
             popupMode: "fullPanel", popupSelector: "",
         };
     }
@@ -198,6 +200,77 @@ TestCase {
     function test_iconName_leadingDotRejected() {
         // FreeDesktop spec disallows; also blocks a stray "://" slipping past.
         compare(Schema.normaliseTabRow({ thumbIconName: ".hidden" }).thumbIconName, "");
+    }
+
+    // ===== thumbScaleMode enumeration + default =====================
+    function test_scaleMode_default_isFit() {
+        compare(Schema.normaliseTabRow({}).thumbScaleMode, "fit");
+    }
+    function test_scaleMode_fitKept() {
+        compare(Schema.normaliseTabRow({ thumbScaleMode: "fit" }).thumbScaleMode, "fit");
+    }
+    function test_scaleMode_originalKept() {
+        compare(Schema.normaliseTabRow({ thumbScaleMode: "original" }).thumbScaleMode, "original");
+    }
+    function test_scaleMode_stretchKept() {
+        compare(Schema.normaliseTabRow({ thumbScaleMode: "stretch" }).thumbScaleMode, "stretch");
+    }
+    function test_scaleMode_unknownNormalisedToFit() {
+        compare(Schema.normaliseTabRow({ thumbScaleMode: "junk" }).thumbScaleMode, "fit");
+    }
+    function test_scaleMode_nullNormalisedToFit() {
+        compare(Schema.normaliseTabRow({ thumbScaleMode: null }).thumbScaleMode, "fit");
+    }
+
+    // ===== thumbExcludeKeywords normalisation ========================
+    function test_keywords_default_isEmptyArray() {
+        compare(Schema.normaliseTabRow({}).thumbExcludeKeywords, []);
+    }
+    function test_keywords_arrayKept() {
+        compare(Schema.normaliseTabRow({ thumbExcludeKeywords: ["No data", "/Err/"] }).thumbExcludeKeywords,
+                ["No data", "/Err/"]);
+    }
+    function test_keywords_singleStringCoercedToArray() {
+        compare(Schema.normaliseTabRow({ thumbExcludeKeywords: "lone" }).thumbExcludeKeywords,
+                ["lone"]);
+    }
+    function test_keywords_emptyStringsFiltered() {
+        compare(Schema.normaliseTabRow({ thumbExcludeKeywords: ["", "ok", "", null] }).thumbExcludeKeywords,
+                ["ok"]);
+    }
+    function test_keywords_nonStringFiltered() {
+        compare(Schema.normaliseTabRow({ thumbExcludeKeywords: [42, "ok", true] }).thumbExcludeKeywords,
+                ["ok"]);
+    }
+    function test_keywords_null_isEmptyArray() {
+        compare(Schema.normaliseTabRow({ thumbExcludeKeywords: null }).thumbExcludeKeywords, []);
+    }
+
+    // ===== thumbShowLabel ===========================================
+    function test_showLabel_default_isFalse() {
+        compare(Schema.normaliseTabRow({}).thumbShowLabel, false);
+    }
+    function test_showLabel_trueKept() {
+        compare(Schema.normaliseTabRow({ thumbShowLabel: true }).thumbShowLabel, true);
+    }
+    function test_showLabel_falseKept() {
+        compare(Schema.normaliseTabRow({ thumbShowLabel: false }).thumbShowLabel, false);
+    }
+    function test_showLabel_truthyNonBoolDropped() {
+        // Defence: anything that isn't strictly === true normalises to
+        // false so a malformed import can't smuggle a "1" string through.
+        compare(Schema.normaliseTabRow({ thumbShowLabel: 1 }).thumbShowLabel, false);
+        compare(Schema.normaliseTabRow({ thumbShowLabel: "true" }).thumbShowLabel, false);
+        compare(Schema.normaliseTabRow({ thumbShowLabel: null }).thumbShowLabel, false);
+    }
+    function test_legacyHideLabelField_isStripped() {
+        // The 0.6.0 schema doesn't expose thumbHideLabel — a row that
+        // still carries it (e.g. imported from a pre-migration backup
+        // before main.qml's migrateThumbShowLabel runs) should normalise
+        // to a row without the legacy key.
+        const row = Schema.normaliseTabRow({ thumbHideLabel: true });
+        verify(!("thumbHideLabel" in row),
+               "thumbHideLabel should not survive normalisation");
     }
 
     // ===== full round-trip JSON →→ array →→ ListModel-shape =========

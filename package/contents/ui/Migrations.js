@@ -200,3 +200,58 @@ function legacyAuthMigration(urlsJson, profilesJson, autheliaHostFallback,
         mutated:      mutated,
     };
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// 4. Per-URL "Show tab label" migration (0.5.x → 0.6.0).
+//    The global compactPreviewShowLabel toggle is gone; whether the
+//    panel-slot label overlay paints is now per-URL via thumbShowLabel
+//    (opt-IN). The old per-URL opt-OUT thumbHideLabel is also dropped.
+//
+//    Loudest-default policy: on first widget load after upgrade, every
+//    row gets thumbShowLabel=true regardless of the old global/per-row
+//    state. Surfaces the new control even for users who had labels off;
+//    they can untick per row. Legacy thumbHideLabel is stripped so the
+//    on-disk shape stays clean.
+//
+//    Idempotent: the second run sees thumbShowLabel already true and
+//    thumbHideLabel already absent, returns mutated:false.
+//
+// Returns { json: string|null, mutated: bool, skipped: bool, reason: string }
+//   json:    new urlsJson (only when mutated); null otherwise
+//   mutated: whether any row gained thumbShowLabel or lost thumbHideLabel
+//   skipped: true on parse error / non-array (callers must not write)
+//   reason:  human-readable explanation
+// ─────────────────────────────────────────────────────────────────────
+function thumbShowLabelMigration(urlsJson) {
+    let tabs;
+    try {
+        tabs = JSON.parse(urlsJson || "[]");
+    } catch (e) {
+        return { json: null, mutated: false, skipped: true,
+                 reason: "urlsJson parse error: " + e.message };
+    }
+    if (!Array.isArray(tabs)) {
+        return { json: null, mutated: false, skipped: true,
+                 reason: "urlsJson is not an array (no-op)" };
+    }
+    let mutated = false;
+    for (let i = 0; i < tabs.length; i++) {
+        const t = tabs[i];
+        if (!t || typeof t !== "object") continue;
+        if (t.thumbShowLabel !== true) {
+            t.thumbShowLabel = true;
+            mutated = true;
+        }
+        if ("thumbHideLabel" in t) {
+            delete t.thumbHideLabel;
+            mutated = true;
+        }
+    }
+    return {
+        json:    mutated ? JSON.stringify(tabs) : null,
+        mutated: mutated,
+        skipped: false,
+        reason:  mutated ? "set thumbShowLabel=true on " + tabs.length + " row(s)"
+                         : "already migrated; no-op",
+    };
+}

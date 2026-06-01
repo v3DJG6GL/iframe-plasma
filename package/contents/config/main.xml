@@ -52,9 +52,18 @@
         <entry name="compactPreviewMigrated" type="Bool">
             <default>false</default>
         </entry>
-        <!-- When true, render the URL's `label` field as a semi-transparent
-             bar across the top of the panel-slot thumbnail. -->
+        <!-- DEPRECATED in 0.6.0: the global label-overlay toggle is gone.
+             Whether the overlay paints is now per-URL via thumbShowLabel
+             (opt-IN). Kept read-only for the one-shot migration in main.qml
+             (Component.onCompleted → migrateThumbShowLabel). Remove in 0.7.0. -->
         <entry name="compactPreviewShowLabel" type="Bool">
+            <default>false</default>
+        </entry>
+        <!-- One-shot flag for the per-URL label-overlay migration. Set true
+             after main.qml has seeded thumbShowLabel=true on every existing
+             row (loudest-default policy) and stripped the legacy
+             thumbHideLabel field. -->
+        <entry name="thumbLabelMigrated" type="Bool">
             <default>false</default>
         </entry>
         <!-- Long-axis size of the panel-slot preview in pixels. On a

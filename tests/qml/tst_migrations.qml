@@ -357,4 +357,89 @@ TestCase {
         verify(tabs[2].authProfileId.length > 0);
         compare(out.walletWrites.length, 1);
     }
+
+    // =============================================================
+    //  4. thumbShowLabelMigration
+    // =============================================================
+    function test_thumbShow_emptyArray_isNoOp() {
+        // Empty list — nothing to flip, mutated=false, json stays null
+        // so the caller skips the write.
+        const out = M.thumbShowLabelMigration("[]");
+        compare(out.skipped, false);
+        compare(out.mutated, false);
+        compare(out.json, null);
+    }
+
+    function test_thumbShow_malformedJson_skipped() {
+        const out = M.thumbShowLabelMigration("{not json");
+        compare(out.skipped, true);
+        compare(out.mutated, false);
+        verify(out.reason.indexOf("parse error") >= 0);
+    }
+
+    function test_thumbShow_nonArray_skipped() {
+        // A stray object instead of an array — refuse to mutate.
+        const out = M.thumbShowLabelMigration('{"a":1}');
+        compare(out.skipped, true);
+        compare(out.mutated, false);
+    }
+
+    function test_thumbShow_setsTrueForEveryRow() {
+        // Loudest-default policy: every existing row gets the overlay
+        // turned on regardless of prior state.
+        const out = M.thumbShowLabelMigration(
+            '[{"url":"https://a"},{"url":"https://b"},{"url":"https://c"}]');
+        compare(out.skipped, false);
+        compare(out.mutated, true);
+        const tabs = JSON.parse(out.json);
+        compare(tabs.length, 3);
+        compare(tabs[0].thumbShowLabel, true);
+        compare(tabs[1].thumbShowLabel, true);
+        compare(tabs[2].thumbShowLabel, true);
+    }
+
+    function test_thumbShow_overridesExistingFalse() {
+        // Even an explicit thumbShowLabel:false gets flipped — the
+        // policy is a clean reset, not a merge.
+        const out = M.thumbShowLabelMigration(
+            '[{"url":"https://a","thumbShowLabel":false}]');
+        compare(out.mutated, true);
+        const tabs = JSON.parse(out.json);
+        compare(tabs[0].thumbShowLabel, true);
+    }
+
+    function test_thumbShow_stripsLegacyHideField() {
+        // The deprecated per-URL thumbHideLabel key is removed from
+        // each row so the new on-disk shape stays clean.
+        const out = M.thumbShowLabelMigration(
+            '[{"url":"https://a","thumbHideLabel":true}]');
+        compare(out.mutated, true);
+        const tabs = JSON.parse(out.json);
+        compare(tabs[0].thumbShowLabel, true);
+        verify(!("thumbHideLabel" in tabs[0]));
+    }
+
+    function test_thumbShow_idempotent() {
+        // Second pass over already-migrated JSON: thumbShowLabel is
+        // already true, no thumbHideLabel present → mutated:false.
+        const first = M.thumbShowLabelMigration(
+            '[{"url":"https://a"},{"url":"https://b"}]');
+        compare(first.mutated, true);
+        const second = M.thumbShowLabelMigration(first.json);
+        compare(second.mutated, false);
+        compare(second.skipped, false);
+        compare(second.json, null);
+    }
+
+    function test_thumbShow_preservesOtherFields() {
+        // Migration must not clobber unrelated row data.
+        const out = M.thumbShowLabelMigration(
+            '[{"url":"https://a","label":"Main","thumbMode":"icon","thumbIconName":"cpu"}]');
+        const tabs = JSON.parse(out.json);
+        compare(tabs[0].url, "https://a");
+        compare(tabs[0].label, "Main");
+        compare(tabs[0].thumbMode, "icon");
+        compare(tabs[0].thumbIconName, "cpu");
+        compare(tabs[0].thumbShowLabel, true);
+    }
 }
