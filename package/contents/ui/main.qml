@@ -100,11 +100,17 @@ PlasmoidItem {
     }
 
     toolTipMainText: {
+        // Depend on the metadata serial: an in-place Apply that renames
+        // the active tab's label leaves this tooltip painting the old
+        // name otherwise. See _tabsMetadataSerial docblock.
+        const _tick = root._tabsMetadataSerial;
         if (tabs.length === 0) return i18n("iframe Plasma");
         const cur = tabs[currentTabIndex];
         return cur && cur.label ? cur.label : i18n("iframe Plasma");
     }
     toolTipSubText: {
+        // Subtext is index-position-only, no per-tab fields — serial
+        // dependency unnecessary.
         if (tabs.length === 0) return i18n("No URLs configured");
         if (tabs.length === 1) return "";
         return i18np("1 tab", "%1 tabs (%2 active)", tabs.length, currentTabIndex + 1);
@@ -230,20 +236,73 @@ PlasmoidItem {
                 console.info("iframe-plasma[urls] selector-only update; tabs[] rebuild skipped");
                 return;
             }
-            root.tabs = root.parseTabs(Plasmoid.configuration.urlsJson);
+            const newTabs = root.parseTabs(Plasmoid.configuration.urlsJson);
+            // Fast path: metadata-only Apply (keyword chip add, scale-mode
+            // pick, hide-label toggle, label rename, etc.) leaves URLs +
+            // profile assignments + ordering intact. In that case mutate
+            // root.tabs[i] in place — no Repeater rebuild, no
+            // WebEngineView destruction, no popup blank. Same template
+            // savePickedSelector uses for picker writes (L771-869).
+            if (UrlUtils.isMetadataOnlyTabsChange(root.tabs, newTabs)) {
+                root._applyTabsMetadataInPlace(newTabs);
+                return;
+            }
+            // Structural change — accept the rebuild. URL added/removed/
+            // edited or profile reassigned: the WebEngineView at the
+            // affected index has to navigate to the new URL or rebind
+            // to a different profile, so destroying the delegates is
+            // the cheapest correct path.
+            root.tabs = newTabs;
             if (root.currentTabIndex >= root.tabs.length) {
                 root.setCurrentTab(Math.max(0, root.tabs.length - 1));
             }
             root.primeAuthProfiles();
         }
         function onAuthProfilesJsonChanged() {
+            // Snapshot the pre-change profile bodies BEFORE we replace
+            // root.authProfiles. Each entry's full JSON body — minus the
+            // KWallet-resident secret which doesn't live in this JSON
+            // anyway — is the diff target. Profiles with identical bodies
+            // don't need any tab to reload.
+            const oldById = {};
+            for (const p of root.authProfiles) {
+                if (p && p.id) oldById[p.id] = JSON.stringify(p);
+            }
             root.authProfiles = root.parseAuthProfiles(Plasmoid.configuration.authProfilesJson);
             // Per-profile preempt flags may have flipped — resync interceptor
             // attach/detach BEFORE priming so applyProfile writes hit only
             // profiles that are actually attached.
             root.syncInterceptor();
             root.primeAuthProfiles();
-            root.reloadAll();
+            // Compute the set of changed profile ids (added / removed /
+            // body-different). Only tabs referencing a changed id need
+            // the soft reload — the blanket reloadAll() this used to call
+            // re-navigated every other tab in the pinned popup for no
+            // reason.
+            const changed = {};
+            const newById = {};
+            for (const p of root.authProfiles) {
+                if (p && p.id) {
+                    newById[p.id] = JSON.stringify(p);
+                    if (newById[p.id] !== oldById[p.id]) changed[p.id] = true;
+                }
+            }
+            for (const id in oldById) {
+                if (!(id in newById)) changed[id] = true;
+            }
+            const changedIds = Object.keys(changed);
+            if (changedIds.length === 0) {
+                console.info("iframe-plasma[auth] profiles unchanged; no tab reloads");
+                return;
+            }
+            console.info("iframe-plasma[auth] changed profile ids=" + JSON.stringify(changedIds)
+                + " — reloading referencing tabs");
+            for (let i = 0; i < root.tabs.length; i++) {
+                const t = root.tabs[i];
+                if (t && t.authProfileId && (t.authProfileId in changed)) {
+                    root._tabReloadRequested(i, "soft");
+                }
+            }
         }
         // userAgentOverride used to live as a binding on WebEngineProfile,
         // but the 6.9 WebEngineProfilePrototype migration moved it off the
@@ -324,6 +383,11 @@ PlasmoidItem {
             // into per-URL thumbMode="excluded" markers. One-shot, marked
             // via compactPreviewMigrated.
             root.migrateCompactPreview();
+            // Per-URL label-overlay migration: drops the old global
+            // compactPreviewShowLabel + per-URL thumbHideLabel pair and
+            // seeds thumbShowLabel=true on every existing row. One-shot,
+            // marked via thumbLabelMigrated.
+            root.migrateThumbShowLabel();
             // Re-read authProfiles after the migration may have rewritten
             // authProfilesJson — the Connections onAuthProfilesJsonChanged
             // handler also re-parses, but the migration writes before that
@@ -523,6 +587,27 @@ PlasmoidItem {
         return safe;
     }
 
+    // Resolve the LIVE row object for a Repeater delegate at `idx`. In
+    // Qt 6.10, a Repeater whose `model` is a JS array snapshots each
+    // element into the delegate's `modelData` AT DELEGATE CREATION TIME —
+    // mutating `root.tabs[idx].x` later is NOT visible through
+    // `modelData.x`. Bindings that need to react to in-place metadata
+    // Apply (or picker save) must read through `root.tabs[idx]` instead.
+    // Pair this with `const _tick = root._tabsMetadataSerial;` to install
+    // the metadata-serial dep; the serial bump re-triggers the binding,
+    // and _liveRow returns the now-mutated row.
+    //
+    // The `fallback` arg is used during the brief window where a
+    // structural change shrinks root.tabs while a delegate is being torn
+    // down — idx may transiently be out-of-range. Passing modelData /
+    // ownTab as the fallback keeps the binding well-defined; QML schedules
+    // the delegate destruction shortly after.
+    function _liveRow(idx, fallback) {
+        const arr = root.tabs;
+        if (arr && idx >= 0 && idx < arr.length) return arr[idx];
+        return fallback || null;
+    }
+
     // Per-tab thumbnail CSS selector. Lifted out of the compact rep so the
     // new N-parallel architecture lets each per-tab WebEngineView compute
     // its own selector instead of all sharing one tied to the popup's
@@ -544,16 +629,6 @@ PlasmoidItem {
     signal reloadAllRequested()
     function reloadAll() { reloadAllRequested() }
 
-    // Fired by savePickedSelector when a thumb-scope save happened —
-    // the compact rep listens and applies the new selector to its
-    // mini-view if the saved tab is the currently-previewed one. We
-    // pass the new selector through the signal because the compact's
-    // declarative `thumbSelector` binding can't see a JS-object
-    // property mutation on root.tabs[i], so the previous "fire a
-    // reload and let onLoadingChanged re-apply" pattern would have
-    // re-applied the OLD cached binding value.
-    signal _thumbSelectorSaved(int tabIdx, string newSelector)
-
     // Per-tab reload broadcast. Both the popup WebTab and the compact-rep
     // miniView delegate subscribe and filter by their own index — so a
     // single toolbar click / keyboard shortcut reloads both the popup tab
@@ -564,6 +639,144 @@ PlasmoidItem {
     // profile-wide clearHttpCache completes; cache-clear is profile-scoped
     // so both views observe the cleared cache on their next fetch.
     signal _tabReloadRequested(int tabIdx, string kind)
+
+    // Monotonic NOTIFY counter for in-place metadata updates to
+    // root.tabs[]. When the KCM Apply path detects a metadata-only
+    // urlsJson change (no URL/profile/order change — see
+    // UrlUtils.isMetadataOnlyTabsChange), it writes the new fields onto
+    // the existing root.tabs[i] JS objects rather than reassigning the
+    // whole array. QML emits no NOTIFY for plain-JS field writes on a
+    // `var`, so any binding that reads `t.label`, `t.thumbMode`, etc.
+    // would stay stale. Bumping this serial inside the in-place
+    // applicator re-evaluates every binding that touches it. Mirrors the
+    // `authProfilesSecretsSerial` pattern in config/main.xml.
+    //
+    // Read it as a const-assigned dependency at the top of binding
+    // expressions:
+    //     readonly property string foo: {
+    //         const _tick = root._tabsMetadataSerial;   // depend
+    //         return modelData.thumbText || "";
+    //     }
+    //
+    // IMPORTANT: do NOT use `void root._tabsMetadataSerial;` for this —
+    // the Qt 6.10 QML/V4 JIT treats a bare `void X.Y` statement as dead
+    // code (no observable side effect, result discarded) and drops the
+    // read, taking the dependency-capture with it. The binding then only
+    // re-evaluates when its other deps change — for the metadata-only
+    // Apply path (no Repeater rebuild) that means NEVER, and the
+    // selector / mode / label silently freezes at first-load value. Use
+    // `const _tick = ...` instead — the const-declaration cannot be
+    // elided, so the property read survives the optimizer.
+    property int _tabsMetadataSerial: 0
+
+    // Companion signal for IMPERATIVE consumers (Connections handlers
+    // that need to re-run applyThumbCrop / _applyPopupSelector when a
+    // tab's metadata changes underneath them). `tabIdx` is -1 to mean
+    // "any/all tabs changed" — the in-place applicator emits -1 since
+    // it processes the whole array at once.
+    signal _tabsMetadataChanged(int tabIdx)
+
+    // Apply metadata-only field updates from `newArr` onto the existing
+    // root.tabs[i] objects in place, then bump the serial + emit the
+    // signal so live delegates pick up the change without their
+    // WebEngineView being destroyed and re-navigated. Precondition:
+    // UrlUtils.isMetadataOnlyTabsChange(root.tabs, newArr) === true.
+    function _applyTabsMetadataInPlace(newArr) {
+        const cur = root.tabs;
+        if (!Array.isArray(cur) || !Array.isArray(newArr)
+            || cur.length !== newArr.length) {
+            console.warn("iframe-plasma[urls] in-place apply called with"
+                + " mismatched lengths cur=" + (cur ? cur.length : "?")
+                + " new=" + (newArr ? newArr.length : "?"));
+            return;
+        }
+        // Rows where the visible render MODE flipped (chartOnly ↔ custom ↔
+        // fullPanel etc. on either the thumbnail or the popup). The
+        // lightweight selector-swap path (CropEngine buildApplyJs / buildClearJs
+        // via the serial+signal) cannot reliably re-flow stateful page
+        // engines (Grafana's uPlot canvas caches its constrained size, SPA
+        // routers keep stale layouts) when the wrapping isolation flips on
+        // or off — the *intended* viewport is now genuinely different. A
+        // soft reload re-navigates to the same URL and lets the page paint
+        // at its new natural extent. Per-tab only, no other tabs touched.
+        const reloadTabs = [];
+        for (let i = 0; i < cur.length; i++) {
+            const o = cur[i];
+            const n = newArr[i];
+            if (!o || !n) continue;
+            const oldThumbMode = o.thumbMode || "";
+            const oldPopupMode = o.popupMode || "";
+            const newThumbMode = n.thumbMode || "";
+            const newPopupMode = n.popupMode || "";
+            // Copy every metadata field. authProfileId and url are
+            // checked structurally above, but copy authProfileId too
+            // so the row object stays internally consistent if a
+            // future Apply changes a metadata field that depends on
+            // it (none today, but cheap).
+            o.label                = n.label || "";
+            o.thumbMode            = n.thumbMode || "chartOnly";
+            o.thumbSelector        = n.thumbSelector || "";
+            o.thumbText            = n.thumbText || "";
+            o.thumbIconName        = n.thumbIconName || "";
+            o.thumbTimeRange       = n.thumbTimeRange || "";
+            o.thumbScaleMode       = n.thumbScaleMode || "fit";
+            o.thumbExcludeKeywords = Array.isArray(n.thumbExcludeKeywords)
+                                     ? n.thumbExcludeKeywords.slice()
+                                     : [];
+            o.thumbShowLabel       = n.thumbShowLabel === true;
+            o.popupMode            = n.popupMode || "fullPanel";
+            o.popupSelector        = n.popupSelector || "";
+            if (oldThumbMode !== newThumbMode || oldPopupMode !== newPopupMode) {
+                reloadTabs.push(i);
+            }
+        }
+        root._tabsMetadataSerial = root._tabsMetadataSerial + 1;
+        root._tabsMetadataChanged(-1);
+        console.info("iframe-plasma[urls] metadata-only apply rows=" + cur.length
+            + " serial=" + root._tabsMetadataSerial
+            + " modeChangedTabs=" + JSON.stringify(reloadTabs));
+        // Per-tab soft reloads (popup WebTab + miniView) for the mode-flip
+        // rows. Uses the broadcast _tabReloadRequested signal — same
+        // routing as Ctrl+R / the toolbar reload button — so the popup
+        // tab + slot delegate both pick it up, and the page renders fresh
+        // at the now-correct viewport size.
+        for (let r = 0; r < reloadTabs.length; r++) {
+            root._tabReloadRequested(reloadTabs[r], "soft");
+        }
+    }
+
+    // Session-only runtime exclusion map. Populated by miniView delegates
+    // when their CropEngine-injected JS reports `[ifp-keyword] hit=true`
+    // for a configured exclude-keyword (see ConfigUrls' thumbExcludeKeywords
+    // field). Read by cycleTimer via UrlUtils.nextCycleTabIndex — the
+    // auto-cycle steps past indices that appear here. NOT persisted; on
+    // reload the next CropEngine apply re-emits the live state within ~250ms.
+    //
+    // Plain object {tabIdx: true}. cycleTimer reads imperatively inside
+    // its handler, so we do NOT depend on a binding invalidation here —
+    // the auto-generated _runtimeExcludedChanged NOTIFY exists for QML
+    // book-keeping but no consumer subscribes to it. setRuntimeExcluded
+    // mutates the same object in place, which is intentional and safe
+    // because the read path doesn't cache.
+    property var _runtimeExcluded: ({})
+
+    // Idempotent setter for the runtime-exclusion map. Called from each
+    // miniView's onJavaScriptConsoleMessage handler when the
+    // [ifp-keyword] hit boolean transitions. Skips the mutation when
+    // the desired state already holds (CropEngine itself only emits on
+    // transitions, but a tab reload re-seeds and could produce a
+    // duplicate post-restart emit).
+    function setRuntimeExcluded(tabIdx, hit) {
+        if (tabIdx < 0) return;
+        const was = !!root._runtimeExcluded[tabIdx];
+        if (was === !!hit) return;
+        if (hit) {
+            root._runtimeExcluded[tabIdx] = true;
+        } else {
+            delete root._runtimeExcluded[tabIdx];
+        }
+        console.info("iframe-plasma[runtime-excl] idx=" + tabIdx + " hit=" + hit);
+    }
 
     function syncInterceptor() {
         console.info("iframe-plasma[sync] authSupport=" + (root.authSupport ? "available" : "null"));
@@ -765,52 +978,59 @@ PlasmoidItem {
             arr[tabIdx] = entry;
 
             // Mutate the live tabs[] entry in place so any binding
-            // that re-reads modelData fields sees the new values
-            // without the Repeater being rebuilt.
-            if (root.tabs[tabIdx]) {
-                root.tabs[tabIdx].thumbMode    = entry.thumbMode;
-                root.tabs[tabIdx].thumbSelector = entry.thumbSelector;
-                root.tabs[tabIdx].popupMode    = entry.popupMode;
-                root.tabs[tabIdx].popupSelector = entry.popupSelector;
+            // that reads root.tabs[tabIdx] (the live array, NOT the
+            // Repeater's per-delegate `modelData` snapshot) sees the new
+            // values without the Repeater being rebuilt. Capture the row
+            // reference once — multiple `root.tabs[tabIdx]` reads through
+            // the property var indexer risk going through fresh wrappers
+            // (the proven-working `_applyTabsMetadataInPlace` uses the
+            // same captured-reference pattern, hence the mirror here).
+            const liveRow = root.tabs[tabIdx];
+            if (liveRow) {
+                liveRow.thumbMode     = entry.thumbMode;
+                liveRow.thumbSelector = entry.thumbSelector;
+                liveRow.popupMode     = entry.popupMode;
+                liveRow.popupSelector = entry.popupSelector;
             }
 
-            // Apply the new popup selector DIRECTLY via WebTab's
-            // applyImmediately(). The lookup of the live WebTab MUST
-            // go through fullRoot.applyPopupSelectorAt — the
-            // Repeater's `id: repeater` lives inside the
-            // fullRepresentation Component's ID scope, which root
-            // can't see. A direct `repeater.itemAt(tabIdx)` here
-            // threw `ReferenceError: repeater is not defined` and
-            // the try/catch silently swallowed it, leaving every
-            // picker save a no-op (the urlsJson write below never
-            // even ran). Confirmed in journal as `save error:
-            // repeater is not defined`.
-            if (scope === "popup" || scope === "both") {
-                if (fr && typeof fr.applyPopupSelectorAt === "function") {
-                    const ok = fr.applyPopupSelectorAt(tabIdx, entry.popupSelector || "");
-                    if (!ok) console.warn("iframe-plasma[picker] no live WebTab at idx=" + tabIdx);
-                } else {
-                    console.warn("iframe-plasma[picker] fullRepresentationItem unavailable");
-                }
-            } else {
-                // Thumb-only save: popup was not touched, but the picker's
-                // _PICKER_START_BODY teardown stripped popup isolation before
-                // the dialog opened. The dialog's onClosed Cancel branch
-                // would have restored it, but _saved=true skips that path.
-                // Re-engage the existing popupSelector here.
+            // Drive every live consumer through the same serial-bump +
+            // signal mechanism used by the KCM-Apply metadata path. This
+            // converges the two save paths (picker save and config-dialog
+            // Apply) on ONE source of truth — no more imperative writes to
+            // wt.popupSelector or miniView.ownSelector that would sever
+            // those bindings (Qt6 destroys a binding permanently on any
+            // imperative property write). After this:
+            //   - WebTab.popupSelector binding re-evaluates → produces
+            //     the new value → fires onPopupSelectorChanged →
+            //     _applyPopupSelector → applyImmediately. ONE apply,
+            //     no flicker.
+            //   - miniView.ownSelector binding re-evaluates → its
+            //     on_TabsMetadataChanged Connections handler reads the
+            //     fresh value and re-runs applyThumbCrop / buildClearJs.
+            root._tabsMetadataSerial = root._tabsMetadataSerial + 1;
+            root._tabsMetadataChanged(tabIdx);
+
+            // Ground-truth diagnostic — proves the mutation actually
+            // landed on the live row that bindings will read. If a future
+            // regression resurfaces this is the first line to check: if
+            // these print the OLD value, the mutation never took (look
+            // at the `liveRow` capture above); if they print the NEW
+            // value but a consumer still applies the OLD, the consumer
+            // is reading through a stale `modelData` snapshot (look at
+            // its binding for `root._liveRow`).
+            console.info("iframe-plasma[picker] post-mutation idx=" + tabIdx
+                + " liveRow.thumbSelector=" + JSON.stringify(liveRow && liveRow.thumbSelector)
+                + " liveRow.popupSelector=" + JSON.stringify(liveRow && liveRow.popupSelector));
+
+            // Thumb-only save edge case: the picker's _PICKER_START_BODY
+            // teardown stripped popup isolation BEFORE the dialog opened.
+            // popupSelector hasn't changed, so the binding update above
+            // produces an identical value — onPopupSelectorChanged elides
+            // and nothing re-applies the isolation. Force it back here.
+            if (scope === "thumb") {
                 if (fr && typeof fr.restorePopupSelectorAt === "function") {
                     fr.restorePopupSelectorAt(tabIdx);
                 }
-            }
-
-            // Notify the thumbnail (if currently showing this tab)
-            // with the NEW selector — compact's binding-based
-            // thumbSelector can't see the modelData mutation, so we
-            // pass the resolved selector explicitly. Mirror the same
-            // preset→selector mapping the compact's `thumbSelector`
-            // binding uses (chartOnly→.u-wrap>canvas etc.).
-            if (scope === "thumb" || scope === "both") {
-                root._thumbSelectorSaved(tabIdx, entry.thumbSelector || "");
             }
 
             // Persist to urlsJson — guarded so onUrlsJsonChanged
@@ -967,6 +1187,27 @@ PlasmoidItem {
         Plasmoid.configuration.compactPreviewMigrated = true;
     }
 
+    // One-shot 0.6.0 migration: the global "Show URL label" toggle
+    // (compactPreviewShowLabel) is gone; label-overlay visibility is now
+    // per-URL via thumbShowLabel (opt-IN). Loudest-default policy — on
+    // upgrade we seed thumbShowLabel=true on every existing row so the
+    // new control is discoverable, and strip the deprecated per-URL
+    // thumbHideLabel field. Users who don't want labels untick per row.
+    function migrateThumbShowLabel() {
+        if (Plasmoid.configuration.thumbLabelMigrated) return;
+        const out = Migrations.thumbShowLabelMigration(
+            Plasmoid.configuration.urlsJson);
+        if (out.skipped) {
+            console.info("iframe-plasma[thumb-label-migrate] skipped: " + out.reason);
+        } else if (out.mutated) {
+            Plasmoid.configuration.urlsJson = out.json;
+            console.info("iframe-plasma[thumb-label-migrate] " + out.reason);
+        } else {
+            console.info("iframe-plasma[thumb-label-migrate] " + out.reason);
+        }
+        Plasmoid.configuration.thumbLabelMigrated = true;
+    }
+
     // Simple v4 UUID (sufficient for profile identity — not security-critical).
     function newUuid() {
         function hex() { return Math.floor(Math.random() * 16).toString(16); }
@@ -998,7 +1239,12 @@ PlasmoidItem {
                  && root.compactObservable
         repeat: true
         onTriggered: {
-            const next = UrlUtils.nextCycleTabIndex(root.currentTabIndex, root.tabs);
+            // Pass the live runtime-exclusion map so any tab whose
+            // configured keyword is currently visible on its rendered
+            // thumbnail is skipped this tick. The map is plain-object
+            // {idx: true}; UrlUtils duck-types Set vs object.
+            const next = UrlUtils.nextCycleTabIndex(
+                root.currentTabIndex, root.tabs, root._runtimeExcluded);
             if (next >= 0) root.advanceCycleTab(next);
         }
     }
@@ -1134,6 +1380,11 @@ PlasmoidItem {
         // current tab is excluded, or out-of-range). The render path falls
         // back to the plasmoid icon in that case.
         readonly property int previewTabIdx: {
+            // In-place metadata writes mutate t.thumbMode without firing
+            // NOTIFY on root.tabs (the array reference is unchanged),
+            // so depend on the serial to re-evaluate after a metadata
+            // Apply switches a tab to thumbMode="excluded".
+            const _tick = root._tabsMetadataSerial;
             if (root.tabs.length === 0) return -1;
             const idx = root.currentTabIndex;
             if (idx < 0 || idx >= root.tabs.length) return -1;
@@ -1142,6 +1393,33 @@ PlasmoidItem {
             return idx;
         }
         readonly property var previewTab: previewTabIdx >= 0 ? root.tabs[previewTabIdx] : null
+
+        // Primitive-typed shadow of previewTab.label. QML6's `property var`
+        // change detection on `array[index]` is lossy when only the index
+        // changes — the binding can keep returning a stale-but-equal-typed
+        // reference, leaving consumers (thumbLabel below, plus any future
+        // var-chain reads) painting yesterday's label. A `string` property
+        // has proper NOTIFY semantics, so this re-evaluates reliably on
+        // every previewTabIdx / root.tabs change. Same reason
+        // toolTipMainText (L102-106) reads root.tabs[currentTabIndex].label
+        // imperatively into a string, rather than via the var indirection.
+        readonly property string previewTabLabel: {
+            // Depend on the serial so an in-place metadata Apply (label
+            // rename, show-label toggle) re-evaluates this binding. Without
+            // the const-assigned read, mutating t.label / t.thumbShowLabel
+            // in place leaves the overlay painting the pre-Apply value.
+            const _tick = root._tabsMetadataSerial;
+            if (previewTabIdx < 0) return "";
+            const t = root.tabs[previewTabIdx];
+            if (!t) return "";
+            // Per-URL opt-IN for the label overlay. Folding this into
+            // previewTabLabel (rather than gating visible in thumbLabel)
+            // keeps the visibility chain on a single primitive-typed
+            // property — same reason as the parent comment for
+            // primitive-vs-var change propagation.
+            if (t.thumbShowLabel !== true) return "";
+            return t.label || "";
+        }
 
         // Whether the slot has any live-rendering work to show. Used by the
         // fallback icon's visibility predicate. Replaces the older
@@ -1240,7 +1518,19 @@ PlasmoidItem {
 
                     // Cache the mode + per-tab predicates so the per-delegate
                     // Loader, lifecycle, and visibility bindings stay readable.
-                    readonly property string slotMode: (modelData && modelData.thumbMode) || "chartOnly"
+                    // Depend on the metadata serial — in-place Apply mutates
+                    // modelData.thumbMode without firing NOTIFY on the var,
+                    // so without this read a mode swap (e.g. custom → text)
+                    // would leave wantLive cached at the old value.
+                    readonly property string slotMode: {
+                        // Read through root._liveRow — `modelData.thumbMode`
+                        // is a Repeater snapshot that does NOT see in-place
+                        // mutations from KCM Apply / picker save. See the
+                        // _liveRow docblock.
+                        const _tick = root._tabsMetadataSerial;
+                        const t = root._liveRow(thumbSlot.index, thumbSlot.modelData);
+                        return (t && t.thumbMode) || "chartOnly";
+                    }
                     readonly property bool isCurrent: thumbSlot.index === compact.previewTabIdx
                                                    && compact.previewTabIdx >= 0
                     readonly property bool wantLive: Plasmoid.configuration.compactPreviewEnabled
@@ -1248,42 +1538,22 @@ PlasmoidItem {
                                                   && slotMode !== "icon"
                                                   && slotMode !== "excluded"
 
-                    // Picker-save force-flag for the Loader gate. When a
-                    // picker thumb-save lands on a slot whose modelData.thumbMode
-                    // was excluded/text/icon, savePickedSelector mutates
-                    // thumbMode="custom" in place — but the slotMode binding
-                    // (on modelData.thumbMode) emits no NOTIFY for JS-field
-                    // writes, so wantLive stays cached at false. Without
-                    // this override the Loader would stay inactive, the
-                    // webThumbComp would never instantiate, and the
-                    // _thumbSelectorSaved signal would land on no receiver.
-                    // Set by the Connections below; cleared by the next
-                    // Repeater rebuild (delegate destroyed → default false).
-                    property bool _forceLive: false
-                    Connections {
-                        target: root
-                        function on_ThumbSelectorSaved(tabIdx, newSelector) {
-                            if (tabIdx !== thumbSlot.index) return;
-                            if (!thumbSlot.wantLive
-                                && newSelector && newSelector.length > 0) {
-                                thumbSlot._forceLive = true;
-                            }
-                        }
-                    }
-
                     // --- Live web preview (per tab) -----------------------
                     // Loader-gated so excluded / text / icon tabs pay zero
                     // Chromium-renderer cost. When `active` flips false the
                     // WebEngineView is destroyed; flipping it true re-loads
                     // from scratch (matches today's URL-change reload, just
-                    // localized to one tab).
+                    // localized to one tab). slotMode → wantLive picks up
+                    // metadata-Apply mode flips via the `void
+                    // root._tabsMetadataSerial` dependency on slotMode, so
+                    // the old `_forceLive` picker-save override is gone.
                     Loader {
                         id: webLoader
                         anchors.top: parent.top
                         anchors.left: parent.left
                         width: compact.internalWidth
                         height: compact.internalHeight
-                        active: thumbSlot.wantLive || thumbSlot._forceLive
+                        active: thumbSlot.wantLive
                         sourceComponent: webThumbComp
 
                         // Per-instance data plumbed via Loader properties —
@@ -1306,7 +1576,11 @@ PlasmoidItem {
                             anchors.fill: parent
                             anchors.margins: Kirigami.Units.smallSpacing
                             text: {
-                                const t = thumbSlot.modelData;
+                                // Read through root._liveRow — `modelData`
+                                // is a Repeater snapshot. See _liveRow
+                                // docblock.
+                                const _tick = root._tabsMetadataSerial;
+                                const t = root._liveRow(thumbSlot.index, thumbSlot.modelData);
                                 if (!t) return "";
                                 const explicit = t.thumbText || "";
                                 return explicit.length > 0 ? explicit : (t.label || "");
@@ -1338,12 +1612,23 @@ PlasmoidItem {
                                  && Plasmoid.configuration.compactPreviewEnabled
                         // isMask only for bundled SVGs — theme icons and
                         // user-picked file:// paths render full-color.
+                        // Both isMask and source depend on the metadata
+                        // serial so a thumbIconName swap mid-pinned-popup
+                        // re-resolves the icon source.
                         isMask: {
-                            const n = String(thumbSlot.modelData ? thumbSlot.modelData.thumbIconName : "");
+                            // Read through root._liveRow — modelData is a
+                            // Repeater snapshot. See _liveRow docblock.
+                            const _tick = root._tabsMetadataSerial;
+                            const t = root._liveRow(thumbSlot.index, thumbSlot.modelData);
+                            const n = String(t ? t.thumbIconName : "");
                             return n.startsWith("bundled:");
                         }
                         color: Kirigami.Theme.textColor
-                        source: root.resolveIconSource(thumbSlot.modelData ? thumbSlot.modelData.thumbIconName : "")
+                        source: {
+                            const _tick = root._tabsMetadataSerial;
+                            const t = root._liveRow(thumbSlot.index, thumbSlot.modelData);
+                            return root.resolveIconSource(t ? t.thumbIconName : "");
+                        }
                     }
 
                     // `excluded` mode: leave the delegate blank. The
@@ -1361,7 +1646,7 @@ PlasmoidItem {
         // engine apply, reflow timer, lifecycle) mirrors the old miniView
         // verbatim; the only changes are (a) source the active tab from
         // the Loader instead of compact.previewTab, and (b) self-filter the
-        // _thumbSelectorSaved signal by ownIndex.
+        // _tabsMetadataChanged signal by ownIndex.
         Component {
             id: webThumbComp
 
@@ -1372,17 +1657,26 @@ PlasmoidItem {
                 readonly property var ownTab: parent.ownTab
                 readonly property int ownIndex: parent.ownIndex
                 readonly property bool ownIsCurrent: parent.ownIsCurrent
-                // Writable (not readonly) — the _thumbSelectorSaved handler
-                // imperatively pins this after a picker save. The binding
-                // reads modelData.thumbMode/.thumbSelector via thumbSelectorFor;
-                // savePickedSelector mutates those JS-object fields in place
-                // under _suppressTabsRebuildOnce, but QML emits no NOTIFY for
-                // plain-JS field writes, so without the imperative pin the
-                // cached value stays stale and the next reload (lifecycle
-                // resume, Ctrl+R, LoadSucceededStatus) re-applies the OLD
-                // selector — silently reverting the saved crop. Same severable-
-                // binding pattern as WebTab.popupSelector (see L1755-1771).
-                property string ownSelector: root.thumbSelectorFor(ownTab)
+                // Read through root._liveRow(ownIndex, ownTab) rather than
+                // the ownTab chain — ownTab → parent.ownTab →
+                // thumbSlot.modelData, and modelData is a Repeater snapshot
+                // in Qt 6.10 that does NOT see in-place mutations from KCM
+                // Apply / picker save. The serial bump triggers re-eval but
+                // would otherwise still pick up the stale snapshot.
+                //
+                // Stays a declarative binding (no imperative writes
+                // anywhere) so subsequent serial bumps continue to fire —
+                // see Qt6 "Property Binding" docs: ANY imperative write
+                // permanently destroys the binding (only Qt.binding()
+                // re-arms it). The const-assigned form is also load-bearing
+                // on Qt 6.10: the V4 JIT drops a bare `void` statement as
+                // dead code and loses the dep-capture (see the docblock on
+                // `_tabsMetadataSerial`).
+                property string ownSelector: {
+                    const _tick = root._tabsMetadataSerial;
+                    const t = root._liveRow(miniView.ownIndex, ownTab);
+                    return root.thumbSelectorFor(t);
+                }
 
                 // Set true when a hard-reload arrives while the view is
                 // Discarded; consumed by onLoadingChanged on the next
@@ -1437,7 +1731,10 @@ PlasmoidItem {
                         // active tab AND its tab opted into auto-follow
                         // ("" or "auto" thumbTimeRange).
                         if (miniView.ownIndex !== currentIdx) return;
-                        const t = miniView.ownTab;
+                        // Read through root._liveRow — ownTab is a Repeater
+                        // snapshot; thumbTimeRange may have been mutated by
+                        // KCM Apply since this delegate was created.
+                        const t = root._liveRow(miniView.ownIndex, miniView.ownTab);
                         if (!t || (t.thumbTimeRange || "auto") !== "auto") return;
                         // 'custom' is the sentinel WebTab.currentTimeRange
                         // returns when the popup URL's from/to don't match
@@ -1583,6 +1880,21 @@ PlasmoidItem {
                         miniView._miniRenderRetried = false;
                         if (miniView.ownSelector.length > 0) {
                             applyThumbCrop(miniView.ownSelector);
+                        } else {
+                            // Symmetric clear — mirror the WebTab popup's
+                            // applyImmediately(clear). Defensive: a reload
+                            // (Ctrl+R, _tabReloadRequested, soft-reload from
+                            // mode flip) followed by an empty selector
+                            // shouldn't leave any stale CropEngine state
+                            // lingering on the page. The state is gone after
+                            // navigation in the common case, but this keeps
+                            // the post-reload page state hermetically in sync
+                            // with the current `ownSelector` and matches the
+                            // popup path's symmetry.
+                            miniView.runJavaScript(CropEngine.buildClearJs(), function(r) {
+                                console.info("iframe-plasma[compact] load-succeeded clear idx="
+                                    + miniView.ownIndex + " = " + r);
+                            });
                         }
                     }
                 }
@@ -1612,17 +1924,51 @@ PlasmoidItem {
                 }
 
                 onJavaScriptConsoleMessage: function(level, message, lineNumber, sourceID) {
-                    if (message && message.indexOf('[ifp-thumb]') !== -1) {
-                        const safe = String(message).replace(/[\x00-\x1f\x7f]/g, '?').slice(0, 512);
+                    if (!message) return;
+                    const safe = String(message).replace(/[\x00-\x1f\x7f]/g, '?').slice(0, 512);
+                    if (safe.indexOf('[ifp-thumb]') !== -1) {
                         console.info("iframe-plasma" + safe);
+                        return;
+                    }
+                    // CropEngine emits '[ifp-keyword] hit=true|false' on
+                    // every exclusion-state transition. Forward into the
+                    // root.setRuntimeExcluded map so the next cycleTimer
+                    // tick can skip this tab. The receiver dedupes by
+                    // current value, so duplicate emits (re-apply after
+                    // reload) are free.
+                    const kw = safe.indexOf('[ifp-keyword]');
+                    if (kw !== -1) {
+                        const hit = safe.indexOf('hit=true', kw) !== -1;
+                        root.setRuntimeExcluded(miniView.ownIndex, hit);
                     }
                 }
 
                 function applyThumbCrop(selector) {
+                    // Read through root._liveRow — `miniView.ownTab` is a
+                    // Repeater snapshot; thumbMode / thumbScaleMode /
+                    // thumbExcludeKeywords may have been mutated by KCM
+                    // Apply or picker save since this delegate was created.
+                    const tab = root._liveRow(miniView.ownIndex, miniView.ownTab);
+                    // Scale mode applies ONLY to the user-controlled
+                    // custom-selector path. Grafana presets
+                    // (chartOnly canvas-blit / chartWithAxes .u-wrap)
+                    // and fullPanel are designed around the legacy
+                    // stretch semantics — overriding them with `fit`
+                    // would force uPlot to redraw at a smaller content
+                    // size and then visually upscale, producing blurry
+                    // axis text. Force stretch for non-custom modes.
+                    const mode = (tab && tab.thumbMode) || "chartOnly";
+                    const userScale = (tab && tab.thumbScaleMode) || "fit";
+                    const opts = {
+                        scaleMode: mode === "custom" ? userScale : "stretch",
+                        keywords: (tab && tab.thumbExcludeKeywords) || []
+                    };
                     console.info("iframe-plasma[thumb] applyThumbCrop ENTRY selector=" + JSON.stringify(selector)
                         + " idx=" + miniView.ownIndex
+                        + " scale=" + opts.scaleMode
+                        + " kwCount=" + opts.keywords.length
                         + " loading=" + miniView.loading + " url=" + miniView.url);
-                    runJavaScript(CropEngine.buildApplyJs(selector), function(r) {
+                    runJavaScript(CropEngine.buildApplyJs(selector, opts), function(r) {
                         console.info("iframe-plasma[thumb] applyThumbCrop("
                             + JSON.stringify(selector) + ") = " + r);
                     });
@@ -1640,31 +1986,8 @@ PlasmoidItem {
                     }
                 }
 
-                // Picker-save fast path: when the user saves a new selector
-                // via the popup picker for THIS tab, applyThumbCrop directly
-                // (skip a full URL reload — the cached binding value would
-                // have re-applied the OLD selector). Filter the broadcast
-                // signal by ownIndex.
                 Connections {
                     target: root
-                    function on_ThumbSelectorSaved(tabIdx, newSelector) {
-                        if (tabIdx !== miniView.ownIndex) return;
-                        // Pin ownSelector imperatively — modelData.thumbMode/
-                        // .thumbSelector were mutated in place by
-                        // savePickedSelector with no NOTIFY, so the binding's
-                        // cached value would still return the OLD selector on
-                        // the next LoadSucceededStatus / reflow / reload.
-                        miniView.ownSelector = String(newSelector || "");
-                        if (newSelector && newSelector.length > 0) {
-                            console.info("iframe-plasma[compact] thumb-save apply idx=" + tabIdx
-                                + " sel=" + JSON.stringify(newSelector));
-                            miniView.applyThumbCrop(newSelector);
-                        } else {
-                            console.info("iframe-plasma[compact] thumb-save reload idx=" + tabIdx);
-                            miniView.reload();
-                        }
-                    }
-
                     // Broadcast reload from the popup toolbar / shortcuts /
                     // cache-clear. Fire on the matching thumbnail too so a
                     // single Ctrl+R refreshes both the popup tab AND its
@@ -1705,6 +2028,35 @@ PlasmoidItem {
                     // stale 401/Authelia render until the next nav.
                     function onReloadAllRequested() {
                         on_TabReloadRequested(miniView.ownIndex, "soft");
+                    }
+
+                    // In-place metadata Apply (both KCM Apply path and
+                    // picker save) mutated root.tabs[i] fields and bumped
+                    // the metadata serial. miniView.ownSelector is a
+                    // declarative binding with `const _tick =
+                    // root._tabsMetadataSerial;` dependency — so by the time
+                    // this handler runs, the binding has ALREADY re-evaluated
+                    // to the fresh value.
+                    // Just read and dispatch: apply on non-empty, clear on
+                    // empty. No imperative property write (would sever the
+                    // binding and break every subsequent metadata Apply).
+                    // idx === -1 means "all tabs" — filter to ours.
+                    function on_TabsMetadataChanged(idx) {
+                        if (idx !== -1 && idx !== miniView.ownIndex) return;
+                        const sel = miniView.ownSelector;
+                        if (sel.length > 0) {
+                            console.info("iframe-plasma[compact] metadata apply idx=" + miniView.ownIndex
+                                + " selector=" + JSON.stringify(sel));
+                            miniView.applyThumbCrop(sel);
+                        } else {
+                            // Selector cleared (e.g. user switched mode
+                            // to fullPanel/text/icon). Tear down CropEngine
+                            // state so the page reverts to its full layout.
+                            console.info("iframe-plasma[compact] metadata apply clear idx=" + miniView.ownIndex);
+                            miniView.runJavaScript(CropEngine.buildClearJs(), function(r) {
+                                console.info("iframe-plasma[compact] metadata clear = " + r);
+                            });
+                        }
                     }
                 }
 
@@ -1762,10 +2114,12 @@ PlasmoidItem {
                             thumbLabelText.implicitWidth + horizontalPadding * 2)
             height: Math.max(12, Math.round(parent.height * 0.30))
             color: Qt.rgba(0, 0, 0, 0.55)
-            visible: Plasmoid.configuration.compactPreviewShowLabel
-                  && compact.previewTab
-                  && compact.previewTab.label
-                  && compact.previewTab.label.length > 0
+            // Bind to the primitive previewTabLabel string. Reading via
+            // `compact.previewTab.label` (a `var` indirection through an
+            // array element) misses the NOTIFY when only currentTabIndex
+            // changes, so the label paints yesterday's tab after an
+            // auto-cycle skip. See the previewTabLabel comment above.
+            visible: compact.previewTabLabel.length > 0
             z: 2
 
             QQC.Label {
@@ -1775,7 +2129,7 @@ PlasmoidItem {
                     leftMargin: thumbLabel.horizontalPadding
                     rightMargin: thumbLabel.horizontalPadding
                 }
-                text: (compact.previewTab && compact.previewTab.label) || ""
+                text: compact.previewTabLabel
                 // Pin PlainText: the label comes from imported JSON with no
                 // HTML strip (RowSchema.normalize passes it through), and
                 // AutoText would let `<img src=…>` beacon via the NAM.
@@ -1850,59 +2204,41 @@ PlasmoidItem {
         // `ReferenceError: repeater is not defined`, the try/catch
         // swallowed it, and every picker save silently no-op'd
         // (urlsJson never even got written). This helper lives in
-        // scope and routes the apply through WebTab.applyImmediately.
+        // Force-apply helper. savePickedSelector NO LONGER calls this —
+        // the binding-driven path (serial bump → popupSelector binding
+        // re-evaluates → onPopupSelectorChanged → _applyPopupSelector)
+        // does it on its own. Kept solely for explicit re-apply needs
+        // (currently unused; harmless to leave in case a future caller
+        // wants a force without going through urlsJson). NEVER writes
+        // wt.popupSelector — that would sever its binding and break
+        // every subsequent metadata-Apply for this tab. Same severance
+        // rule applies to restorePopupSelectorAt below.
         function applyPopupSelectorAt(tabIdx, sel) {
             const wt = repeater.itemAt(tabIdx);
             if (wt && typeof wt.applyImmediately === "function") {
-                // The previous shape called applyImmediately AND wrote the
-                // property — but the property write fires
-                // onPopupSelectorChanged → _applyPopupSelector →
-                // applyImmediately, which runs the CropEngine apply a
-                // SECOND time. Observable flicker on heavy Grafana pages,
-                // and explicitly counter to the "bypass the binding race"
-                // intent doc'd at WebTab.qml's applyImmediately comment.
-                //
-                // Split on value-equality:
-                //  - Value changes (the common case — binding's cached
-                //    modelData.popupSelector is stale because in-place
-                //    mutation doesn't fire NOTIFY): property write fires
-                //    the change handler which runs ONE apply, and the
-                //    imperative write also severs the binding (05e5590
-                //    pin pattern).
-                //  - Same value (re-save of an already-saved selector
-                //    after picker-time teardown stripped the crop CSS):
-                //    property write would be a no-op NOTIFY → handler
-                //    skipped → crop NOT re-applied. Apply directly;
-                //    pinning is moot since the value matches.
-                if (wt.popupSelector === sel) {
-                    wt.applyImmediately(sel);
-                } else {
-                    wt.popupSelector = sel;
-                }
+                wt.applyImmediately(sel);
                 return true;
             }
             return false;
         }
 
-        // Re-engage the WebTab's popupSelector — used by the save-picked
-        // dialog's Cancel path AND by savePickedSelector's thumb-only
-        // branch. _PICKER_START_BODY's teardown stripped data-ifp-* +
-        // style node before the dialog opened, so the popup is currently
-        // showing the uncropped page; without this restore, dismissal
-        // leaves the popup un-isolated until the user reloads or
-        // switches tabs.
+        // Re-engage the popup's CropEngine isolation for the CURRENT
+        // value of root.tabs[tabIdx] — used by the save-picked dialog's
+        // Cancel path AND by savePickedSelector's thumb-only branch.
+        // _PICKER_START_BODY's teardown stripped data-ifp-* + style node
+        // before the dialog opened, so the popup is currently un-cropped;
+        // without this restore, dismissal leaves the popup un-isolated
+        // until the user reloads or switches tabs. Reads root.tabs[]
+        // directly (the live model is the truth) and calls
+        // applyImmediately so the page-side state matches. Does NOT
+        // touch wt.popupSelector — see severance note in
+        // applyPopupSelectorAt above.
         function restorePopupSelectorAt(tabIdx) {
             const wt = repeater.itemAt(tabIdx);
             if (!wt || typeof wt.applyImmediately !== "function") return false;
-            // Read from root.tabs[tabIdx] directly, NOT via the WebTab's
-            // popupSelector property — that property is a binding on
-            // modelData fields that doesn't NOTIFY on in-place mutation,
-            // so it can return a stale cached value after a prior
-            // savePickedSelector. The live model array is the truth.
             const t = root.tabs[tabIdx];
             const sel = (t && t.popupMode === "custom") ? (t.popupSelector || "") : "";
             wt.applyImmediately(sel);
-            wt.popupSelector = sel;
             return true;
         }
 
@@ -2045,6 +2381,9 @@ PlasmoidItem {
             tabs: root.tabs
             currentIndex: root.currentTabIndex
             statuses: root.tabStatuses
+            // Pass through the metadata serial so the strip's per-tab
+            // Label re-evaluates `modelData.label` after an in-place Apply.
+            metadataSerial: root._tabsMetadataSerial
             fullRepVisible: root.fullRepVisible
             onTabSelected: idx => root.setCurrentTab(idx)
             // Route through the broadcast signal so the panel-slot
@@ -2100,13 +2439,34 @@ PlasmoidItem {
                         return (p && p.autheliaHost) || Plasmoid.configuration.autheliaHost || "";
                     }
                     zoomPct: Plasmoid.configuration.zoomFactor
+                    // resolveUrl reads only modelData.url, which is a
+                    // STRUCTURAL field in our diff classifier — a change
+                    // takes the rebuild path, not the in-place path —
+                    // so this binding doesn't need _tabsMetadataSerial
+                    // dependency. themeMode IS volatile, but
+                    // substituteTheme() returns the same string for
+                    // URLs without ${theme} and QML elides identical-
+                    // value setter calls, so no spurious navigation.
                     url: root.resolveUrl(modelData)
                     // Popup-only CSS-selector crop. fullPanel mode (or empty
                     // selector) → no crop; custom mode passes the user's
                     // selector to CropEngine isolation in WebTab.qml.
-                    popupSelector: (modelData.popupMode === "custom")
-                                   ? (modelData.popupSelector || "")
-                                   : ""
+                    // Depends on the metadata serial so an in-place Apply
+                    // (the common "I picked a new selector via the picker
+                    // in the config dialog" case) re-evaluates and fires
+                    // onPopupSelectorChanged inside WebTab → applyImmediately
+                    // — no full-page reload, just a CropEngine swap.
+                    popupSelector: {
+                        // Read through root._liveRow — `modelData` is a
+                        // Repeater snapshot in Qt 6.10 that does NOT see
+                        // in-place mutations from KCM Apply / picker save.
+                        // See the _liveRow docblock.
+                        const _tick = root._tabsMetadataSerial;
+                        const t = root._liveRow(index, modelData);
+                        return (t && t.popupMode === "custom")
+                               ? (t.popupSelector || "")
+                               : "";
+                    }
                     debugPort: Plasmoid.configuration.remoteDebuggingPort
                     // Live only for the tab actually on screen; the rest are
                     // frozen, then discarded after a long idle.
@@ -2119,6 +2479,15 @@ PlasmoidItem {
                     onAuthRequired: () => root.expanded = true
                     onLoadStatusChanged: root.setTabStatus(index, loadStatus)
                     onSelectorPicked: sel => root.handlePickedSelector(index, sel)
+                    // The compact-rep miniView at the same index loaded the
+                    // URL before the session cookie was set and got parked
+                    // on the redirected /login page. WebTab fires this once
+                    // per auth-completion (both Authelia and SPA-internal
+                    // logins — see WebTab.qml's onLoadingChanged for the
+                    // detection gates). Re-route through the existing soft
+                    // reload broadcast so the miniView re-fetches with the
+                    // now-valid cookies on its own.
+                    onAuthSucceeded: root._tabReloadRequested(index, "soft")
 
                     // Broadcast reload from the popup toolbar / shortcuts /
                     // cache-clear. Soft and hard both filter to THIS tab's

@@ -49,6 +49,15 @@ Item {
     // reflect it. Values: "idle" | "loading" | "ok" | "err" | "auth".
     property string loadStatus: "idle"
 
+    // Final URL of the most recent successful load. Used by the
+    // LoadSucceededStatus handler to detect "we just navigated back to the
+    // tab's configured URL from somewhere else" — typically the back-half of
+    // a SPA-internal login (e.g. streamystats Quick Connect: configured
+    // /dashboard → redirected to /login → after user signs in, navigates
+    // back to /dashboard). Used to fire `authSucceeded` for SPA flows that
+    // never touch the Authelia host. Empty until the first success.
+    property string _lastSuccessUrl: ""
+
     // "" → no override (chip follows URL); "off"; or an interval like "30s".
     property string userRefreshChoice: ""
 
@@ -78,6 +87,15 @@ Item {
     signal basicAuthRequested(var request)
     // Fired when the click-to-pick overlay returns. Empty string = cancelled.
     signal selectorPicked(string selector)
+    // Fired exactly once per "auth" → "ok" transition. The companion
+    // miniView in the compact rep loaded the URL before the auth cookie
+    // was set and got parked at /login; main.qml listens and broadcasts
+    // _tabReloadRequested(index, "soft") so the slot re-fetches with the
+    // now-valid session cookie. Self-loop safe: the miniView is not a
+    // WebTab — it never emits this signal back. The popup only re-emits
+    // on the next genuine "auth" → "ok" transition; cookies-already-valid
+    // loads land directly on "ok" without a prior "auth" and stay quiet.
+    signal authSucceeded()
 
     // Discarded views have no live renderer; calling webview.reload() /
     // triggerWebAction directly on one is silently dropped by Qt. Mirror
@@ -552,6 +570,34 @@ Item {
                 // permanently blank until plasmashell restart.
                 _renderRetried = false;
 
+                // Capture BEFORE we mutate loadStatus / _lastSuccessUrl
+                // below so the "did we just complete an auth round-trip?"
+                // checks survive the assignments. The popup may have just
+                // completed auth in one of two shapes:
+                //   (a) Authelia round-trip — loadStatus was "auth", now back
+                //       on a non-Authelia host. wasAuthing covers this.
+                //   (b) SPA-internal login (no Authelia involvement) — popup
+                //       went configured URL → /login → ... → configured URL.
+                //       loadStatus stayed "ok" throughout; the only signal
+                //       is that we just navigated BACK to the configured URL
+                //       from a different one. arrivedAtTargetFromElsewhere
+                //       covers this.
+                // Either gate firing means: the matching slot miniView is
+                // parked on the redirected /login URL with stale cookies,
+                // so emit authSucceeded so main.qml broadcasts a soft reload.
+                const wasAuthing = (tab.loadStatus === "auth");
+                function _stripHash(u) {
+                    const i = u.indexOf('#');
+                    return i >= 0 ? u.slice(0, i) : u;
+                }
+                const finalKey = _stripHash(finalUrl);
+                const targetKey = _stripHash(String(tab.url));
+                const arrivedAtTargetFromElsewhere =
+                    !onAuthelia
+                    && finalKey === targetKey
+                    && tab._lastSuccessUrl !== ""
+                    && _stripHash(tab._lastSuccessUrl) !== finalKey;
+
                 if (onAuthelia) {
                     if (!tab.loginInProgress) {
                         tab.loadStatus = "auth";
@@ -565,7 +611,16 @@ Item {
                     tab.loginInProgress = false;
                     tab.loadStatus = "ok";
                     statusOverlay.hide();
+                    if (wasAuthing || arrivedAtTargetFromElsewhere) {
+                        console.info("iframe-plasma[load] authSucceeded"
+                            + " wasAuthing=" + wasAuthing
+                            + " arrivedAtTarget=" + arrivedAtTargetFromElsewhere
+                            + " from=" + JSON.stringify(tab._lastSuccessUrl)
+                            + " to=" + JSON.stringify(finalUrl));
+                        tab.authSucceeded();
+                    }
                 }
+                tab._lastSuccessUrl = finalUrl;
                 tab._captureNavTiming();
                 tab._applyPopupSelector();
             } else if (info.status === WebEngineView.LoadFailedStatus) {

@@ -26,6 +26,14 @@ Rectangle {
     property var tabs: []
     property int currentIndex: 0
     property var statuses: []
+    // Monotonic NOTIFY for in-place metadata mutations on the underlying
+    // tab objects. main.qml bumps its `_tabsMetadataSerial` when an
+    // Apply mutates root.tabs[i] fields without reassigning root.tabs
+    // (the in-place fast path that keeps WebTabs alive). QML doesn't
+    // fire NOTIFY on var-object field writes, so this counter is the
+    // only way the per-delegate `modelData.label` binding below can
+    // know to re-evaluate.
+    property int metadataSerial: 0
     // True while the full popup representation is on screen. The accent-glow
     // animation is infinite, so without this gate it keeps the QtQuick
     // animation timer ticking even when the full rep is hidden (panel-mode
@@ -35,6 +43,19 @@ Rectangle {
     property bool fullRepVisible: false
     signal tabSelected(int index)
     signal reloadRequested(int index)
+
+    // Resolve the LIVE row at `idx` from bar.tabs (the live JS array, NOT
+    // the ListView delegate's `modelData` snapshot). Mirror of main.qml's
+    // `_liveRow` — see that docblock for the Qt 6.10 Repeater snapshot
+    // rationale. ListView delegates have the same snapshot semantics:
+    // `tabDel.modelData.label` does NOT see an in-place mutation of
+    // `bar.tabs[i].label` triggered by a metadata-Apply on main.qml's
+    // root.tabs (bar.tabs is bound to it).
+    function _liveRow(idx, fallback) {
+        const arr = bar.tabs;
+        if (arr && idx >= 0 && idx < arr.length) return arr[idx];
+        return fallback || null;
+    }
 
     implicitHeight: Theme.tabHeight
     color: Theme.bgAlt
@@ -147,7 +168,18 @@ Rectangle {
                     // dominate the strip; the overflow then elides. Unbounded
                     // inside this Row the `elide` would never trigger.
                     width: Math.min(implicitWidth, Kirigami.Units.gridUnit * 10)
-                    text: tabDel.modelData.label || tabDel.modelData.url || i18n("Tab %1", tabDel.index + 1)
+                    text: {
+                        // Depend on the metadataSerial AND read through
+                        // bar._liveRow — `tabDel.modelData` is a ListView
+                        // snapshot that does NOT see in-place mutations of
+                        // `bar.tabs[i].label` from KCM Apply. Const-assign
+                        // (NOT `void`): Qt 6.10's V4 JIT drops a bare
+                        // `void X.Y` statement as dead code and loses the
+                        // dep-capture.
+                        const _tick = bar.metadataSerial;
+                        const t = bar._liveRow(tabDel.index, tabDel.modelData);
+                        return (t && (t.label || t.url)) || i18n("Tab %1", tabDel.index + 1);
+                    }
                     // PlainText pins the renderer so Qt's mightBeRichText
                     // heuristic can't promote an imported-JSON label like
                     // `<img src=…>` to StyledText and beacon out via the
