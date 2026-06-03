@@ -562,14 +562,6 @@ Item {
                 console.info("iframe-plasma[load] SUCCEEDED finalUrl=" + finalUrl
                     + " onAuthelia=" + onAuthelia + " title=\"" + webview.title + "\"");
 
-                // Each fresh successful load grants a new renderer-crash
-                // retry budget. Without this reset the one-shot latch above
-                // stays armed for the popup-session lifetime and a second
-                // independent crash (GPU process loss, OOM under memory
-                // pressure, IPC-broker loss) hours later leaves the view
-                // permanently blank until plasmashell restart.
-                _renderRetried = false;
-
                 // Capture BEFORE we mutate loadStatus / _lastSuccessUrl
                 // below so the "did we just complete an auth round-trip?"
                 // checks survive the assignments. The popup may have just
@@ -638,10 +630,15 @@ Item {
             }
         }
 
-        // Bounded one-shot reload after a renderer crash. Without a handler
-        // the view just goes blank — both a DoS vector (hostile page crashes
-        // its own renderer to disable the widget) and a forensics gap. Cap at
-        // one retry per session to avoid a crash-loop hammering plasmashell.
+        // Reload after a renderer crash, with a time-windowed budget: at most
+        // one retry per 60 s. Without a handler the view just goes blank — both
+        // a DoS vector (hostile page crashes its own renderer to disable the
+        // widget) and a forensics gap. The previous one-shot latch reset only
+        // on a later SUCCESS, so a tab that crashed and then kept failing to
+        // load ignored every subsequent crash for the popup-session lifetime
+        // (permanently blank until plasmashell restart). The window lets a
+        // genuine later crash recover while still stopping a crash-loop from
+        // hammering plasmashell.
         //
         // Reset loginInProgress for the same reason tab.reload()/hardReload()
         // do (see contract at L90-95): the crash destroyed any in-flight form
@@ -649,15 +646,21 @@ Item {
         // otherwise take the "hide overlay" branch and leave the operator
         // typing into a bare Authelia form with no trust signal. Same
         // bug-class as bb69913's broadcast-reload latch leak.
-        property bool _renderRetried: false
+        property double _lastRenderRetryMs: 0
         onRenderProcessTerminated: function(status, exitCode) {
             console.warn("iframe-plasma[render] terminated status=" + status
-                + " exitCode=" + exitCode + " retried=" + _renderRetried);
-            if (status !== WebEngineView.NormalTerminationStatus && !_renderRetried) {
-                _renderRetried = true;
-                tab.loginInProgress = false;
-                webview.reload();
+                + " exitCode=" + exitCode);
+            if (status === WebEngineView.NormalTerminationStatus) return;
+            const now = Date.now();
+            if (now - _lastRenderRetryMs < 60000) {
+                console.warn("iframe-plasma[render] crash within 60s window, not retrying");
+                tab.loadStatus = "err";
+                statusOverlay.showError("Renderer crashed");
+                return;
             }
+            _lastRenderRetryMs = now;
+            tab.loginInProgress = false;
+            webview.reload();
         }
 
         onAuthenticationDialogRequested: function(request) {

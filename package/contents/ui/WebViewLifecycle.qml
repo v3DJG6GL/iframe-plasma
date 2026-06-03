@@ -50,6 +50,12 @@ QtObject {
     // instant). The thumbnail wires this to the auto-cycle interval.
     property int stalenessSec: 0
 
+    // True when the view's last load failed or rendered blank. Forces a
+    // reload on the next Frozen->Active promotion regardless of stalenessSec /
+    // frozen duration, so a failed thumbnail can't resume showing its stale
+    // blank frame. The thumbnail binds this to miniView.loadStatus.
+    property bool priorFailed: false
+
     // Date.now() ms when the view entered Frozen; 0 when not frozen.
     property double _frozenAtMs: 0
 
@@ -91,7 +97,8 @@ QtObject {
             freezeDelaySec,
             discardDelaySec,
             stalenessSec,
-            Date.now()));
+            Date.now(),
+            priorFailed));
     }
 
     onTargetChanged: _reevaluate()

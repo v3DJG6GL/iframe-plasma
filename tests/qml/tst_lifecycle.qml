@@ -40,14 +40,59 @@ TestCase {
         const a = P.decideOnChange("frozen", true, 1000, 30, 600, 10, 6000);
         verify(!a.reload);
     }
-    function test_frozen_boundaryAtStaleness_noReload() {
-        // Strict `>` boundary: exactly stalenessSec elapsed → no reload.
+    function test_frozen_boundaryAtStaleness_reloads() {
+        // Inclusive `>=` boundary: exactly stalenessSec elapsed → reload.
+        // (When the auto-cycle interval equals the freeze delay, a tab is
+        // frozen for exactly stalenessSec between appearances; a strict `>`
+        // would never refresh it — the original frozen-blank-thumbnail bug.)
         const a = P.decideOnChange("frozen", true, 1000, 30, 600, 10, 11000);
+        compare(a.reload, true);
+    }
+    function test_frozen_boundaryJustBelowStaleness_noReload() {
+        const a = P.decideOnChange("frozen", true, 1000, 30, 600, 10, 10999);
         verify(!a.reload);
     }
     function test_frozen_boundaryJustAboveStaleness_reloads() {
         const a = P.decideOnChange("frozen", true, 1000, 30, 600, 10, 11001);
         compare(a.reload, true);
+    }
+
+    // ============================================================
+    //  decideOnChange — priorFailed (8th arg) forces reload on resume
+    // ============================================================
+    function test_frozen_priorFailed_reloadsRegardlessOfTiming() {
+        // Frozen well within stalenessSec (would normally NOT reload), but the
+        // prior load failed/blanked → must reload so the stale blank frame is
+        // never resumed.
+        const a = P.decideOnChange("frozen", true, 1000, 30, 600, 10, 2000, true);
+        compare(a.setState, "active");
+        compare(a.reload, true);
+    }
+    function test_frozen_priorFailed_reloadsEvenWithFrozenAtMsZero() {
+        // frozenAtMs=0 normally guards out the timing reload; priorFailed
+        // still forces it.
+        const a = P.decideOnChange("frozen", true, 0, 30, 600, 10, 1000, true);
+        compare(a.reload, true);
+    }
+    function test_frozen_priorFailedUndefined_backwardCompat() {
+        // 7-arg callers (priorFailed undefined) behave as the timing rule
+        // alone — below staleness → no reload.
+        const a = P.decideOnChange("frozen", true, 1000, 30, 600, 10, 2000);
+        verify(!a.reload);
+    }
+    function test_active_priorFailed_noReload() {
+        // priorFailed only matters on the Frozen->Active promotion, never on
+        // an already-active view.
+        const a = P.decideOnChange("active", true, 0, 30, 600, 10, 1000, true);
+        verify(a.setState === undefined);
+        verify(!a.reload);
+    }
+    function test_discarded_priorFailed_noPolicyReload() {
+        // Discarded->Active auto-reloads in QtWebEngine; the policy must not
+        // add its own reload even when priorFailed.
+        const a = P.decideOnChange("discarded", true, 0, 30, 600, 10, 1000, true);
+        compare(a.setState, "active");
+        verify(!a.reload);
     }
     function test_discarded_doesNotTriggerReload() {
         // Discarded->Active auto-reloads in QtWebEngine; the policy must

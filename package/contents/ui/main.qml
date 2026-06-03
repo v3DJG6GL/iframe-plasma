@@ -807,6 +807,40 @@ PlasmoidItem {
         console.info("iframe-plasma[runtime-excl] idx=" + tabIdx + " hit=" + hit);
     }
 
+    // Per-thumb error/blank placeholder state, keyed by tab index. The value
+    // is the (sanitized) error message string; "" / absent means "no error".
+    // Set by each miniView delegate when its load fails (LoadFailedStatus) or
+    // when CropEngine reports it produced no display frame ("blank"). Read by
+    // the thumbStack error-placeholder overlay (below) to show an error icon +
+    // tab label instead of an ambiguous blank slot.
+    //
+    // The miniView lives inside a Loader/Component (webThumbComp), so it cannot
+    // write thumbSlot delegate properties directly — this root-level map is the
+    // clean cross-boundary channel. Mirrors _runtimeExcluded verbatim: the map
+    // is mutated in place and fires no NOTIFY, so the overlay's `errMsg` binding
+    // depends on _thumbErrorSerial to re-evaluate.
+    property var _thumbErrorState: ({})
+    property int _thumbErrorSerial: 0
+
+    // Idempotent setter for the per-thumb error map. Called from each
+    // miniView's load handlers. Skips the mutation (and the serial bump) when
+    // the desired state already holds, so repeated failures / re-applies are
+    // free and don't churn bindings.
+    function setThumbError(tabIdx, msg) {
+        if (tabIdx < 0) return;
+        const cur = root._thumbErrorState[tabIdx] || "";
+        const next = msg || "";
+        if (cur === next) return;
+        if (next.length > 0) {
+            root._thumbErrorState[tabIdx] = next;
+        } else {
+            delete root._thumbErrorState[tabIdx];
+        }
+        root._thumbErrorSerial++;
+        console.info("iframe-plasma[thumb-err] idx=" + tabIdx
+            + " err=" + JSON.stringify(next));
+    }
+
     function syncInterceptor() {
         console.info("iframe-plasma[sync] authSupport=" + (root.authSupport ? "available" : "null"));
         if (!root.authSupport) return;
@@ -1580,6 +1614,61 @@ PlasmoidItem {
                         }
                     }
 
+                    // --- Error / blank placeholder ------------------------
+                    // Overlays the (blank) live webview in THIS slot when the
+                    // tab's load failed or CropEngine produced no frame — see
+                    // root._thumbErrorState / setThumbError. Drawn above the
+                    // webLoader (z:1) so it covers the blank renderer without
+                    // touching the StackLayout's currentIndex / previewTabIdx /
+                    // slotShowsContent chain (those stay exactly as before; the
+                    // overlay is purely additive and self-gates on the map).
+                    Rectangle {
+                        anchors.fill: parent
+                        z: 1
+                        readonly property string errMsg: {
+                            const _tick = root._thumbErrorSerial;
+                            return root._thumbErrorState[thumbSlot.index] || "";
+                        }
+                        visible: errMsg.length > 0
+                                 && Plasmoid.configuration.compactPreviewEnabled
+                        color: Kirigami.Theme.backgroundColor
+                        ColumnLayout {
+                            anchors.centerIn: parent
+                            width: parent.width - Kirigami.Units.largeSpacing
+                            spacing: Kirigami.Units.smallSpacing
+                            Kirigami.Icon {
+                                Layout.alignment: Qt.AlignHCenter
+                                source: "dialog-error"
+                                implicitWidth: Math.max(16,
+                                    Math.min(thumbSlot.width, thumbSlot.height) * 0.35)
+                                implicitHeight: implicitWidth
+                            }
+                            QQC.Label {
+                                Layout.alignment: Qt.AlignHCenter
+                                Layout.fillWidth: true
+                                // Show the tab's own label so a broken panel is
+                                // identifiable; fall back to a generic string.
+                                text: {
+                                    const _tick = root._tabsMetadataSerial;
+                                    const t = root._liveRow(thumbSlot.index, thumbSlot.modelData);
+                                    return (t && t.label) || i18n("Failed to load");
+                                }
+                                // Page/config-derived content: pin PlainText so
+                                // AutoText can't promote `<img src=…>` to a
+                                // beacon (same SSRF class as the text-mode label).
+                                textFormat: Text.PlainText
+                                elide: Text.ElideRight
+                                horizontalAlignment: Text.AlignHCenter
+                                wrapMode: Text.Wrap
+                                maximumLineCount: 2
+                                color: Kirigami.Theme.textColor
+                                font.family: Theme.fontHeader
+                                font.pixelSize: Math.max(8, Math.min(20,
+                                    Math.round(Math.min(thumbSlot.width, thumbSlot.height) * 0.14)))
+                            }
+                        }
+                    }
+
                     // `excluded` mode: leave the delegate blank. The
                     // currentIndex pointer never lands here (previewTabIdx
                     // returns -1 for the excluded case, the StackLayout
@@ -1647,6 +1736,22 @@ PlasmoidItem {
                 // hand-off the bypass-cache intent races the auto-reload
                 // on Chromium's IO thread and is typically lost.
                 property bool _pendingHardReload: false
+
+                // Per-thumbnail load state, mirroring WebTab.tab.loadStatus.
+                // "blank" is thumbnail-specific: the page LOADED fine but
+                // CropEngine produced no display frame (a Grafana canvas that
+                // hadn't painted at apply time — see the applyThumbCrop
+                // callback below). Both "err" and "blank" drive the
+                // error-placeholder overlay (via root.setThumbError) and the
+                // bounded-backoff retry below, and force a reload-on-promotion
+                // through WebViewLifecycle.priorFailed.
+                property string loadStatus: "loading"   // loading|ok|err|blank
+                // Bounded-backoff retry counter. Reset to 0 on a successful
+                // load, on a URL change, and each time the auto-cycle lands on
+                // this tab (onOwnIsCurrentChanged) — so a transient failure
+                // self-heals but a permanently-broken URL backs off instead of
+                // hammering the server forever.
+                property int _retryAttempt: 0
 
                 // Per-delegate auto-follow override. Defaults to "" (use
                 // tab's static thumbTimeRange / URL-own range). The
@@ -1790,24 +1895,30 @@ PlasmoidItem {
                     request.dialogReject();
                     request.accepted = true;
                 }
-                // Bounded one-shot reload on renderer crash, mirroring the
-                // popup WebTab handler. Without this a Chromium renderer
-                // termination in a thumbnail (OOM under memory pressure,
-                // GPU-process loss, hostile content force-crashing its own
-                // renderer) leaves the mini-view permanently blank until the
-                // user re-edits the tab URL or restarts plasmashell. Cap at
-                // one retry per session so a crash-loop can't hammer
-                // plasmashell into the ground.
-                property bool _miniRenderRetried: false
+                // Reload on renderer crash with a time-windowed budget (one
+                // retry per 60 s), mirroring the popup WebTab handler. Without
+                // this a Chromium renderer termination in a thumbnail (OOM
+                // under memory pressure, GPU-process loss, hostile content
+                // force-crashing its own renderer) leaves the mini-view blank.
+                // A one-shot latch that reset only on a later SUCCESS meant a
+                // thumbnail that crashed then kept failing to load ignored
+                // every subsequent crash forever; the window lets a genuine
+                // later crash recover while a crash-loop still backs off.
+                property double _lastRenderRetryMs: 0
                 onRenderProcessTerminated: function(status, exitCode) {
                     console.warn("iframe-plasma[mini-render] terminated status=" + status
-                        + " exitCode=" + exitCode + " idx=" + miniView.ownIndex
-                        + " retried=" + miniView._miniRenderRetried);
-                    if (status !== WebEngineView.NormalTerminationStatus
-                        && !miniView._miniRenderRetried) {
-                        miniView._miniRenderRetried = true;
-                        miniView.reload();
+                        + " exitCode=" + exitCode + " idx=" + miniView.ownIndex);
+                    if (status === WebEngineView.NormalTerminationStatus) return;
+                    const now = Date.now();
+                    if (now - miniView._lastRenderRetryMs < 60000) {
+                        console.warn("iframe-plasma[mini-render] crash within 60s window, not retrying idx="
+                            + miniView.ownIndex);
+                        miniView.loadStatus = "err";
+                        root.setThumbError(miniView.ownIndex, "Renderer crashed");
+                        return;
                     }
+                    miniView._lastRenderRetryMs = now;
+                    miniView.reload();
                 }
 
                 transform: Scale {
@@ -1821,24 +1932,29 @@ PlasmoidItem {
                         + " idx=" + miniView.ownIndex
                         + " url=" + info.url
                         + " thumbSelector=" + JSON.stringify(miniView.ownSelector));
-                    if (info.status === WebEngineView.LoadStartedStatus
-                        && miniView._pendingHardReload)
-                    {
-                        miniView._pendingHardReload = false;
-                        hardReloadFallback.stop();
-                        console.info("iframe-plasma[compact] tab-reload hard (post-discard) idx=" + miniView.ownIndex);
-                        miniView.stop();
-                        miniView.triggerWebAction(WebEngineView.ReloadAndBypassCache);
+                    if (info.status === WebEngineView.LoadStartedStatus) {
+                        miniView.loadStatus = "loading";
+                        // Clear any prior error placeholder the moment a fresh
+                        // navigation begins (manual reload, retry, range pick).
+                        root.setThumbError(miniView.ownIndex, "");
+                        if (miniView._pendingHardReload) {
+                            miniView._pendingHardReload = false;
+                            hardReloadFallback.stop();
+                            console.info("iframe-plasma[compact] tab-reload hard (post-discard) idx=" + miniView.ownIndex);
+                            miniView.stop();
+                            miniView.triggerWebAction(WebEngineView.ReloadAndBypassCache);
+                        }
                         return;
                     }
                     if (info.status === WebEngineView.LoadSucceededStatus) {
-                        // Each fresh successful load grants a new
-                        // renderer-crash retry budget; mirror of WebTab's
-                        // _renderRetried reset. Without this the one-shot
-                        // latch above stays armed for the popup lifetime
-                        // and a second crash hours later leaves the
-                        // thumbnail permanently blank.
-                        miniView._miniRenderRetried = false;
+                        // A clean load clears the error state and resets the
+                        // bounded-backoff budget. The "blank" override may be
+                        // re-applied below by the applyThumbCrop callback if
+                        // CropEngine reports no frame was produced.
+                        miniView.loadStatus = "ok";
+                        miniView._retryAttempt = 0;
+                        thumbRetryTimer.stop();
+                        root.setThumbError(miniView.ownIndex, "");
                         if (miniView.ownSelector.length > 0) {
                             applyThumbCrop(miniView.ownSelector);
                         } else {
@@ -1857,6 +1973,18 @@ PlasmoidItem {
                                     + miniView.ownIndex + " = " + r);
                             });
                         }
+                    }
+                    else if (info.status === WebEngineView.LoadFailedStatus) {
+                        // errorCode -3 is Aborted: a user stop / navigation
+                        // race (a fresh url binding superseding an in-flight
+                        // load, or our own stop()+bypass-cache hand-off), not
+                        // a real failure — don't surface it or arm a retry.
+                        if (info.errorCode === -3) return;
+                        console.warn("iframe-plasma[mini] load FAILED idx=" + miniView.ownIndex
+                            + " code=" + info.errorCode + " msg=" + info.errorString);
+                        miniView.loadStatus = "err";
+                        root.setThumbError(miniView.ownIndex, info.errorString || "Load failed");
+                        thumbRetryTimer.arm();
                     }
                 }
 
@@ -1884,11 +2012,72 @@ PlasmoidItem {
                     }
                 }
 
+                // Bounded-backoff retry for a failed ("err") or blank-rendered
+                // ("blank") thumbnail. arm() escalates the delay each attempt
+                // and gives up after the schedule is exhausted; the budget is
+                // reset on a successful load, on a URL change, and each time
+                // the auto-cycle lands on this tab (so a permanently-broken URL
+                // backs off instead of being hammered, but a tab the user keeps
+                // rotating past still gets a fresh chance). Reloads bypass cache
+                // — a cache-honoring reload would just re-serve the same error.
+                Timer {
+                    id: thumbRetryTimer
+                    repeat: false
+                    readonly property var _backoffMs: [3000, 10000, 30000]
+                    function arm() {
+                        if (miniView._retryAttempt >= _backoffMs.length) {
+                            console.info("iframe-plasma[mini-retry] backoff exhausted idx="
+                                + miniView.ownIndex);
+                            return;
+                        }
+                        interval = _backoffMs[miniView._retryAttempt];
+                        miniView._retryAttempt++;
+                        restart();
+                    }
+                    onTriggered: {
+                        console.info("iframe-plasma[mini-retry] attempt=" + miniView._retryAttempt
+                            + " idx=" + miniView.ownIndex);
+                        miniView.stop();
+                        miniView.triggerWebAction(WebEngineView.ReloadAndBypassCache);
+                    }
+                }
+
+                // Re-attempt once whenever the auto-cycle (or a tab switch)
+                // lands on this tab while it is broken. Resetting the counter
+                // here is what makes "retry once per rotation landing" distinct
+                // from the unbounded backoff above.
+                onOwnIsCurrentChanged: {
+                    if (miniView.ownIsCurrent
+                        && (miniView.loadStatus === "err" || miniView.loadStatus === "blank")) {
+                        miniView._retryAttempt = 0;
+                        thumbRetryTimer.arm();
+                    }
+                }
+
+                // A new URL (range pick, metadata Apply) is a fresh target:
+                // drop the backoff budget and cancel any pending retry so the
+                // new navigation isn't immediately clobbered by a stale one.
+                onUrlChanged: {
+                    miniView._retryAttempt = 0;
+                    thumbRetryTimer.stop();
+                }
+
                 onJavaScriptConsoleMessage: function(level, message, lineNumber, sourceID) {
                     if (!message) return;
                     const safe = String(message).replace(/[\x00-\x1f\x7f]/g, '?').slice(0, 512);
                     if (safe.indexOf('[ifp-thumb]') !== -1) {
                         console.info("iframe-plasma" + safe);
+                        // A 'CROP' log means cropAxes drew a frame. If we were
+                        // showing the "blank" placeholder (canvas-pending), the
+                        // in-page observer/3s interval has since healed it —
+                        // clear the placeholder and cancel the pending retry so
+                        // the QML side tracks what's actually on screen.
+                        if (safe.indexOf('CROP') !== -1 && miniView.loadStatus === "blank") {
+                            miniView.loadStatus = "ok";
+                            miniView._retryAttempt = 0;
+                            thumbRetryTimer.stop();
+                            root.setThumbError(miniView.ownIndex, "");
+                        }
                         return;
                     }
                     // CropEngine emits '[ifp-keyword] hit=true|false' on
@@ -1932,6 +2121,18 @@ PlasmoidItem {
                     runJavaScript(CropEngine.buildApplyJs(selector, opts), function(r) {
                         console.info("iframe-plasma[thumb] applyThumbCrop("
                             + JSON.stringify(selector) + ") = " + r);
+                        // CropEngine matched the canvas but it hadn't painted a
+                        // frame yet (page is un-blanked, would otherwise look
+                        // empty). Mark "blank" and arm a retry — but only while
+                        // this is still a clean load; a later success or failure
+                        // resets it. The in-page 3s interval also keeps trying,
+                        // but it stops once the view freezes, so the QML retry
+                        // is the durable recovery.
+                        if (r === "canvas-pending" && miniView.loadStatus === "ok") {
+                            miniView.loadStatus = "blank";
+                            root.setThumbError(miniView.ownIndex, i18n("Rendering…"));
+                            thumbRetryTimer.arm();
+                        }
                     });
                 }
 
@@ -2042,6 +2243,11 @@ PlasmoidItem {
                     freezeDelaySec: Plasmoid.configuration.webViewFreezeDelaySec
                     discardDelaySec: Plasmoid.configuration.webViewDiscardDelaySec
                     stalenessSec: Math.max(5, Plasmoid.configuration.autoCycleIntervalSec)
+                    // A failed/blank thumbnail must reload on promotion even if
+                    // it was frozen for less than stalenessSec, otherwise it
+                    // resumes its stale blank frame and never recovers.
+                    priorFailed: miniView.loadStatus === "err"
+                              || miniView.loadStatus === "blank"
                 }
             }
         }

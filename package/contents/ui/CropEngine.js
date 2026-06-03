@@ -194,13 +194,17 @@ const _APPLY_BODY = `(function(sel, opts){
   // uPlot pixel-blit crop. Source canvas keeps its natural CSS box so
   // bufW/cr.width = devicePixelRatio uniformly and drawImage math is
   // correct. Used only when the matched element is a <canvas>.
+  // Returns true once it has drawn a frame into #ifp-thumb-display, false on
+  // any not-yet-ready condition (canvas 0x0, overlay missing, empty buffer).
+  // The caller uses this to decide whether to blank the page chrome — see the
+  // canvas branch in apply().
   function cropAxes(srcCanvas) {
-    if (!srcCanvas || srcCanvas.tagName !== 'CANVAS') return;
+    if (!srcCanvas || srcCanvas.tagName !== 'CANVAS') return false;
     const wrap = srcCanvas.parentElement;
     const over = wrap && wrap.querySelector(':scope > .u-over');
-    if (!wrap || !over) return;
+    if (!wrap || !over) return false;
     const cr = srcCanvas.getBoundingClientRect();
-    if (cr.width === 0 || cr.height === 0) return;
+    if (cr.width === 0 || cr.height === 0) return false;
     const orct = over.getBoundingClientRect();
     let cssL, cssT, cssW, cssH;
     if (orct.width > 0 && orct.height > 0) {
@@ -213,14 +217,14 @@ const _APPLY_BODY = `(function(sel, opts){
       const oT = parseFloat(over.style.top)    || 0;
       const oW = parseFloat(over.style.width)  || 0;
       const oH = parseFloat(over.style.height) || 0;
-      if (oW === 0 || oH === 0) return;
+      if (oW === 0 || oH === 0) return false;
       const wr = wrap.getBoundingClientRect();
       cssL = oL - (cr.left - wr.left); cssT = oT - (cr.top - wr.top);
       cssW = oW; cssH = oH;
     }
     const bufW = srcCanvas.width;
     const bufH = srcCanvas.height;
-    if (bufW === 0 || bufH === 0) return;
+    if (bufW === 0 || bufH === 0) return false;
     const scaleX = bufW / cr.width;
     const scaleY = bufH / cr.height;
     const sL = cssL * scaleX, sT = cssT * scaleY;
@@ -238,11 +242,12 @@ const _APPLY_BODY = `(function(sel, opts){
     disp.height = Math.max(1, Math.round(dispCssH * dpr));
     const ctx = disp.getContext('2d');
     try { ctx.drawImage(srcCanvas, sL, sT, sW, sH, 0, 0, disp.width, disp.height); }
-    catch (e) { console.warn('[ifp-thumb] drawImage failed:', e.message); return; }
+    catch (e) { console.warn('[ifp-thumb] drawImage failed:', e.message); return false; }
     console.info('[ifp-thumb] CROP canvas-css=' + cr.width.toFixed(0) + 'x' + cr.height.toFixed(0)
       + ' src=' + bufW + 'x' + bufH + ' scale=' + scaleX.toFixed(3) + ',' + scaleY.toFixed(3)
       + ' srcRect=' + sL.toFixed(0) + ',' + sT.toFixed(0) + ',' + sW.toFixed(0) + ',' + sH.toFixed(0)
       + ' disp=' + disp.width + 'x' + disp.height);
+    return true;
   }
 
   // Generic isolation. Walks ancestors of \`el\` up to <body>, tagging
@@ -421,8 +426,21 @@ const _APPLY_BODY = `(function(sel, opts){
     }
     ensureStyle();
     if (el.tagName === 'CANVAS') {
-      document.documentElement.setAttribute('data-ifp-thumb','1');
-      cropAxes(el);
+      // Crop FIRST, blank the page chrome only once a frame actually
+      // exists. Setting data-ifp-thumb before cropAxes succeeds would hide
+      // the whole page while #ifp-thumb-display is still absent (canvas not
+      // yet painted — common for a backgrounded Grafana tab), leaving a
+      // fully-blank thumbnail with no recovery signal. On a not-ready canvas
+      // we leave the page un-blanked and report 'canvas-pending' so the QML
+      // side can show a placeholder / arm a retry, and the observer + 3s
+      // interval re-attempt the crop as the chart paints.
+      if (cropAxes(el)) {
+        document.documentElement.setAttribute('data-ifp-thumb','1');
+      } else {
+        document.documentElement.removeAttribute('data-ifp-thumb');
+        matchedEl = null;
+        return 'canvas-pending';
+      }
     } else {
       isolateElement(el);
       // Fit-mode scaling runs after isolation so the element is in its
@@ -483,10 +501,11 @@ const _APPLY_BODY = `(function(sel, opts){
       // apply() would also catch it, but cheaper to bail here.
       if (window.__ifpPickerArmed) return;
       const r = apply();
-      if (r === 'wait') {
+      if (r === 'wait' || r === 'canvas-pending') {
         // ~10 consecutive misses. With the 3 s poll alone that's 30 s;
         // burst MutationObserver fires usually reach the threshold within
-        // a few seconds of an SPA mounting nothing matching.
+        // a few seconds of an SPA mounting nothing matching. 'canvas-pending'
+        // (matched canvas, no frame yet) counts toward the same banner.
         if (++missStreak >= 10) showMissBanner();
       } else if (r === 'matched') {
         missStreak = 0;
@@ -539,7 +558,12 @@ const _APPLY_BODY = `(function(sel, opts){
   // Cheap: a single drawImage + getBoundingClientRect call.
   if (window.__ifpThumbInterval) clearInterval(window.__ifpThumbInterval);
   window.__ifpThumbInterval = setInterval(schedule, 3000);
-  return first === 'matched' ? 'matched-and-observing' : 'observing';
+  // Distinguish a not-yet-painted canvas ('canvas-pending') from an
+  // unmatched selector ('observing') so the QML applyThumbCrop callback can
+  // mark the thumbnail "blank" and arm a retry only for the canvas case.
+  return first === 'matched' ? 'matched-and-observing'
+       : first === 'canvas-pending' ? 'canvas-pending'
+       : 'observing';
 })`;
 
 // Tears down all crop state (data attributes, observers, timers,
