@@ -179,7 +179,7 @@ function isMetadataOnlyTabsChange(oldArr, newArr) {
 
 // Auto-cycle stepper. Given the current tab index and the live `tabs`
 // array, return the next index whose tab is not marked
-// thumbMode="excluded" AND not present in the optional
+// excludeFromRotation AND not present in the optional
 // `runtimeExcluded` set (live keyword-match exclusions, session-only —
 // see main.qml's _runtimeExcluded map). Returns -1 when no such tab
 // exists (zero/one tab, every non-current tab excluded, etc.). Modulo
@@ -200,7 +200,7 @@ function nextCycleTabIndex(currentIndex, tabs, runtimeExcluded) {
     for (let step = 1; step < n; step++) {
         const candidate = (start + step) % n;
         const t = tabs[candidate];
-        if (!t || t.thumbMode === "excluded") continue;
+        if (!t || t.excludeFromRotation === true) continue;
         if (hasLiveCheck) {
             const live = setLike
                 ? runtimeExcluded.has(candidate)

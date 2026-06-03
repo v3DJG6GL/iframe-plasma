@@ -86,13 +86,25 @@ function _normaliseKeywords(v) {
 const TAB_FIELDS = [
     "label", "url", "enabled", "authProfileId", "thumbMode", "thumbSelector",
     "thumbText", "thumbIconName", "thumbTimeRange", "thumbScaleMode",
-    "thumbExcludeKeywords", "thumbShowLabel", "popupMode", "popupSelector",
+    "thumbExcludeKeywords", "thumbShowLabel", "excludeFromRotation",
+    "popupMode", "popupSelector",
 ];
+
+// Coerce the retired thumbMode="excluded" value (a single mode that used to
+// both blank the panel slot AND skip rotation) to a plain full-page
+// thumbnail. Auto-rotation skipping now lives in the dedicated
+// `excludeFromRotation` boolean, so a legacy "excluded" row renders normally
+// and rejoins rotation. Applied in both directions so a stale value can never
+// reach a runtime consumer (UrlUtils.nextCycleTabIndex / main.qml previewTabIdx)
+// — see tst_serialize_urls' coercion test.
+function _coerceThumbMode(mode) {
+    return mode === "excluded" ? "fullPanel" : mode;
+}
 
 function normaliseTabRow(entry) {
     entry = entry || {};
     const sel = entry.thumbSelector || "";
-    const mode = entry.thumbMode || "chartOnly";
+    const mode = _coerceThumbMode(entry.thumbMode || "chartOnly");
 
     const psel = entry.popupSelector || "";
     const pmode = entry.popupMode || "fullPanel";
@@ -120,6 +132,11 @@ function normaliseTabRow(entry) {
         // Default false → no overlay; an explicit true → overlay
         // (provided thumbMode renders a slot at all).
         thumbShowLabel:       entry.thumbShowLabel === true,
+        // Per-URL opt-IN to skip this tab during panel-slot auto-rotation
+        // while leaving its thumbnail untouched (it still renders normally
+        // when the user actively selects it). Default false. The cycle
+        // stepper (UrlUtils.nextCycleTabIndex) reads this; nothing else does.
+        excludeFromRotation:  entry.excludeFromRotation === true,
         popupMode:            pmode,
         popupSelector:        psel,
     };
@@ -142,7 +159,7 @@ function serialiseTabRow(row) {
         // directions must agree so tst_serialize_urls' parity guard holds.
         enabled:              row.enabled !== false,
         authProfileId:        row.authProfileId || "",
-        thumbMode:            row.thumbMode || "chartOnly",
+        thumbMode:            _coerceThumbMode(row.thumbMode || "chartOnly"),
         thumbSelector:        row.thumbSelector || "",
         thumbText:            row.thumbText || "",
         thumbIconName:        sanitizeIconName(row.thumbIconName),
@@ -150,6 +167,7 @@ function serialiseTabRow(row) {
         thumbScaleMode:       _normaliseScaleMode(row.thumbScaleMode),
         thumbExcludeKeywords: _normaliseKeywords(row.thumbExcludeKeywords),
         thumbShowLabel:       row.thumbShowLabel === true,
+        excludeFromRotation:  row.excludeFromRotation === true,
         popupMode:            row.popupMode || "fullPanel",
         popupSelector:        row.popupSelector || "",
     };

@@ -15,7 +15,7 @@ TestCase {
             thumbMode: "chartOnly", thumbSelector: "",
             thumbText: "", thumbIconName: "", thumbTimeRange: "",
             thumbScaleMode: "fit", thumbExcludeKeywords: [],
-            thumbShowLabel: false,
+            thumbShowLabel: false, excludeFromRotation: false,
             popupMode: "fullPanel", popupSelector: "",
         };
     }
@@ -84,7 +84,12 @@ TestCase {
     function test_thumbMode_custom()         { compare(Schema.normaliseTabRow({ thumbMode: "custom" }).thumbMode, "custom"); }
     function test_thumbMode_text()           { compare(Schema.normaliseTabRow({ thumbMode: "text" }).thumbMode, "text"); }
     function test_thumbMode_icon()           { compare(Schema.normaliseTabRow({ thumbMode: "icon" }).thumbMode, "icon"); }
-    function test_thumbMode_excluded()       { compare(Schema.normaliseTabRow({ thumbMode: "excluded" }).thumbMode, "excluded"); }
+    // The retired "excluded" mode is coerced to a plain full-page thumbnail;
+    // rotation-skipping now lives in the excludeFromRotation boolean.
+    function test_thumbMode_legacyExcludedCoercedToFullPanel() {
+        compare(Schema.normaliseTabRow({ thumbMode: "excluded" }).thumbMode, "fullPanel");
+        compare(Schema.serialiseTabRow({ thumbMode: "excluded" }).thumbMode, "fullPanel");
+    }
 
     // ===== thumbMode defaults ========================================
     function test_thumbMode_missingDefaultsChartOnly() {
@@ -280,6 +285,23 @@ TestCase {
                "thumbHideLabel should not survive normalisation");
     }
 
+    // ===== excludeFromRotation ======================================
+    function test_excludeFromRotation_default_isFalse() {
+        compare(Schema.normaliseTabRow({}).excludeFromRotation, false);
+    }
+    function test_excludeFromRotation_trueKept() {
+        compare(Schema.normaliseTabRow({ excludeFromRotation: true }).excludeFromRotation, true);
+    }
+    function test_excludeFromRotation_falseKept() {
+        compare(Schema.normaliseTabRow({ excludeFromRotation: false }).excludeFromRotation, false);
+    }
+    function test_excludeFromRotation_truthyNonBoolDropped() {
+        // Same defence as thumbShowLabel: only a strict === true survives.
+        compare(Schema.normaliseTabRow({ excludeFromRotation: 1 }).excludeFromRotation, false);
+        compare(Schema.normaliseTabRow({ excludeFromRotation: "true" }).excludeFromRotation, false);
+        compare(Schema.normaliseTabRow({ excludeFromRotation: null }).excludeFromRotation, false);
+    }
+
     // ===== full round-trip JSON →→ array →→ ListModel-shape =========
     function test_fullJsonRoundtrip() {
         const json = '[{"label":"k","url":"https://k","thumbMode":"icon","thumbIconName":"cpu"},'
@@ -318,6 +340,7 @@ TestCase {
                 thumbText: "TXT", thumbIconName: "bundled:cpu",
                 thumbTimeRange: "7d", thumbScaleMode: "original",
                 thumbExcludeKeywords: ["a", "b"], thumbShowLabel: true,
+                excludeFromRotation: true,
                 popupMode: "custom", popupSelector: "section.app",
             } },
             { tag: "disabledRow",  x: { enabled: false } },

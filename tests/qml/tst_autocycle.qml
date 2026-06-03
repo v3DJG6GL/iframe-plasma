@@ -10,7 +10,7 @@ TestCase {
     name: "AutoCycle"
 
     function _ok(label)      { return { label: label }; }
-    function _excluded(label){ return { label: label, thumbMode: "excluded" }; }
+    function _excluded(label){ return { label: label, excludeFromRotation: true }; }
 
     // ===== Empty / sentinel cases ====================================
     function test_emptyArray_returnsMinus1() {
@@ -114,7 +114,7 @@ TestCase {
         compare(U.nextCycleTabIndex(0, tabs, live), 2);
     }
     function test_runtimeExcluded_combinedWithStaticExcluded() {
-        // Tab 1 marked thumbMode=excluded, tab 2 is runtime-excluded
+        // Tab 1 marked excludeFromRotation, tab 2 is runtime-excluded
         // → wrap to 3.
         const tabs = [_ok("a"), _excluded("b"), _ok("c"), _ok("d")];
         const live = { 2: true };

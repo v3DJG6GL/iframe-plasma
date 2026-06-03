@@ -252,6 +252,7 @@ KCM.SimpleKCM {
                     thumbScaleMode: row.thumbScaleMode,
                     thumbExcludeKeywords: kw,
                     thumbShowLabel: row.thumbShowLabel,
+                    excludeFromRotation: row.excludeFromRotation,
                     popupMode: row.popupMode,
                     popupSelector: row.popupSelector
                 }));
@@ -373,7 +374,7 @@ KCM.SimpleKCM {
                 text: i18n("Add URL")
                 icon.name: "list-add"
                 onClicked: {
-                    listModel.append({ label: "", url: "https://", rowEnabled: true, authProfileId: "", thumbMode: "chartOnly", thumbSelector: "", thumbText: "", thumbIconName: "", thumbTimeRange: "", thumbScaleMode: "fit", thumbExcludeKeywords: "[]", thumbShowLabel: false, popupMode: "fullPanel", popupSelector: "" });
+                    listModel.append({ label: "", url: "https://", rowEnabled: true, authProfileId: "", thumbMode: "chartOnly", thumbSelector: "", thumbText: "", thumbIconName: "", thumbTimeRange: "", thumbScaleMode: "fit", thumbExcludeKeywords: "[]", thumbShowLabel: false, excludeFromRotation: false, popupMode: "fullPanel", popupSelector: "" });
                     store.serialize();
                     urlList.currentIndex = listModel.count - 1;
                 }
@@ -452,19 +453,23 @@ KCM.SimpleKCM {
                 // as a semi-transparent bar across the top of the
                 // thumbnail. Default false → no overlay.
                 required property bool thumbShowLabel
+                // Per-URL opt-IN to skip this tab during panel-slot auto-
+                // rotation. Orthogonal to the thumbnail mode: the tab still
+                // renders its normal thumbnail when the user actively selects
+                // it; only the background cycle steps past it. Default false.
+                required property bool excludeFromRotation
                 // Thumbnail-mode presets shown in the combo. Grafana embeds
                 // get the uPlot-specific chartOnly/chartWithAxes presets in
                 // addition to the generic options; non-Grafana URLs see only
-                // the generic ones. `text`, `icon`, and `excluded` skip the
-                // WebEngineView render path entirely — cheap stand-ins for
-                // tabs whose live preview is uninteresting or unwanted.
+                // the generic ones. `text` and `icon` skip the WebEngineView
+                // render path entirely — cheap stand-ins for tabs whose live
+                // preview is uninteresting or unwanted.
                 readonly property var thumbModePresets: {
                     const generic = [
                         { value: "fullPanel", display: i18n("Full page (no crop)") },
                         { value: "custom",    display: i18n("Custom CSS selector…") },
                         { value: "text",      display: i18n("Text label") },
-                        { value: "icon",      display: i18n("Icon") },
-                        { value: "excluded",  display: i18n("Hide from panel slot") }
+                        { value: "icon",      display: i18n("Icon") }
                     ];
                     if (!page.isGrafanaEmbed(url)) return generic;
                     return [
@@ -879,19 +884,42 @@ KCM.SimpleKCM {
                             }
                         }
 
+                        // Static per-URL rotation opt-out. Always available
+                        // (rotation is orthogonal to how the thumbnail
+                        // renders); when ON, the tab keeps its normal
+                        // thumbnail wherever it's actively shown but the
+                        // background auto-cycle steps past it. The
+                        // keyword-based dynamic exclusion below is redundant
+                        // while this is on, so it hides.
+                        QQC.Switch {
+                            Layout.fillWidth: true
+                            text: i18n("Exclude this URL from rotation")
+                            checked: excludeFromRotation
+                            onToggled: page._setRowField(index, "excludeFromRotation", checked)
+                            QQC.ToolTip.visible: hovered
+                            QQC.ToolTip.delay: 600
+                            QQC.ToolTip.text: i18n("When enabled, the panel-slot auto-cycle skips this URL. Its thumbnail still renders normally whenever the URL is actively selected (popup click, Ctrl+Tab, or restored on load).")
+                        }
+
                         // Live keyword-exclusion chip list. CropEngine
                         // scans the thumbnail's scope on every observer
                         // tick + 3s safety poll and emits hit transitions
                         // (main.qml setRuntimeExcluded). The cycle skips
                         // this URL while a chip's pattern is on screen.
-                        // Visible whenever the row renders live content;
-                        // hidden for text / icon / excluded.
+                        // Visible whenever the row renders live content
+                        // (hidden for text / icon). Greyed out — not hidden
+                        // — while the static "Exclude this URL from rotation"
+                        // switch makes it moot. Plain `enabled:` (no extra
+                        // opacity) so Qt's native disabled dim matches every
+                        // other greyed control on this page (reorder buttons,
+                        // add-chip button, refresh-interval field).
                         ColumnLayout {
                             Layout.fillWidth: true
                             visible: thumbMode === "chartOnly"
                                   || thumbMode === "chartWithAxes"
                                   || thumbMode === "custom"
                                   || thumbMode === "fullPanel"
+                            enabled: !excludeFromRotation
                             spacing: Kirigami.Units.smallSpacing
                             QQC.Label {
                                 text: i18n("Exclude from rotation when present:")
@@ -1092,13 +1120,11 @@ KCM.SimpleKCM {
 
                         // Per-URL opt-IN for the panel-slot label overlay
                         // (replaces the old Display-tab global toggle + per-
-                        // URL "Hide tab label" double-negative). Visible for
-                        // every mode whose thumbnail can carry the overlay
-                        // (i.e. anything except `excluded`, which has no
-                        // slot content at all).
+                        // URL "Hide tab label" double-negative). Every mode
+                        // renders a slot the overlay can sit on, so it's
+                        // always offered.
                         QQC.Switch {
                             Layout.fillWidth: true
-                            visible: thumbMode !== "excluded"
                             text: i18n("Display tab label on this thumbnail")
                             checked: thumbShowLabel
                             onToggled: page._setRowField(index, "thumbShowLabel", checked)
@@ -1163,17 +1189,6 @@ KCM.SimpleKCM {
                                         page._setRowField(index, "thumbIconName", picked);
                                 }
                             }
-                        }
-
-                        // `excluded` mode follow-up: explainer label, no input.
-                        QQC.Label {
-                            Layout.fillWidth: true
-                            Layout.maximumWidth: Kirigami.Units.gridUnit * 22
-                            visible: thumbMode === "excluded"
-                            text: i18n("This URL is hidden from the panel-slot preview and skipped during rotation.")
-                            wrapMode: Text.WordWrap
-                            color: Kirigami.Theme.disabledTextColor
-                            font.pixelSize: Kirigami.Theme.defaultFont.pixelSize - 1
                         }
                     }
 
@@ -1629,7 +1644,7 @@ KCM.SimpleKCM {
             const [vpBase, _vpFrag] = splitFragment(pastedUrl.text);
             const vpMatch = vpBase.match(/[?&]viewPanel=panel-(\d+)/);
             const lbl = deriveLabel(vpMatch ? vpMatch[1] : null);
-            listModel.append({ label: lbl, url: out, rowEnabled: true, authProfileId: "", thumbMode: "chartOnly", thumbSelector: "", thumbText: "", thumbIconName: "", thumbTimeRange: "", thumbScaleMode: "fit", thumbExcludeKeywords: "[]", thumbShowLabel: false, popupMode: "fullPanel", popupSelector: "" });
+            listModel.append({ label: lbl, url: out, rowEnabled: true, authProfileId: "", thumbMode: "chartOnly", thumbSelector: "", thumbText: "", thumbIconName: "", thumbTimeRange: "", thumbScaleMode: "fit", thumbExcludeKeywords: "[]", thumbShowLabel: false, excludeFromRotation: false, popupMode: "fullPanel", popupSelector: "" });
             store.serialize();
             // Paste fields + control defaults are reset centrally in onClosed
             // (accept() closes the dialog), covering this path and cancel alike.

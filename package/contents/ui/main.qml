@@ -615,7 +615,7 @@ PlasmoidItem {
         case "chartOnly":     return ".u-wrap > canvas";
         case "chartWithAxes": return ".u-wrap";
         case "custom":        return tab.thumbSelector || "";
-        default:              return "";   // fullPanel / text / icon / excluded
+        default:              return "";   // fullPanel / text / icon
         }
     }
 
@@ -740,6 +740,7 @@ PlasmoidItem {
                                      ? n.thumbExcludeKeywords.slice()
                                      : [];
             o.thumbShowLabel       = n.thumbShowLabel === true;
+            o.excludeFromRotation  = n.excludeFromRotation === true;
             o.popupMode            = n.popupMode || "fullPanel";
             o.popupSelector        = n.popupSelector || "";
             if (oldThumbMode !== newThumbMode || oldPopupMode !== newPopupMode) {
@@ -1195,9 +1196,9 @@ PlasmoidItem {
     // user opens the widget the cycle pauses so they can browse without the
     // active tab being yanked out from under them.
     //
-    // Tabs marked thumbMode="excluded" on the URLs tab are skipped: the next-
-    // index walk advances past them in order. If every tab is excluded (or
-    // only the current one is non-excluded) the timer keeps running but
+    // Tabs marked "Exclude from rotation" on the URLs tab are skipped: the
+    // next-index walk advances past them in order. If every tab is excluded
+    // (or only the current one is non-excluded) the timer keeps running but
     // advanceCycleTab is a no-op for that tick.
     Timer {
         id: cycleTimer
@@ -1369,10 +1370,10 @@ PlasmoidItem {
         // current tab is excluded, or out-of-range). The render path falls
         // back to the plasmoid icon in that case.
         readonly property int previewTabIdx: {
-            // In-place metadata writes mutate t.thumbMode without firing
+            // In-place metadata writes mutate row fields without firing
             // NOTIFY on root.tabs (the array reference is unchanged),
             // so depend on the serial to re-evaluate after a metadata
-            // Apply switches a tab to thumbMode="excluded".
+            // Apply changes the current tab's thumbnail mode.
             const _tick = root._tabsMetadataSerial;
             // Also re-evaluate when a runtime keyword exclusion is recorded
             // or cleared for the current tab. Without this the slot keeps
@@ -1385,7 +1386,7 @@ PlasmoidItem {
             const idx = root.currentTabIndex;
             if (idx < 0 || idx >= root.tabs.length) return -1;
             const t = root.tabs[idx];
-            if (!t || t.thumbMode === "excluded") return -1;
+            if (!t) return -1;
             // Runtime keyword exclusion only hides the preview while the
             // auto-cycle put us on this tab. When the user explicitly
             // selected it (popup click / Ctrl+Tab / restored on load) show
@@ -1504,7 +1505,8 @@ PlasmoidItem {
         //
         // Hidden entirely (→ fallback icon takes the slot) when:
         //   • compactPreviewEnabled is off,
-        //   • previewTabIdx is -1 (no tabs, or current tab is "excluded").
+        //   • previewTabIdx is -1 (no tabs, or the auto-cycle landed on a
+        //     tab whose runtime keyword exclusion is currently active).
         StackLayout {
             id: thumbStack
             anchors.fill: parent
@@ -1539,10 +1541,9 @@ PlasmoidItem {
                     readonly property bool wantLive: Plasmoid.configuration.compactPreviewEnabled
                                                   && slotMode !== "text"
                                                   && slotMode !== "icon"
-                                                  && slotMode !== "excluded"
 
                     // --- Live web preview (per tab) -----------------------
-                    // Loader-gated so excluded / text / icon tabs pay zero
+                    // Loader-gated so text / icon tabs pay zero
                     // Chromium-renderer cost. When `active` flips false the
                     // WebEngineView is destroyed; flipping it true re-loads
                     // from scratch (matches today's URL-change reload, just
@@ -1689,10 +1690,6 @@ PlasmoidItem {
                         }
                     }
 
-                    // `excluded` mode: leave the delegate blank. The
-                    // currentIndex pointer never lands here (previewTabIdx
-                    // returns -1 for the excluded case, the StackLayout
-                    // itself goes invisible, fallback icon takes over).
                 }
             }
         }
