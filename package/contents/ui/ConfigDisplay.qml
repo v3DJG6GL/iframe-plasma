@@ -50,7 +50,7 @@ KCM.SimpleKCM {
 
         Item { Kirigami.FormData.isSection: true }
 
-        QQC.CheckBox {
+        QQC.Switch {
             id: tabBarSwitch
             Kirigami.FormData.label: i18n("Tab bar:")
             text: i18n("Show tab bar when multiple URLs are configured")
@@ -62,7 +62,7 @@ KCM.SimpleKCM {
 
         Item { Kirigami.FormData.isSection: true }
 
-        QQC.CheckBox {
+        QQC.Switch {
             id: compactSwitch
             Kirigami.FormData.label: i18n("Panel preview:")
             text: i18n("Render a live mini-preview in the Plasma panel slot")
@@ -82,7 +82,7 @@ KCM.SimpleKCM {
         RowLayout {
             Kirigami.FormData.label: i18n("Rotate preview:")
             enabled: compactSwitch.checked
-            QQC.CheckBox {
+            QQC.Switch {
                 id: cycleBox
                 text: i18n("Cycle through tabs every")
                 checked: false

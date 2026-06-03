@@ -1096,7 +1096,7 @@ KCM.SimpleKCM {
                         // every mode whose thumbnail can carry the overlay
                         // (i.e. anything except `excluded`, which has no
                         // slot content at all).
-                        QQC.CheckBox {
+                        QQC.Switch {
                             Layout.fillWidth: true
                             visible: thumbMode !== "excluded"
                             text: i18n("Display tab label on this thumbnail")
@@ -1382,7 +1382,7 @@ KCM.SimpleKCM {
                 Layout.fillWidth: true
                 Layout.topMargin: Kirigami.Units.smallSpacing
 
-                QQC.CheckBox {
+                QQC.Switch {
                     id: convertDSolo
                     visible: grafanaHelper.editingIndex < 0
                     Kirigami.FormData.label: visible ? i18n("Single panel:") : ""
@@ -1399,13 +1399,13 @@ KCM.SimpleKCM {
                     currentIndex: 7   // 24h (Last 24 hours)
                     NoWheel {}
                 }
-                QQC.CheckBox {
+                QQC.Switch {
                     id: addKiosk
                     Kirigami.FormData.label: i18n("Kiosk mode:")
                     text: i18n("Hide remaining Grafana chrome")
                     checked: true
                 }
-                QQC.CheckBox {
+                QQC.Switch {
                     id: addTheme
                     Kirigami.FormData.label: i18n("Theme:")
                     text: i18n("Match KDE color scheme (substitutes ${theme})")
@@ -1413,7 +1413,7 @@ KCM.SimpleKCM {
                 }
                 RowLayout {
                     Kirigami.FormData.label: i18n("Auto-refresh:")
-                    QQC.CheckBox { id: addRefresh; text: i18n("every"); checked: true }
+                    QQC.Switch { id: addRefresh; text: i18n("every"); checked: true }
                     UnitSpinBox {
                         id: refreshInterval
                         from: 5; to: 3600
@@ -1425,7 +1425,7 @@ KCM.SimpleKCM {
                 // hideLogo=true removes Grafana 12.4+'s "Powered by Grafana"
                 // overlay (PR #115198). Harmless on older Grafana — the param
                 // is silently ignored. Default on; users rarely want it.
-                QQC.CheckBox {
+                QQC.Switch {
                     id: addHideLogo
                     Kirigami.FormData.label: i18n("Branding:")
                     text: i18n("Hide \"Powered by Grafana\" badge")
@@ -1437,7 +1437,7 @@ KCM.SimpleKCM {
                 // internal sentinel `_ifp_hidePanelMenu=1` which Grafana
                 // ignores (unknown query param) and a WebEngineScript in
                 // WebTab.qml detects it and injects the hiding CSS.
-                QQC.CheckBox {
+                QQC.Switch {
                     id: addHidePanelMenu
                     Kirigami.FormData.label: i18n("Panel menu:")
                     text: i18n("Hide per-panel 3-dot menu (Explore / View / Inspect)")

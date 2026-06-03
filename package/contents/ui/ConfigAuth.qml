@@ -422,7 +422,7 @@ KCM.SimpleKCM {
                         Layout.fillWidth: true
                         visible: card.authType !== "none"
                         QQC.Label { text: ""; Layout.preferredWidth: Kirigami.Units.gridUnit * 8 }
-                        QQC.CheckBox {
+                        QQC.Switch {
                             id: preemptBox
                             Layout.fillWidth: true
                             text: i18n("Send credentials with the first request")
