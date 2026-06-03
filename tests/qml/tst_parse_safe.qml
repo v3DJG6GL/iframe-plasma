@@ -47,6 +47,20 @@ TestCase {
         compare(out[0].label, "L");
         compare(out[0].custom, 42);
     }
+    function test_parseTabs_filtersDisabled() {
+        // enabled:false rows are dropped from the live tab set; enabled:true
+        // and the rows that omit the field (legacy / default-on) survive.
+        const out = U.parseTabs('[{"url":"https://a","enabled":true},{"url":"https://b","enabled":false},{"url":"https://c"}]');
+        compare(out.length, 2);
+        compare(out[0].url, "https://a");
+        compare(out[1].url, "https://c");
+    }
+    function test_parseTabs_keepsMissingEnabled() {
+        // Missing `enabled` defaults to on — a pre-feature config stays visible.
+        const out = U.parseTabs('[{"url":"https://ok","label":"L"}]');
+        compare(out.length, 1);
+        compare(out[0].url, "https://ok");
+    }
     function test_parseTabs_singleEntry() {
         const out = U.parseTabs('[{"url":"https://kde.org","label":"KDE"}]');
         compare(out.length, 1);

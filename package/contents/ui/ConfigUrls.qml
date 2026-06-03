@@ -183,6 +183,11 @@ KCM.SimpleKCM {
                     const stored = Object.assign({}, row);
                     stored.thumbExcludeKeywords =
                         JSON.stringify(row.thumbExcludeKeywords || []);
+                    // Bridge the on-disk `enabled` field to the delegate's
+                    // `rowEnabled` model role (renamed to dodge QQuickItem's
+                    // built-in `enabled`). serialize() reverses this.
+                    stored.rowEnabled = (row.enabled !== false);
+                    delete stored.enabled;
                     listModel.append(stored);
                 }
             }
@@ -235,6 +240,9 @@ KCM.SimpleKCM {
                 arr.push(RowSchema.serialiseTabRow({
                     label: row.label,
                     url: row.url,
+                    // ListModel role `rowEnabled` → on-disk field `enabled`
+                    // (see the delegate property comment for the rename).
+                    enabled: row.rowEnabled,
                     authProfileId: row.authProfileId,
                     thumbMode: row.thumbMode,
                     thumbSelector: row.thumbSelector,
@@ -365,7 +373,7 @@ KCM.SimpleKCM {
                 text: i18n("Add URL")
                 icon.name: "list-add"
                 onClicked: {
-                    listModel.append({ label: "", url: "https://", authProfileId: "", thumbMode: "chartOnly", thumbSelector: "", thumbText: "", thumbIconName: "", thumbTimeRange: "", thumbScaleMode: "fit", thumbExcludeKeywords: "[]", thumbShowLabel: false, popupMode: "fullPanel", popupSelector: "" });
+                    listModel.append({ label: "", url: "https://", rowEnabled: true, authProfileId: "", thumbMode: "chartOnly", thumbSelector: "", thumbText: "", thumbIconName: "", thumbTimeRange: "", thumbScaleMode: "fit", thumbExcludeKeywords: "[]", thumbShowLabel: false, popupMode: "fullPanel", popupSelector: "" });
                     store.serialize();
                     urlList.currentIndex = listModel.count - 1;
                 }
@@ -402,6 +410,20 @@ KCM.SimpleKCM {
                 required property int index
                 required property string label
                 required property string url
+                // Per-URL on/off. A disabled URL is filtered out of the live
+                // tab set by main.qml's parseTabs (UrlUtils.js), so it
+                // vanishes from the widget entirely but keeps its full config
+                // here for later re-enabling. The card dims to advertise the
+                // off state; the header toggle below writes it.
+                //
+                // The ListModel role is `rowEnabled`, NOT `enabled`, on
+                // purpose: `enabled` is QQuickItem's own (interactivity)
+                // property, so a same-named required model property would
+                // collide — and binding the inherited `enabled` to the row's
+                // off state would grey out the whole card and trap the user
+                // (no way to toggle it back). On disk the field stays
+                // `enabled`; serialize()/repopulate() bridge the two names.
+                required property bool rowEnabled
                 required property string authProfileId
                 required property string thumbMode
                 required property string thumbSelector
@@ -470,6 +492,12 @@ KCM.SimpleKCM {
 
                 width: ListView.view.width
 
+                // A disabled card is de-emphasised by dimming its title text
+                // and its editable body (see the title ColumnLayout + the
+                // contentItem Item below) — NOT the whole card, so the header
+                // controls, and above all the Enabled switch itself, stay at
+                // full opacity and remain clearly legible/operable.
+
                 // Rich card header: index, the tab's label (bold, elided), a
                 // muted one-line summary, and the reorder/delete actions. Frees
                 // the contentItem to be a single grouped column. `label`/`url`
@@ -486,6 +514,11 @@ KCM.SimpleKCM {
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 0
+                        // Dim the title + summary when the URL is off — the
+                        // "off" reading now comes from the labelled switch's
+                        // position plus this de-emphasis, so no separate
+                        // "(disabled)" tag is needed.
+                        opacity: rowEnabled ? 1.0 : 0.5
                         Kirigami.Heading {
                             Layout.fillWidth: true
                             level: 4
@@ -503,6 +536,29 @@ KCM.SimpleKCM {
                             color: Kirigami.Theme.disabledTextColor
                             font.pixelSize: Kirigami.Theme.defaultFont.pixelSize - 1
                         }
+                    }
+                    // Per-URL enable/disable. Off → main.qml's parseTabs
+                    // drops the row, so the URL leaves the widget (tab bar,
+                    // popup, panel-slot thumbnail, auto-cycle) and its
+                    // WebEngineView is never created — but the row stays here
+                    // with all its config intact. Writes the `rowEnabled`
+                    // model role (see the delegate property comment for why
+                    // it isn't named `enabled`).
+                    QQC.Switch {
+                        // Label names what the control DOES (not its current
+                        // state — "Enabled" read as a status, not a switch
+                        // purpose); the toggle position carries the on/off
+                        // state. Stays at full opacity (its parent card is not
+                        // dimmed) so it reads clearly even when the URL is off.
+                        text: i18n("Enable/Disable URL")
+                        checked: urlRow.rowEnabled
+                        onToggled: page._setRowField(index, "rowEnabled", checked)
+                        Layout.alignment: Qt.AlignVCenter
+                        QQC.ToolTip.visible: hovered
+                        QQC.ToolTip.delay: 400
+                        QQC.ToolTip.text: urlRow.rowEnabled
+                            ? i18n("This URL appears in the widget. Turn off to hide it (kept here, skipped in rotation, not loaded) without deleting its settings.")
+                            : i18n("This URL is hidden from the widget and skipped during rotation. Its settings are kept — turn on to restore it as a tab.")
                     }
                     QQC.ToolButton {
                         icon.name: "go-up"
@@ -541,6 +597,10 @@ KCM.SimpleKCM {
                 // very wrap.)
                 contentItem: Item {
                     implicitHeight: contentCol.implicitHeight
+                    // De-emphasise the editable body of a disabled URL (its
+                    // header controls stay bright). Still fully interactive —
+                    // the user can edit a disabled URL before turning it back on.
+                    opacity: rowEnabled ? 1.0 : 0.5
 
                     ColumnLayout {
                         id: contentCol
@@ -1569,7 +1629,7 @@ KCM.SimpleKCM {
             const [vpBase, _vpFrag] = splitFragment(pastedUrl.text);
             const vpMatch = vpBase.match(/[?&]viewPanel=panel-(\d+)/);
             const lbl = deriveLabel(vpMatch ? vpMatch[1] : null);
-            listModel.append({ label: lbl, url: out, authProfileId: "", thumbMode: "chartOnly", thumbSelector: "", thumbText: "", thumbIconName: "", thumbTimeRange: "", thumbScaleMode: "fit", thumbExcludeKeywords: "[]", thumbShowLabel: false, popupMode: "fullPanel", popupSelector: "" });
+            listModel.append({ label: lbl, url: out, rowEnabled: true, authProfileId: "", thumbMode: "chartOnly", thumbSelector: "", thumbText: "", thumbIconName: "", thumbTimeRange: "", thumbScaleMode: "fit", thumbExcludeKeywords: "[]", thumbShowLabel: false, popupMode: "fullPanel", popupSelector: "" });
             store.serialize();
             // Paste fields + control defaults are reset centrally in onClosed
             // (accept() closes the dialog), covering this path and cancel alike.

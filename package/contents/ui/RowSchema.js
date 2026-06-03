@@ -84,7 +84,7 @@ function _normaliseKeywords(v) {
 // f831b02 drift class — three thumb* fields silently dropped on serialize)
 // fails CI instead of silently corrupting every save.
 const TAB_FIELDS = [
-    "label", "url", "authProfileId", "thumbMode", "thumbSelector",
+    "label", "url", "enabled", "authProfileId", "thumbMode", "thumbSelector",
     "thumbText", "thumbIconName", "thumbTimeRange", "thumbScaleMode",
     "thumbExcludeKeywords", "thumbShowLabel", "popupMode", "popupSelector",
 ];
@@ -100,6 +100,12 @@ function normaliseTabRow(entry) {
     return {
         label:                entry.label || "",
         url:                  entry.url || "",
+        // Per-URL on/off. Default ON: a missing/non-false value (legacy
+        // rows, imported backups predating this field) round-trips as
+        // enabled so existing configs are unchanged. main.qml's parseTabs
+        // drops `enabled === false` rows from the live tab set, so a
+        // disabled URL keeps its config here but never becomes a tab.
+        enabled:              entry.enabled !== false,
         authProfileId:        entry.authProfileId || "",
         thumbMode:            mode,
         thumbSelector:        sel,
@@ -131,6 +137,10 @@ function serialiseTabRow(row) {
     return {
         label:                row.label || "",
         url:                  row.url || "",
+        // Mirror normaliseTabRow's default-ON idiom (`!== false`), NOT the
+        // default-OFF `=== true` form thumbShowLabel uses — the two
+        // directions must agree so tst_serialize_urls' parity guard holds.
+        enabled:              row.enabled !== false,
         authProfileId:        row.authProfileId || "",
         thumbMode:            row.thumbMode || "chartOnly",
         thumbSelector:        row.thumbSelector || "",

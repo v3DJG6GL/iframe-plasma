@@ -11,13 +11,38 @@ TestCase {
 
     function _defaults() {
         return {
-            label: "", url: "", authProfileId: "",
+            label: "", url: "", enabled: true, authProfileId: "",
             thumbMode: "chartOnly", thumbSelector: "",
             thumbText: "", thumbIconName: "", thumbTimeRange: "",
             thumbScaleMode: "fit", thumbExcludeKeywords: [],
             thumbShowLabel: false,
             popupMode: "fullPanel", popupSelector: "",
         };
+    }
+
+    // ===== enabled: default-ON boolean ===============================
+    // Mirror image of thumbShowLabel (default-OFF). A missing or non-false
+    // value normalises to true so legacy rows / pre-field backups stay
+    // visible; an explicit false is preserved both directions.
+    function test_enabled_missingDefaultsTrue() {
+        compare(Schema.normaliseTabRow({}).enabled, true);
+    }
+    function test_enabled_explicitFalseKept() {
+        compare(Schema.normaliseTabRow({ enabled: false }).enabled, false);
+    }
+    function test_enabled_explicitTrueKept() {
+        compare(Schema.normaliseTabRow({ enabled: true }).enabled, true);
+    }
+    function test_enabled_nonBoolNonFalseDefaultsTrue() {
+        // Anything that isn't strictly `false` (e.g. a corrupt string)
+        // normalises to enabled — only a real false hides the row.
+        compare(Schema.normaliseTabRow({ enabled: "nope" }).enabled, true);
+    }
+    function test_enabled_serialiseFalseKept() {
+        compare(Schema.serialiseTabRow({ enabled: false }).enabled, false);
+    }
+    function test_enabled_serialiseMissingDefaultsTrue() {
+        compare(Schema.serialiseTabRow({}).enabled, true);
     }
 
     // ===== empty input -> default row ================================
@@ -288,13 +313,14 @@ TestCase {
         return [
             { tag: "empty",        x: {} },
             { tag: "fullyPopulated", x: {
-                label: "L", url: "https://x", authProfileId: "uuid-1",
+                label: "L", url: "https://x", enabled: false, authProfileId: "uuid-1",
                 thumbMode: "custom", thumbSelector: ".u-wrap",
                 thumbText: "TXT", thumbIconName: "bundled:cpu",
                 thumbTimeRange: "7d", thumbScaleMode: "original",
                 thumbExcludeKeywords: ["a", "b"], thumbShowLabel: true,
                 popupMode: "custom", popupSelector: "section.app",
             } },
+            { tag: "disabledRow",  x: { enabled: false } },
             { tag: "junkScaleMode", x: { thumbScaleMode: "junk" } },
             { tag: "httpIcon",      x: { thumbIconName: "http://attacker/p?h=KIOSK" } },
             { tag: "dirtyKeywords", x: { thumbExcludeKeywords: ["", "ok", 42, null] } },

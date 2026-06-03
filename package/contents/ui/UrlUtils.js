@@ -32,7 +32,15 @@ function isSafeTabUrl(s) {
 function parseTabs(jsonStr) {
     try {
         const arr = JSON.parse(jsonStr || "[]");
-        if (Array.isArray(arr)) return arr.filter(t => t && isSafeTabUrl(t.url));
+        // Drop disabled rows here, at the single deserialize chokepoint, so
+        // the live tab set (root.tabs) carries only enabled URLs — every
+        // downstream consumer (tab bar, popup/thumbnail Repeaters, auto-
+        // cycle, keyboard nav, count gates) is then correct with no per-
+        // consumer skip. `enabled !== false` keeps legacy rows that predate
+        // the field (missing → enabled). The config page (ConfigUrls) keeps
+        // its own full list, so disabled URLs stay editable / re-enableable.
+        if (Array.isArray(arr))
+            return arr.filter(t => t && isSafeTabUrl(t.url) && t.enabled !== false);
     } catch (e) {
         console.warn("iframe-plasma: bad urlsJson:", e.message);
     }
