@@ -26,25 +26,51 @@ function isSafeTabUrl(s) {
     return /^https?:\/\//i.test(s);
 }
 
+// Single source of truth for "this on-disk row becomes a live tab". Drops
+// rows with an unsafe/parse-hostile URL AND rows the user disabled. Both
+// parseTabs (which produces root.tabs) and configIndexForTab (which maps a
+// live-tab index back to its on-disk position) MUST agree on this predicate,
+// else the filtered live index and the unfiltered urlsJson index diverge.
+// `enabled !== false` keeps legacy rows that predate the field (missing →
+// enabled).
+function isLiveTab(t) {
+    return !!t && isSafeTabUrl(t.url) && t.enabled !== false;
+}
+
 // JSON.parse with a defensive guard: returns the parsed array (with
-// unsafe-URL rows filtered) or [] on any failure. Logs to console.warn so
-// users debugging a broken config get a journal breadcrumb.
+// unsafe-URL and disabled rows filtered) or [] on any failure. Logs to
+// console.warn so users debugging a broken config get a journal breadcrumb.
 function parseTabs(jsonStr) {
     try {
         const arr = JSON.parse(jsonStr || "[]");
-        // Drop disabled rows here, at the single deserialize chokepoint, so
-        // the live tab set (root.tabs) carries only enabled URLs — every
+        // Drop disabled/unsafe rows here, at the single deserialize chokepoint,
+        // so the live tab set (root.tabs) carries only enabled URLs — every
         // downstream consumer (tab bar, popup/thumbnail Repeaters, auto-
         // cycle, keyboard nav, count gates) is then correct with no per-
-        // consumer skip. `enabled !== false` keeps legacy rows that predate
-        // the field (missing → enabled). The config page (ConfigUrls) keeps
-        // its own full list, so disabled URLs stay editable / re-enableable.
-        if (Array.isArray(arr))
-            return arr.filter(t => t && isSafeTabUrl(t.url) && t.enabled !== false);
+        // consumer skip. The config page (ConfigUrls) keeps its own full list,
+        // so disabled URLs stay editable / re-enableable.
+        if (Array.isArray(arr)) return arr.filter(isLiveTab);
     } catch (e) {
         console.warn("iframe-plasma: bad urlsJson:", e.message);
     }
     return [];
+}
+
+// Translate a live-tab index (index into the filtered array parseTabs
+// returns) back to its index in the FULL on-disk `arr`. Returns -1 when out
+// of range. Without this, any write that addresses urlsJson by a live index
+// (e.g. savePickedSelector) lands on the wrong row whenever a disabled/unsafe
+// URL precedes the target.
+function configIndexForTab(arr, tabIndex) {
+    if (!Array.isArray(arr) || tabIndex < 0) return -1;
+    let seen = 0;
+    for (let i = 0; i < arr.length; i++) {
+        if (isLiveTab(arr[i])) {
+            if (seen === tabIndex) return i;
+            seen++;
+        }
+    }
+    return -1;
 }
 
 // Same shape as parseTabs but no URL filter — profile rows aren't URLs.

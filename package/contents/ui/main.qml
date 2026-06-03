@@ -258,6 +258,13 @@ PlasmoidItem {
             // safe and avoids a non-live (text/icon) tab inheriting a
             // stale-excluded index and being dropped from the rotation.
             root._runtimeExcluded = ({});
+            // Same index-shift hazard for the per-thumb error map: a stale
+            // entry would paint a "failed" placeholder over a different (often
+            // a non-loading text/icon) tab that inherited the freed index. New
+            // webview delegates re-emit their load state on reload, so clearing
+            // here is safe.
+            root._thumbErrorState = ({});
+            root._thumbErrorSerial++;
             if (root.currentTabIndex >= root.tabs.length) {
                 root.setCurrentTab(Math.max(0, root.tabs.length - 1));
             }
@@ -707,9 +714,9 @@ PlasmoidItem {
             const newThumbMode = n.thumbMode || "";
             const newPopupMode = n.popupMode || "";
             const oldKeywords = Array.isArray(o.thumbExcludeKeywords)
-                                ? o.thumbExcludeKeywords.join(" ") : "";
+                                ? JSON.stringify(o.thumbExcludeKeywords) : "";
             const newKeywords = Array.isArray(n.thumbExcludeKeywords)
-                                ? n.thumbExcludeKeywords.join(" ") : "";
+                                ? JSON.stringify(n.thumbExcludeKeywords) : "";
             // Copy every metadata field. authProfileId and url are
             // checked structurally above, but copy authProfileId too
             // so the row object stays internally consistent if a
@@ -1024,11 +1031,17 @@ PlasmoidItem {
         }
         try {
             const arr = JSON.parse(Plasmoid.configuration.urlsJson || "[]");
-            if (!Array.isArray(arr) || tabIdx < 0 || tabIdx >= arr.length) {
+            // tabIdx indexes the FILTERED live tab set (root.tabs); arr is the
+            // FULL on-disk list including disabled/unsafe rows. Map across so a
+            // disabled URL ahead of the picked tab can't shift the write onto
+            // the wrong row (and `tabIdx < arr.length` can't catch it — the
+            // full array is longer than the filtered one).
+            const cfgIdx = UrlUtils.configIndexForTab(arr, tabIdx);
+            if (cfgIdx < 0) {
                 _restoreOnAbort();
                 return;
             }
-            const entry = arr[tabIdx] || {};
+            const entry = arr[cfgIdx] || {};
             if (scope === "thumb" || scope === "both") {
                 entry.thumbMode = "custom";
                 entry.thumbSelector = sel;
@@ -1037,7 +1050,7 @@ PlasmoidItem {
                 entry.popupMode = "custom";
                 entry.popupSelector = sel;
             }
-            arr[tabIdx] = entry;
+            arr[cfgIdx] = entry;
 
             // Mutate the live tabs[] entry in place so any binding
             // that reads root.tabs[tabIdx] (the live array, NOT the
@@ -1752,6 +1765,13 @@ PlasmoidItem {
                 // self-heals but a permanently-broken URL backs off instead of
                 // hammering the server forever.
                 property int _retryAttempt: 0
+                // Bumped every time the in-page CropEngine logs a successful
+                // CROP. applyThumbCrop snapshots this before its async
+                // runJavaScript and refuses to downgrade the slot to "blank"
+                // if a CROP landed meanwhile — otherwise a stale
+                // "canvas-pending" result races in after the canvas already
+                // painted and pins a false placeholder until the next reload.
+                property int _cropSeenSerial: 0
 
                 // Per-delegate auto-follow override. Defaults to "" (use
                 // tab's static thumbTimeRange / URL-own range). The
@@ -2072,11 +2092,16 @@ PlasmoidItem {
                         // in-page observer/3s interval has since healed it —
                         // clear the placeholder and cancel the pending retry so
                         // the QML side tracks what's actually on screen.
-                        if (safe.indexOf('CROP') !== -1 && miniView.loadStatus === "blank") {
-                            miniView.loadStatus = "ok";
-                            miniView._retryAttempt = 0;
-                            thumbRetryTimer.stop();
-                            root.setThumbError(miniView.ownIndex, "");
+                        if (safe.indexOf('CROP') !== -1) {
+                            // Record the crop so a still-in-flight applyThumbCrop
+                            // callback can't re-blank a slot that just painted.
+                            miniView._cropSeenSerial++;
+                            if (miniView.loadStatus === "blank") {
+                                miniView.loadStatus = "ok";
+                                miniView._retryAttempt = 0;
+                                thumbRetryTimer.stop();
+                                root.setThumbError(miniView.ownIndex, "");
+                            }
                         }
                         return;
                     }
@@ -2118,17 +2143,24 @@ PlasmoidItem {
                         + " scale=" + opts.scaleMode
                         + " kwCount=" + opts.keywords.length
                         + " loading=" + miniView.loading + " url=" + miniView.url);
+                    // Snapshot the crop counter before the async call so the
+                    // callback can tell whether the in-page observer/3s interval
+                    // already cropped the canvas while runJavaScript was in
+                    // flight (see _cropSeenSerial).
+                    const cropEpoch = miniView._cropSeenSerial;
                     runJavaScript(CropEngine.buildApplyJs(selector, opts), function(r) {
                         console.info("iframe-plasma[thumb] applyThumbCrop("
                             + JSON.stringify(selector) + ") = " + r);
                         // CropEngine matched the canvas but it hadn't painted a
                         // frame yet (page is un-blanked, would otherwise look
                         // empty). Mark "blank" and arm a retry — but only while
-                        // this is still a clean load; a later success or failure
-                        // resets it. The in-page 3s interval also keeps trying,
-                        // but it stops once the view freezes, so the QML retry
-                        // is the durable recovery.
-                        if (r === "canvas-pending" && miniView.loadStatus === "ok") {
+                        // this is still a clean load AND no CROP landed since we
+                        // dispatched (else this stale result would re-blank a
+                        // slot the canvas already painted). The in-page 3s
+                        // interval also keeps trying, but it stops once the view
+                        // freezes, so the QML retry is the durable recovery.
+                        if (r === "canvas-pending" && miniView.loadStatus === "ok"
+                            && miniView._cropSeenSerial === cropEpoch) {
                             miniView.loadStatus = "blank";
                             root.setThumbError(miniView.ownIndex, i18n("Rendering…"));
                             thumbRetryTimer.arm();
