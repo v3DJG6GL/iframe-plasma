@@ -265,6 +265,13 @@ PlasmoidItem {
             // here is safe.
             root._thumbErrorState = ({});
             root._thumbErrorSerial++;
+            // Same index-shift hazard for the per-tab load-status array (it
+            // feeds the popup tab-bar's status dots and only ever grows, never
+            // shrinks): a stale entry would paint a wrong status against the
+            // tab that inherited the freed index, and trailing entries from a
+            // now-shorter list would linger. Rebuilt WebTabs re-emit
+            // loadStatus on reload, so clearing here is safe.
+            root.tabStatuses = [];
             if (root.currentTabIndex >= root.tabs.length) {
                 root.setCurrentTab(Math.max(0, root.tabs.length - 1));
             }
