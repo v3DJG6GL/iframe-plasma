@@ -13,6 +13,11 @@
   "automerge": true,
   "automergeStrategy": "squash",
   "platformAutomerge": true,
+  "minimumReleaseAge": "3 days",
+  "internalChecksFilter": "strict",
+  "vulnerabilityAlerts": {
+    "minimumReleaseAge": null
+  },
   "pre-commit": {
     "enabled": true
   },
@@ -28,10 +33,11 @@
       "groupName": "pre-commit"
     },
     {
-      "description": "Pin kdeneon/plasma by digest. The image is the only mainstream source of working Qt6.7+/KF6/plasma-workspace/qt6-webengine-dev; the CI workflow explicitly tracks it by sha256 to keep upstream image churn from silently breaking builds. Renovate auto-PRs digest bumps so we don't have to run the docker inspect dance by hand.",
+      "description": "Pin kdeneon/plasma by digest. The image is the only mainstream source of working Qt6.7+/KF6/plasma-workspace/qt6-webengine-dev; the CI workflow explicitly tracks it by sha256 to keep upstream image churn from silently breaking builds. Renovate auto-PRs digest bumps so we don't have to run the docker inspect dance by hand. minimumReleaseAge null exempts these digest bumps from the global 3-day age gate: the point of the pin is tracking upstream churn promptly, an age gate on a rolling KDE base image adds no supply-chain value, and a digest without a registry timestamp would otherwise be frozen (not delayed) by internalChecksFilter=strict.",
       "matchPackageNames": ["kdeneon/plasma"],
       "pinDigests": true,
-      "groupName": "kdeneon-plasma-image"
+      "groupName": "kdeneon-plasma-image",
+      "minimumReleaseAge": null
     },
     {
       "description": "Major bumps require manual review — surface as checkboxes on the Dependency Dashboard, do not open the PR automatically, do not auto-merge. Minor/patch still flow through automerge gated by CI.",
