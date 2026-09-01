@@ -40,7 +40,9 @@ function isLiveTab(t) {
 // JSON.parse with a defensive guard: returns the parsed array (with
 // unsafe-URL and disabled rows filtered) or [] on any failure. Logs to
 // console.warn so users debugging a broken config get a journal breadcrumb.
-function parseTabs(jsonStr) {
+// `logCategory` (optional) is a QML LoggingCategory (see Log.qml); library
+// scripts cannot import the singleton themselves, so callers pass it in.
+function parseTabs(jsonStr, logCategory) {
     try {
         const arr = JSON.parse(jsonStr || "[]");
         // Drop disabled/unsafe rows here, at the single deserialize chokepoint,
@@ -51,7 +53,8 @@ function parseTabs(jsonStr) {
         // so disabled URLs stay editable / re-enableable.
         if (Array.isArray(arr)) return arr.filter(isLiveTab);
     } catch (e) {
-        console.warn("iframe-plasma: bad urlsJson:", e.message);
+        if (logCategory) console.warn(logCategory, "iframe-plasma: bad urlsJson:", e.message);
+        else console.warn("iframe-plasma: bad urlsJson:", e.message);
     }
     return [];
 }
@@ -74,12 +77,13 @@ function configIndexForTab(arr, tabIndex) {
 }
 
 // Same shape as parseTabs but no URL filter — profile rows aren't URLs.
-function parseAuthProfiles(jsonStr) {
+function parseAuthProfiles(jsonStr, logCategory) {
     try {
         const arr = JSON.parse(jsonStr || "[]");
         return Array.isArray(arr) ? arr : [];
     } catch (e) {
-        console.warn("iframe-plasma: bad authProfilesJson:", e.message);
+        if (logCategory) console.warn(logCategory, "iframe-plasma: bad authProfilesJson:", e.message);
+        else console.warn("iframe-plasma: bad authProfilesJson:", e.message);
         return [];
     }
 }

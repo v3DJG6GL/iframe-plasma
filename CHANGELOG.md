@@ -6,6 +6,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+- **Widget logging is now categorised and quiet by default.** Every QML `console.*` call goes through a new `Log.qml` singleton of Qt `LoggingCategory` objects (`io.github.v3djg6gl.iframe.{auth,load,policy,thumb,picker,config,page,lifecycle}`, Info default) instead of Qt's shared `qml` category, and ~55 routine per-load / per-frame messages moved from `info` to `debug`. The C++ plugin's categories were renamed from `iframeplasma.auth` / `iframeplasma.lock` to the same tree and given an explicit Info default: Qt enables debug for a bare `Q_LOGGING_CATEGORY`, so the per-request "injected Authorization for <url>" trace had been landing in the journal all along (~35k lines/day) together with the page-side `[ifp-thumb] CROP` trace (~33k lines/day). Enable trace with `QT_LOGGING_RULES="io.github.v3djg6gl.iframe.*.debug=true"` or via kdebugsettings; see README → Logging.
+- **Page console forwarding is debug-only.** Console output from the embedded pages (popup and panel views) is re-emitted in the `page` category at debug level, keeping the page's own level so page errors surface as warnings; the `[ifp-thumb]` / `[ifp-keyword]` data-channel parsing is unaffected.
+- **URLs are redacted in default-visible log lines.** Load-failure, certificate-error, blocked-download and auth-success messages now log scheme+host+path only (no query string or fragment).
+
+### Added
+- **kdebugsettings integration.** The build installs `iframe-plasma.categories` (via ECM `ecm_qt_export_logging_category` / `ecm_qt_install_logging_categories`) so the widget's categories can be toggled in KDebugSettings; the Advanced config tab and README explain how.
+
 ### Fixed
 - **Tab strip no longer hides tabs past the right edge.** With enough URLs configured the tab strip's `RowLayout` laid the rightmost tabs beyond the popup edge, where they were unreachable without widening the widget. The strip is now a horizontal `ListView` that scrolls (mouse-wheel / drag / flick); the active tab is auto-scrolled into view, and edge-fade gradients hint that there are off-screen tabs. Tab labels now elide instead of stretching a single tab arbitrarily wide.
 - **Toolbar chips no longer overlap on a narrow popup.** The reload control and the time-range / refresh dropdowns now hold their minimum width instead of being squeezed toward zero (which let their centred contents overlap). The hostname elides responsively to the space available, and the HTTP-status chip hides when the popup is too narrow to also fit the controls.

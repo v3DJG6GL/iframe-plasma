@@ -76,7 +76,7 @@ PlasmoidItem {
     property var authProfiles: parseAuthProfiles(Plasmoid.configuration.authProfilesJson)
 
     function parseAuthProfiles(jsonStr) {
-        return UrlUtils.parseAuthProfiles(jsonStr);
+        return UrlUtils.parseAuthProfiles(jsonStr, Log.auth);
     }
 
     function profileById(id) {
@@ -125,7 +125,7 @@ PlasmoidItem {
     }
 
     function parseTabs(jsonStr) {
-        return UrlUtils.parseTabs(jsonStr);
+        return UrlUtils.parseTabs(jsonStr, Log.config);
     }
 
     function resolveTheme() {
@@ -200,7 +200,7 @@ PlasmoidItem {
         // that doesn't match Grafana's interval shape; fall back to the URL's
         // own from/to (range = "").
         if (range.length > 0 && !/^\d+[smhdwMy]$/.test(range)) {
-            console.warn("iframe-plasma[thumb] rejected invalid thumbTimeRange=" + range);
+            console.warn(Log.config, "iframe-plasma[thumb] rejected invalid thumbTimeRange=" + range);
             range = "";
         }
         if (range.length > 0) {
@@ -232,7 +232,7 @@ PlasmoidItem {
             // this guard every picker save would blank the popup.
             if (root._suppressTabsRebuildOnce) {
                 root._suppressTabsRebuildOnce = false;
-                console.info("iframe-plasma[urls] selector-only update; tabs[] rebuild skipped");
+                console.debug(Log.config, "iframe-plasma[urls] selector-only update; tabs[] rebuild skipped");
                 return;
             }
             const newTabs = root.parseTabs(Plasmoid.configuration.urlsJson);
@@ -311,10 +311,10 @@ PlasmoidItem {
             }
             const changedIds = Object.keys(changed);
             if (changedIds.length === 0) {
-                console.info("iframe-plasma[auth] profiles unchanged; no tab reloads");
+                console.debug(Log.auth, "iframe-plasma[auth] profiles unchanged; no tab reloads");
                 return;
             }
-            console.info("iframe-plasma[auth] changed profile ids=" + JSON.stringify(changedIds)
+            console.info(Log.auth, "iframe-plasma[auth] changed profile ids=" + JSON.stringify(changedIds)
                 + " — reloading referencing tabs");
             for (let i = 0; i < root.tabs.length; i++) {
                 const t = root.tabs[i];
@@ -341,7 +341,7 @@ PlasmoidItem {
         // so the live interceptor picks up a freshly typed password
         // and any 401-stuck WebTab re-requests with the new header.
         function onAuthProfilesSecretsSerialChanged() {
-            console.info("iframe-plasma[auth] authProfilesSecretsSerial bumped -> re-prime + reloadAll");
+            console.info(Log.auth, "iframe-plasma[auth] authProfilesSecretsSerial bumped -> re-prime + reloadAll");
             root.primeAuthProfiles();
             root.reloadAll();
         }
@@ -359,7 +359,7 @@ PlasmoidItem {
         target: root.authSupport
         enabled: !!root.authSupport
         function onSecretsChanged() {
-            console.info("iframe-plasma[auth] secretsChanged -> re-prime + reloadAll");
+            console.info(Log.auth, "iframe-plasma[auth] secretsChanged -> re-prime + reloadAll");
             root.primeAuthProfiles();
             root.reloadAll();
         }
@@ -408,7 +408,7 @@ PlasmoidItem {
         source: "AuthSupport.qml"
         asynchronous: false
         onStatusChanged: if (status === Loader.Error) {
-            console.warn("iframe-plasma: C++ auth plugin not available — basic-auth integration disabled. Build with cmake to enable.");
+            console.warn(Log.config, "iframe-plasma: C++ auth plugin not available — basic-auth integration disabled. Build with cmake to enable.");
         }
     }
     readonly property var authSupport: authSupportLoader.item
@@ -496,7 +496,7 @@ PlasmoidItem {
                 : root.profileStorageRoot + "/" + key
         });
         if (!prototype) {
-            console.warn("iframe-plasma[profile] prototype createObject failed for id=" + key);
+            console.error(Log.auth, "iframe-plasma[profile] prototype createObject failed for id=" + key);
             return null;
         }
         const profile = prototype.instance();
@@ -504,7 +504,7 @@ PlasmoidItem {
             // Per Qt docs, instance() returns null on persistentStoragePath
             // collision — should never happen with our per-authProfileId
             // path layout but log defensively.
-            console.warn("iframe-plasma[profile] prototype.instance() returned null for id=" + key);
+            console.error(Log.auth, "iframe-plasma[profile] prototype.instance() returned null for id=" + key);
             prototype.destroy();
             return null;
         }
@@ -525,7 +525,7 @@ PlasmoidItem {
         profile.downloadRequested.connect(root._blockDownload);
         root._profiles[key] = profile;
         if (isEphemeral) {
-            console.info("iframe-plasma[profile] created ephemeral profile");
+            console.debug(Log.auth, "iframe-plasma[profile] created ephemeral profile");
             return profile;
         }
         // Per-profile preempt gate. Only attach the URL-interceptor when this
@@ -538,12 +538,12 @@ PlasmoidItem {
             const interceptor = root.authSupport.createInterceptor();
             if (interceptor && interceptor.attachTo(profile)) {
                 root._interceptors[key] = interceptor;
-                console.info("iframe-plasma[profile] created+attached interceptor for id=" + key);
+                console.debug(Log.auth, "iframe-plasma[profile] created+attached interceptor for id=" + key);
             } else {
-                console.warn("iframe-plasma[profile] failed to create/attach interceptor for id=" + key);
+                console.warn(Log.auth, "iframe-plasma[profile] failed to create/attach interceptor for id=" + key);
             }
         } else {
-            console.info("iframe-plasma[profile] created named profile id=" + key + " (preempt=false, no interceptor)");
+            console.debug(Log.auth, "iframe-plasma[profile] created named profile id=" + key + " (preempt=false, no interceptor)");
         }
         return profile;
     }
@@ -552,7 +552,7 @@ PlasmoidItem {
     // future disconnect() can match (signal.disconnect() needs the same
     // function reference, not just one with the same body).
     function _blockDownload(item) {
-        console.warn("iframe-plasma[dl] blocked download url=" + item.url
+        console.warn(Log.policy, "iframe-plasma[dl] blocked download url=" + Log.redactUrl(item.url)
             + " mime=" + item.mimeType);
         item.cancel();
     }
@@ -689,7 +689,7 @@ PlasmoidItem {
         const cur = root.tabs;
         if (!Array.isArray(cur) || !Array.isArray(newArr)
             || cur.length !== newArr.length) {
-            console.warn("iframe-plasma[urls] in-place apply called with"
+            console.warn(Log.config, "iframe-plasma[urls] in-place apply called with"
                 + " mismatched lengths cur=" + (cur ? cur.length : "?")
                 + " new=" + (newArr ? newArr.length : "?"));
             return;
@@ -749,14 +749,14 @@ PlasmoidItem {
             if (oldKeywords !== newKeywords && root._runtimeExcluded[i]) {
                 delete root._runtimeExcluded[i];
                 exclusionCleared = true;
-                console.info("iframe-plasma[runtime-excl] cleared idx=" + i
+                console.debug(Log.thumb, "iframe-plasma[runtime-excl] cleared idx=" + i
                     + " (exclude-keyword list changed)");
             }
         }
         if (exclusionCleared) root._runtimeExclusionSerial++;
         root._tabsMetadataSerial = root._tabsMetadataSerial + 1;
         root._tabsMetadataChanged(-1);
-        console.info("iframe-plasma[urls] metadata-only apply rows=" + cur.length
+        console.debug(Log.config, "iframe-plasma[urls] metadata-only apply rows=" + cur.length
             + " serial=" + root._tabsMetadataSerial
             + " modeChangedTabs=" + JSON.stringify(reloadTabs));
         // Per-tab soft reloads (popup WebTab + miniView) for the mode-flip
@@ -819,7 +819,7 @@ PlasmoidItem {
             delete root._runtimeExcluded[tabIdx];
         }
         root._runtimeExclusionSerial++;
-        console.info("iframe-plasma[runtime-excl] idx=" + tabIdx + " hit=" + hit);
+        console.debug(Log.thumb, "iframe-plasma[runtime-excl] idx=" + tabIdx + " hit=" + hit);
     }
 
     // Per-thumb error/blank placeholder state, keyed by tab index. The value
@@ -852,12 +852,12 @@ PlasmoidItem {
             delete root._thumbErrorState[tabIdx];
         }
         root._thumbErrorSerial++;
-        console.info("iframe-plasma[thumb-err] idx=" + tabIdx
+        console.debug(Log.thumb, "iframe-plasma[thumb-err] idx=" + tabIdx
             + " err=" + JSON.stringify(next));
     }
 
     function syncInterceptor() {
-        console.info("iframe-plasma[sync] authSupport=" + (root.authSupport ? "available" : "null"));
+        console.debug(Log.auth, "iframe-plasma[sync] authSupport=" + (root.authSupport ? "available" : "null"));
         if (!root.authSupport) return;
         // Per-profile attach/detach. Walk every named profile (the ephemeral
         // profile is intentionally skipped — auth=None tabs never get an
@@ -877,10 +877,10 @@ PlasmoidItem {
                     root._interceptors[key] = interceptor;
                 }
                 const ok = interceptor.attachTo(profile);
-                console.info("iframe-plasma[sync] attachTo id=" + key + " -> " + ok);
+                console.debug(Log.auth, "iframe-plasma[sync] attachTo id=" + key + " -> " + ok);
             } else if (interceptor) {
                 const ok = interceptor.detachFrom(profile);
-                console.info("iframe-plasma[sync] detachFrom id=" + key + " -> " + ok);
+                console.debug(Log.auth, "iframe-plasma[sync] detachFrom id=" + key + " -> " + ok);
             }
         }
     }
@@ -972,10 +972,10 @@ PlasmoidItem {
                 // every Authelia-flash-at-autostart looked identical to
                 // a real config error.
                 if (root.authSupport.isWalletReady()) {
-                    console.info("iframe-plasma[auth] profile " + id
+                    console.warn(Log.auth, "iframe-plasma[auth] profile " + id
                         + " has no stored secret (wallet open, entry missing) — skipping");
                 } else {
-                    console.warn("iframe-plasma[auth] profile " + id
+                    console.warn(Log.auth, "iframe-plasma[auth] profile " + id
                         + " skipped — wallet not available (locked, disabled, or unlock cancelled)");
                 }
                 continue;
@@ -983,7 +983,7 @@ PlasmoidItem {
             root.profileForAuthId(id);   // ensure profile + interceptor exist
             const interceptor = root._interceptors[id];
             if (!interceptor) {
-                console.info("iframe-plasma[auth] no interceptor for profile id=" + id + " (injection disabled?)");
+                console.debug(Log.auth, "iframe-plasma[auth] no interceptor for profile id=" + id + " (injection disabled?)");
                 continue;
             }
             interceptor.applyProfile(id, authType,
@@ -996,7 +996,7 @@ PlasmoidItem {
     // save dialog which lets the user choose whether to apply the selector
     // to the panel-slot thumbnail or the popup widget.
     function handlePickedSelector(tabIdx, sel) {
-        console.info("iframe-plasma[picker] handlePickedSelector idx=" + tabIdx
+        console.debug(Log.picker, "iframe-plasma[picker] handlePickedSelector idx=" + tabIdx
             + " sel=" + JSON.stringify(sel));
         if (!sel || sel.length === 0) return;
         // The dialog lives inside fullRepresentation (it has to be parented
@@ -1008,7 +1008,7 @@ PlasmoidItem {
         if (popup && typeof popup.showSavePickedDialog === "function") {
             popup.showSavePickedDialog(tabIdx, sel);
         } else {
-            console.warn("iframe-plasma[picker] no fullRepresentationItem; selector dropped");
+            console.warn(Log.picker, "iframe-plasma[picker] no fullRepresentationItem; selector dropped");
         }
     }
 
@@ -1101,7 +1101,7 @@ PlasmoidItem {
             // value but a consumer still applies the OLD, the consumer
             // is reading through a stale `modelData` snapshot (look at
             // its binding for `root._liveRow`).
-            console.info("iframe-plasma[picker] post-mutation idx=" + tabIdx
+            console.debug(Log.picker, "iframe-plasma[picker] post-mutation idx=" + tabIdx
                 + " liveRow.thumbSelector=" + JSON.stringify(liveRow && liveRow.thumbSelector)
                 + " liveRow.popupSelector=" + JSON.stringify(liveRow && liveRow.popupSelector));
 
@@ -1126,15 +1126,15 @@ PlasmoidItem {
             // NEXT legitimate urlsJson change.
             const newJson = JSON.stringify(arr);
             if (newJson === Plasmoid.configuration.urlsJson) {
-                console.info("iframe-plasma[picker] urlsJson unchanged; suppression flag not raised");
+                console.debug(Log.picker, "iframe-plasma[picker] urlsJson unchanged; suppression flag not raised");
             } else {
                 root._suppressTabsRebuildOnce = true;
                 Plasmoid.configuration.urlsJson = newJson;
             }
-            console.info("iframe-plasma[picker] saved scope=" + scope
+            console.info(Log.picker, "iframe-plasma[picker] saved scope=" + scope
                 + " sel=" + JSON.stringify(sel) + " idx=" + tabIdx);
         } catch (e) {
-            console.warn("iframe-plasma[picker] save error:", e.message);
+            console.warn(Log.picker, "iframe-plasma[picker] save error:", e.message);
             _restoreOnAbort();
         }
     }
@@ -1146,7 +1146,7 @@ PlasmoidItem {
         try {
             const profile = root.profileById(tabConfig.authProfileId);
             if (!profile) {
-                console.info("iframe-plasma[auth] no profile -> letting Qt prompt");
+                console.debug(Log.auth, "iframe-plasma[auth] no profile -> letting Qt prompt");
                 return;
             }
             // Qt's Basic-auth dialog only makes sense for the `basic` type.
@@ -1155,7 +1155,7 @@ PlasmoidItem {
             // user for user+password which can't fix it. Let Qt prompt
             // anyway in that case; user can cancel.
             if (profile.authType !== "basic") {
-                console.info("iframe-plasma[auth] non-basic profile type=" + profile.authType
+                console.debug(Log.auth, "iframe-plasma[auth] non-basic profile type=" + profile.authType
                     + " -> letting Qt prompt");
                 return;
             }
@@ -1169,12 +1169,12 @@ PlasmoidItem {
             // basic-auth prompt despite stored creds being present.
             const tabHost = new URL(root.resolveUrl(tabConfig)).host;
             if (reqHost.toLowerCase() !== tabHost.toLowerCase()) {
-                console.info("iframe-plasma[auth] host mismatch -> letting Qt prompt");
+                console.debug(Log.auth, "iframe-plasma[auth] host mismatch -> letting Qt prompt");
                 return;
             }
             const user = profile.username || "";
             if (user.length === 0) {
-                console.info("iframe-plasma[auth] profile has no username -> letting Qt prompt");
+                console.debug(Log.auth, "iframe-plasma[auth] profile has no username -> letting Qt prompt");
                 return;
             }
             const secrets = root.authSupport ? root.authSupport.getMap(root.authSupport.profileKey(profile.id)) : {};
@@ -1182,12 +1182,12 @@ PlasmoidItem {
             if (pw.length > 0) {
                 request.accepted = true;
                 request.dialogAccept(user, pw);
-                console.info("iframe-plasma[auth] dialogAccept (profile=" + profile.id + ", user=" + user + ")");
+                console.debug(Log.auth, "iframe-plasma[auth] dialogAccept (profile=" + profile.id + ", user=" + user + ")");
             } else {
-                console.info("iframe-plasma[auth] profile has no stored password -> letting Qt prompt");
+                console.debug(Log.auth, "iframe-plasma[auth] profile has no stored password -> letting Qt prompt");
             }
         } catch (e) {
-            console.warn("iframe-plasma[auth] handler error:", e.message);
+            console.warn(Log.auth, "iframe-plasma[auth] handler error:", e.message);
         }
     }
 
@@ -1251,7 +1251,7 @@ PlasmoidItem {
             if (fired) return;
             fired = true;
             try { profile.clearHttpCacheCompleted.disconnect(onCompleted); } catch (e) { /* profile gone */ }
-            console.info("iframe-plasma: HTTP cache cleared, reloading");
+            console.info(Log.load, "iframe-plasma: HTTP cache cleared, reloading");
             // Soft reload BOTH the popup tab and its matching panel-slot
             // thumbnail. Cache is profile-scoped so both observe the wipe.
             root._tabReloadRequested(idx, "soft");
@@ -1834,7 +1834,7 @@ PlasmoidItem {
                         // invalid thumbTimeRange" warning. Skip silently;
                         // thumb keeps its configured range.
                         if (newRange === "custom") return;
-                        console.info("iframe-plasma[mini-range] idx=" + miniView.ownIndex
+                        console.debug(Log.thumb, "iframe-plasma[mini-range] idx=" + miniView.ownIndex
                             + " applying override=" + JSON.stringify(newRange));
                         miniView.sessionRangeOverride = newRange;
                     }
@@ -1858,63 +1858,63 @@ PlasmoidItem {
                 smooth: true
 
                 onFeaturePermissionRequested: function(securityOrigin, feature) {
-                    console.warn("iframe-plasma[mini-perm] denied feature=" + feature
+                    console.warn(Log.policy, "iframe-plasma[mini-perm] denied feature=" + feature
                         + " origin=" + securityOrigin);
                     miniView.grantFeaturePermission(securityOrigin, feature, false);
                 }
                 onPermissionRequested: function(perm) {
-                    console.warn("iframe-plasma[mini-perm] denied permission=" + perm.permissionType
+                    console.warn(Log.policy, "iframe-plasma[mini-perm] denied permission=" + perm.permissionType
                         + " origin=" + perm.origin);
                     perm.deny();
                 }
                 onFullScreenRequested: function(request) {
-                    console.warn("iframe-plasma[mini-fs] rejected fullScreen request");
+                    console.warn(Log.policy, "iframe-plasma[mini-fs] rejected fullScreen request");
                     request.reject();
                 }
                 onRegisterProtocolHandlerRequested: function(request) {
-                    console.warn("iframe-plasma[mini-proto] rejected scheme=" + request.scheme);
+                    console.warn(Log.policy, "iframe-plasma[mini-proto] rejected scheme=" + request.scheme);
                     request.reject();
                 }
                 onFileDialogRequested: function(request) {
-                    console.warn("iframe-plasma[mini-file] rejected dialog mode=" + request.mode);
+                    console.warn(Log.policy, "iframe-plasma[mini-file] rejected dialog mode=" + request.mode);
                     request.dialogReject();
                 }
                 onContextMenuRequested: function(request) {
-                    console.info("iframe-plasma[mini-ctx] suppressed menu pos=" + request.position);
+                    console.debug(Log.policy, "iframe-plasma[mini-ctx] suppressed menu pos=" + request.position);
                     request.accepted = true;
                 }
                 onSelectClientCertificate: function(selection) {
-                    console.warn("iframe-plasma[mini-cert] rejected client-cert request host="
+                    console.warn(Log.policy, "iframe-plasma[mini-cert] rejected client-cert request host="
                         + selection.host + " count=" + selection.certificates.length);
                     selection.selectNone();
                 }
                 onWebAuthUxRequested: function(request) {
-                    console.warn("iframe-plasma[mini-webauth] cancelled state=" + request.state);
+                    console.warn(Log.policy, "iframe-plasma[mini-webauth] cancelled state=" + request.state);
                     request.cancel();
                 }
                 onTooltipRequested: function(request) {
                     request.accepted = true;
                 }
                 onColorDialogRequested: function(request) {
-                    console.warn("iframe-plasma[mini-color] rejected color dialog");
+                    console.warn(Log.policy, "iframe-plasma[mini-color] rejected color dialog");
                     request.dialogReject();
                 }
                 onDesktopMediaRequested: function(request) {
-                    console.warn("iframe-plasma[mini-dispmedia] cancelled screen-capture request");
+                    console.warn(Log.policy, "iframe-plasma[mini-dispmedia] cancelled screen-capture request");
                     request.cancel();
                 }
                 onFileSystemAccessRequested: function(request) {
-                    console.warn("iframe-plasma[mini-fs-access] rejected origin=" + request.origin
+                    console.warn(Log.policy, "iframe-plasma[mini-fs-access] rejected origin=" + request.origin
                         + " handleType=" + request.handleType);
                     request.reject();
                 }
                 onQuotaRequested: function(request) {
-                    console.warn("iframe-plasma[mini-quota] rejected origin=" + request.origin
+                    console.warn(Log.policy, "iframe-plasma[mini-quota] rejected origin=" + request.origin
                         + " requestedSize=" + request.requestedSize);
                     request.reject();
                 }
                 onAuthenticationDialogRequested: function(request) {
-                    console.warn("iframe-plasma[mini-auth] rejected dialog type=" + request.type
+                    console.warn(Log.policy, "iframe-plasma[mini-auth] rejected dialog type=" + request.type
                         + " url=" + request.url);
                     request.dialogReject();
                     request.accepted = true;
@@ -1930,12 +1930,12 @@ PlasmoidItem {
                 // later crash recover while a crash-loop still backs off.
                 property double _lastRenderRetryMs: 0
                 onRenderProcessTerminated: function(status, exitCode) {
-                    console.warn("iframe-plasma[mini-render] terminated status=" + status
+                    console.warn(Log.load, "iframe-plasma[mini-render] terminated status=" + status
                         + " exitCode=" + exitCode + " idx=" + miniView.ownIndex);
                     if (status === WebEngineView.NormalTerminationStatus) return;
                     const now = Date.now();
                     if (now - miniView._lastRenderRetryMs < 60000) {
-                        console.warn("iframe-plasma[mini-render] crash within 60s window, not retrying idx="
+                        console.warn(Log.load, "iframe-plasma[mini-render] crash within 60s window, not retrying idx="
                             + miniView.ownIndex);
                         miniView.loadStatus = "err";
                         root.setThumbError(miniView.ownIndex, "Renderer crashed");
@@ -1952,7 +1952,7 @@ PlasmoidItem {
                 }
 
                 onLoadingChanged: function(info) {
-                    console.info("iframe-plasma[mini] loadingChanged status=" + info.status
+                    console.debug(Log.load, "iframe-plasma[mini] loadingChanged status=" + info.status
                         + " idx=" + miniView.ownIndex
                         + " url=" + info.url
                         + " thumbSelector=" + JSON.stringify(miniView.ownSelector));
@@ -1964,7 +1964,7 @@ PlasmoidItem {
                         if (miniView._pendingHardReload) {
                             miniView._pendingHardReload = false;
                             hardReloadFallback.stop();
-                            console.info("iframe-plasma[compact] tab-reload hard (post-discard) idx=" + miniView.ownIndex);
+                            console.debug(Log.load, "iframe-plasma[compact] tab-reload hard (post-discard) idx=" + miniView.ownIndex);
                             miniView.stop();
                             miniView.triggerWebAction(WebEngineView.ReloadAndBypassCache);
                         }
@@ -1993,7 +1993,7 @@ PlasmoidItem {
                             // with the current `ownSelector` and matches the
                             // popup path's symmetry.
                             miniView.runJavaScript(CropEngine.buildClearJs(), function(r) {
-                                console.info("iframe-plasma[compact] load-succeeded clear idx="
+                                console.debug(Log.load, "iframe-plasma[compact] load-succeeded clear idx="
                                     + miniView.ownIndex + " = " + r);
                             });
                         }
@@ -2004,7 +2004,7 @@ PlasmoidItem {
                         // load, or our own stop()+bypass-cache hand-off), not
                         // a real failure — don't surface it or arm a retry.
                         if (info.errorCode === -3) return;
-                        console.warn("iframe-plasma[mini] load FAILED idx=" + miniView.ownIndex
+                        console.warn(Log.load, "iframe-plasma[mini] load FAILED idx=" + miniView.ownIndex
                             + " code=" + info.errorCode + " msg=" + info.errorString);
                         miniView.loadStatus = "err";
                         root.setThumbError(miniView.ownIndex, info.errorString || "Load failed");
@@ -2029,7 +2029,7 @@ PlasmoidItem {
                     onTriggered: {
                         if (!miniView._pendingHardReload) return;
                         miniView._pendingHardReload = false;
-                        console.info("iframe-plasma[compact] hard-reload fallback (no LoadStarted) idx="
+                        console.debug(Log.load, "iframe-plasma[compact] hard-reload fallback (no LoadStarted) idx="
                             + miniView.ownIndex);
                         miniView.stop();
                         miniView.triggerWebAction(WebEngineView.ReloadAndBypassCache);
@@ -2050,7 +2050,7 @@ PlasmoidItem {
                     readonly property var _backoffMs: [3000, 10000, 30000]
                     function arm() {
                         if (miniView._retryAttempt >= _backoffMs.length) {
-                            console.info("iframe-plasma[mini-retry] backoff exhausted idx="
+                            console.warn(Log.load, "iframe-plasma[mini-retry] backoff exhausted idx="
                                 + miniView.ownIndex);
                             return;
                         }
@@ -2059,7 +2059,7 @@ PlasmoidItem {
                         restart();
                     }
                     onTriggered: {
-                        console.info("iframe-plasma[mini-retry] attempt=" + miniView._retryAttempt
+                        console.debug(Log.load, "iframe-plasma[mini-retry] attempt=" + miniView._retryAttempt
                             + " idx=" + miniView.ownIndex);
                         miniView.stop();
                         miniView.triggerWebAction(WebEngineView.ReloadAndBypassCache);
@@ -2090,7 +2090,9 @@ PlasmoidItem {
                     if (!message) return;
                     const safe = String(message).replace(/[\x00-\x1f\x7f]/g, '?').slice(0, 512);
                     if (safe.indexOf('[ifp-thumb]') !== -1) {
-                        console.info("iframe-plasma" + safe);
+                        // Trace only; the parsing below must run regardless
+                        // of whether the `page` category is enabled.
+                        Log.pageConsole(level, "iframe-plasma" + safe);
                         // A 'CROP' log means cropAxes drew a frame. If we were
                         // showing the "blank" placeholder (canvas-pending), the
                         // in-page observer/3s interval has since healed it —
@@ -2142,7 +2144,7 @@ PlasmoidItem {
                         scaleMode: mode === "custom" ? userScale : "stretch",
                         keywords: (tab && tab.thumbExcludeKeywords) || []
                     };
-                    console.info("iframe-plasma[thumb] applyThumbCrop ENTRY selector=" + JSON.stringify(selector)
+                    console.debug(Log.thumb, "iframe-plasma[thumb] applyThumbCrop ENTRY selector=" + JSON.stringify(selector)
                         + " idx=" + miniView.ownIndex
                         + " scale=" + opts.scaleMode
                         + " kwCount=" + opts.keywords.length
@@ -2153,7 +2155,7 @@ PlasmoidItem {
                     // flight (see _cropSeenSerial).
                     const cropEpoch = miniView._cropSeenSerial;
                     runJavaScript(CropEngine.buildApplyJs(selector, opts), function(r) {
-                        console.info("iframe-plasma[thumb] applyThumbCrop("
+                        console.debug(Log.thumb, "iframe-plasma[thumb] applyThumbCrop("
                             + JSON.stringify(selector) + ") = " + r);
                         // CropEngine matched the canvas but it hadn't painted a
                         // frame yet (page is un-blanked, would otherwise look
@@ -2211,10 +2213,10 @@ PlasmoidItem {
                             return;
                         }
                         if (kind === "hard") {
-                            console.info("iframe-plasma[compact] tab-reload hard idx=" + tabIdx);
+                            console.debug(Log.load, "iframe-plasma[compact] tab-reload hard idx=" + tabIdx);
                             miniView.triggerWebAction(WebEngineView.ReloadAndBypassCache);
                         } else {
-                            console.info("iframe-plasma[compact] tab-reload soft idx=" + tabIdx);
+                            console.debug(Log.load, "iframe-plasma[compact] tab-reload soft idx=" + tabIdx);
                             miniView.reload();
                         }
                     }
@@ -2249,16 +2251,16 @@ PlasmoidItem {
                         if (idx !== -1 && idx !== miniView.ownIndex) return;
                         const sel = miniView.ownSelector;
                         if (sel.length > 0) {
-                            console.info("iframe-plasma[compact] metadata apply idx=" + miniView.ownIndex
+                            console.debug(Log.thumb, "iframe-plasma[compact] metadata apply idx=" + miniView.ownIndex
                                 + " selector=" + JSON.stringify(sel));
                             miniView.applyThumbCrop(sel);
                         } else {
                             // Selector cleared (e.g. user switched mode
                             // to fullPanel/text/icon). Tear down CropEngine
                             // state so the page reverts to its full layout.
-                            console.info("iframe-plasma[compact] metadata apply clear idx=" + miniView.ownIndex);
+                            console.debug(Log.thumb, "iframe-plasma[compact] metadata apply clear idx=" + miniView.ownIndex);
                             miniView.runJavaScript(CropEngine.buildClearJs(), function(r) {
-                                console.info("iframe-plasma[compact] metadata clear = " + r);
+                                console.debug(Log.thumb, "iframe-plasma[compact] metadata clear = " + r);
                             });
                         }
                     }
@@ -2401,7 +2403,7 @@ PlasmoidItem {
             for (let i = 0; i < repeater.count; ++i) {
                 const wt = repeater.itemAt(i);
                 if (wt && wt.pickerActive && typeof wt.cancelPicker === "function") {
-                    console.info("iframe-plasma[picker] auto-cancel on popup hide idx=" + i);
+                    console.debug(Log.picker, "iframe-plasma[picker] auto-cancel on popup hide idx=" + i);
                     wt.cancelPicker();
                 }
             }

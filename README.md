@@ -190,7 +190,8 @@ User-Agent override; remote DevTools port (for debugging embedded pages — set
 port then run plasmashell with `QTWEBENGINE_REMOTE_DEBUGGING=<port> kstart
 plasmashell`); and the **freeze / discard delays** that control how soon a tab
 you are not looking at has its JavaScript suspended and, later, its renderer
-process shut down. See [docs/PERFORMANCE.md](docs/PERFORMANCE.md) for tuning
+process shut down. There is deliberately no log-level setting here: verbosity
+is controlled the standard Qt/KDE way, see [Logging](#logging). See [docs/PERFORMANCE.md](docs/PERFORMANCE.md) for tuning
 guidance, including the `--process-per-site` flag for multi-tab setups.
 
 ## Grafana server-side setup
@@ -274,6 +275,46 @@ sqlite3 ~/.local/share/iframe-plasma/<plasmoidId>/Cookies \
 # Verify wallet entries
 kwalletmanager6  # browse → folder "iframe-plasma"
 ```
+
+### Logging
+
+The widget logs through Qt logging categories, all under
+`io.github.v3djg6gl.iframe.*`, with an **Info** default: only warnings and
+rare state changes (profile changed, cache cleared, plugin missing) reach the
+journal. Per-load / per-frame trace is `debug` and off until you enable it.
+
+| Category (`io.github.v3djg6gl.iframe.…`) | Covers |
+|---|---|
+| `auth` | auth profiles, header injection, credential dialogs |
+| `load` | page loads, retries, renderer crashes, certificate errors |
+| `policy` | denied permissions, dialogs, navigations, downloads |
+| `thumb` | panel thumbnail crop and keyword exclusion |
+| `picker` | interactive panel-selector picker |
+| `config` | configuration parsing, startup capability checks |
+| `page` | console output forwarded from the embedded web pages |
+| `lifecycle` | freeze/discard lifecycle, screen-lock handling |
+
+```bash
+# One-off: full trace for every category, current session only
+QT_LOGGING_RULES="io.github.v3djg6gl.iframe.*.debug=true" plasmashell --replace
+
+# Only one subsystem, e.g. auth header injection (URLs are logged here)
+QT_LOGGING_RULES="io.github.v3djg6gl.iframe.auth.debug=true" plasmashell --replace
+
+# Persistent: kdebugsettings → search "iframe Plasma" → Full Debug, then
+systemctl --user restart plasma-plasmashell   # rules are read at startup only
+
+# Silence the widget completely (warnings included)
+QT_LOGGING_RULES="io.github.v3djg6gl.iframe.*=false" plasmashell --replace
+```
+
+For a persistent rule without kdebugsettings, add it to
+`~/.config/QtProject/qtlogging.ini` under `[Rules]`, or export
+`QT_LOGGING_RULES` from `~/.config/plasma-workspace/env/*.sh` (takes effect
+at next login). Messages always carry the category name as a prefix, so
+`journalctl --user -f -t plasmashell | grep iframe` works on every distro;
+on Qt builds with journald support you can also use
+`journalctl --user -f QT_CATEGORY=io.github.v3djg6gl.iframe.auth`.
 
 ## Testing
 

@@ -30,7 +30,7 @@ KCM.SimpleKCM {
         id: authLoader
         source: "AuthSupport.qml"
         onStatusChanged: if (status === Loader.Error) {
-            console.info("ConfigAuth: C++ plugin not built — password storage in plaintext fallback.");
+            console.warn(Log.auth, "ConfigAuth: C++ plugin not built — password storage in plaintext fallback.");
         }
     }
     readonly property var authSupport: authLoader.item
@@ -120,7 +120,7 @@ KCM.SimpleKCM {
                 _reloading = true;
             }
         } catch (e) {
-            console.warn("ConfigAuth: parse error", e.message);
+            console.warn(Log.auth, "ConfigAuth: parse error", e.message);
         } finally {
             _reloading = false;
         }
@@ -533,7 +533,7 @@ KCM.SimpleKCM {
                     }
                 }
                 if (changed) page.cfg_urlsJson = JSON.stringify(tabs);
-            } catch (e) { console.warn("ConfigAuth: failed to patch urlsJson on delete:", e.message); }
+            } catch (e) { console.warn(Log.auth, "ConfigAuth: failed to patch urlsJson on delete:", e.message); }
             // Look up the current row index by id at accept-time — survives
             // in-tab listModel mutations between dialog-open and accept
             // (Pass-9's a1ebf94 fixed the cross-tab half via the

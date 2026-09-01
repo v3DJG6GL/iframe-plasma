@@ -12,7 +12,12 @@
 #include <QQuickWebEngineProfile>
 #include <QUrl>
 
-Q_LOGGING_CATEGORY(lcIframeAuth, "iframeplasma.auth")
+// Info default: qCDebug (per-request URL trace) is off until enabled with
+// QT_LOGGING_RULES="io.github.v3djg6gl.iframe.*.debug=true". Without the
+// severity argument Qt enables debug for every non-qt.* category. The name
+// mirrors the QML Log singleton (package/contents/ui/Log.qml) and the
+// kdebugsettings export in the top-level CMakeLists.txt.
+Q_LOGGING_CATEGORY(lcIframeAuth, "io.github.v3djg6gl.iframe.auth", QtInfoMsg)
 
 namespace iframeplasma::auth {
 
@@ -144,7 +149,7 @@ void BasicAuthInterceptor::applyProfile(const QString &profileId,
         return;
     }
     if (profileId.isEmpty() || hosts.isEmpty() || secret.isEmpty()) {
-        qCInfo(lcIframeAuth) << "applyProfile: skipping (empty profileId/hosts/secret)"
+        qCDebug(lcIframeAuth) << "applyProfile: skipping (empty profileId/hosts/secret)"
                              << "id=" << profileId << "hostsCount=" << hosts.size()
                              << "secretLen=" << secret.size();
         return;
@@ -196,7 +201,7 @@ void BasicAuthInterceptor::applyProfile(const QString &profileId,
             m_headers.insert(hLower, header);
         }
     }
-    qCInfo(lcIframeAuth) << "applyProfile: id=" << profileId
+    qCDebug(lcIframeAuth) << "applyProfile: id=" << profileId
                          << "type=" << authType
                          << "hostsCount=" << hosts.size()
                          << "headerLen=" << header.size();
@@ -239,7 +244,8 @@ void BasicAuthInterceptor::interceptRequest(QWebEngineUrlRequestInfo &info)
         info.setHttpHeader(QByteArrayLiteral("Authorization"), header);
         // qCDebug, not qCInfo: request URLs can carry tokens in the query
         // string (e.g. Grafana share links with auth params), so keep them
-        // off the default journal stream.
+        // off the default journal stream (the category's Info default above
+        // is what actually keeps them off).
         qCDebug(lcIframeAuth).noquote() << "interceptor: injected Authorization for"
             << url.toString().left(120);
     } else {
@@ -263,7 +269,7 @@ bool BasicAuthInterceptor::attachTo(QObject *profile)
         return false;
     }
     p->setUrlRequestInterceptor(this);
-    qCInfo(lcIframeAuth) << "attachTo: SUCCESS profile=" << p
+    qCDebug(lcIframeAuth) << "attachTo: SUCCESS profile=" << p
                          << "storageName=" << p->storageName();
     return true;
 }
@@ -278,6 +284,6 @@ bool BasicAuthInterceptor::detachFrom(QObject *profile)
         return false;
     }
     p->setUrlRequestInterceptor(nullptr);
-    qCInfo(lcIframeAuth) << "detachFrom: SUCCESS profile=" << p;
+    qCDebug(lcIframeAuth) << "detachFrom: SUCCESS profile=" << p;
     return true;
 }

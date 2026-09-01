@@ -32,7 +32,7 @@
 .pragma library
 .import "sanitize.js" as Sanitize
 
-function editQuery(urlStr, updates) {
+function editQuery(urlStr, updates, logCategory) {
     try {
         const hashIdx = urlStr.indexOf('#');
         const hash = hashIdx >= 0 ? urlStr.slice(hashIdx) : '';
@@ -70,7 +70,8 @@ function editQuery(urlStr, updates) {
         }
         return path + (out.length ? '?' + out.join('&') : '') + hash;
     } catch (e) {
-        console.warn("iframe-plasma: editQuery error:", e.message);
+        if (logCategory) console.warn(logCategory, "iframe-plasma: editQuery error:", e.message);
+        else console.warn("iframe-plasma: editQuery error:", e.message);
         return urlStr;
     }
 }

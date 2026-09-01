@@ -151,7 +151,7 @@ Item {
         onTriggered: {
             if (!tab._pendingHardReload) return;
             tab._pendingHardReload = false;
-            console.info("iframe-plasma[popup] hard-reload fallback (no LoadStarted)");
+            console.debug(Log.load, "iframe-plasma[popup] hard-reload fallback (no LoadStarted)");
             webview.stop();
             webview.triggerWebAction(WebEngineView.ReloadAndBypassCache);
         }
@@ -184,7 +184,7 @@ Item {
         // has focus.
         webview.forceActiveFocus();
         webview.runJavaScript(CropEngine.buildPickerStartJs(), function(r) {
-            console.info("iframe-plasma[picker] start=" + r);
+            console.debug(Log.picker, "iframe-plasma[picker] start=" + r);
         });
         // Defensive: restart() doesn't zero user properties, so any
         // path that left ticks > 0 (e.g. external stop()) would shorten
@@ -221,7 +221,7 @@ Item {
         enabled: tab.pickerActive
         context: Qt.WindowShortcut
         onActivated: {
-            console.info("iframe-plasma[picker] Esc shortcut → cancel");
+            console.debug(Log.picker, "iframe-plasma[picker] Esc shortcut → cancel");
             tab._finishPickerInPage();
         }
     }
@@ -257,7 +257,7 @@ Item {
                 stop();
                 pickerTimer.ticks = 0;
                 tab.pickerActive = false;
-                console.info("iframe-plasma[picker] result=" + JSON.stringify(result));
+                console.debug(Log.picker, "iframe-plasma[picker] result=" + JSON.stringify(result));
                 // Empty result = Esc / Cancel in-page — restore old
                 // isolation immediately. Non-empty = user picked an
                 // element; main.qml will show the save dialog and its
@@ -281,7 +281,7 @@ Item {
         if (scheme === "http" || scheme === "https") {
             Qt.openUrlExternally(webview.url);
         } else {
-            console.warn("iframe-plasma[nav] refusing openExternal; scheme=" + scheme);
+            console.warn(Log.policy, "iframe-plasma[nav] refusing openExternal; scheme=" + scheme);
         }
     }
 
@@ -321,7 +321,7 @@ Item {
 
     // Manual query-string edit + read — implementations live in
     // QueryUtils.js for testability; these are thin forwarders.
-    function _editQuery(urlStr, updates) { return QueryUtils.editQuery(urlStr, updates); }
+    function _editQuery(urlStr, updates) { return QueryUtils.editQuery(urlStr, updates, Log.load); }
     function _readQuery(urlStr, name)    { return QueryUtils.readQuery(urlStr, name); }
 
     // `range` is a preset like "24h", a `{from, to}` object, or "" to
@@ -342,7 +342,7 @@ Item {
                 };
             }
             _navigate(_editQuery(String(webview.url), updates));
-        } catch (e) { console.warn("iframe-plasma: setTimeRange error:", e.message); }
+        } catch (e) { console.warn(Log.load, "iframe-plasma: setTimeRange error:", e.message); }
     }
 
     // `interval` is "" / "off" (disable), or a Grafana interval like "30s".
@@ -364,7 +364,7 @@ Item {
 
             _navigate(_editQuery(String(webview.url),
                 { refresh: useInterval ? interval : null }));
-        } catch (e) { console.warn("iframe-plasma: setRefreshInterval error:", e.message); }
+        } catch (e) { console.warn(Log.load, "iframe-plasma: setRefreshInterval error:", e.message); }
     }
 
     function onAutheliaHost(currentUrl) {
@@ -540,7 +540,7 @@ Item {
 
         onLoadingChanged: function(info) {
             if (info.status === WebEngineView.LoadStartedStatus) {
-                console.info("iframe-plasma[load] STARTED url=" + info.url);
+                console.debug(Log.load, "iframe-plasma[load] STARTED url=" + info.url);
                 tab.loadStatus = "loading";
                 tab.lastCertError = false;
                 if (!tab.loginInProgress) statusOverlay.showLoading();
@@ -551,7 +551,7 @@ Item {
                 if (tab._pendingHardReload) {
                     tab._pendingHardReload = false;
                     hardReloadFallback.stop();
-                    console.info("iframe-plasma[popup] hard-reload (post-discard)");
+                    console.debug(Log.load, "iframe-plasma[popup] hard-reload (post-discard)");
                     webview.stop();
                     webview.triggerWebAction(WebEngineView.ReloadAndBypassCache);
                     return;
@@ -559,7 +559,7 @@ Item {
             } else if (info.status === WebEngineView.LoadSucceededStatus) {
                 const finalUrl = String(webview.url);
                 const onAuthelia = tab.onAutheliaHost(finalUrl);
-                console.info("iframe-plasma[load] SUCCEEDED finalUrl=" + finalUrl
+                console.debug(Log.load, "iframe-plasma[load] SUCCEEDED finalUrl=" + finalUrl
                     + " onAuthelia=" + onAuthelia + " title=\"" + webview.title + "\"");
 
                 // Capture BEFORE we mutate loadStatus / _lastSuccessUrl
@@ -604,11 +604,11 @@ Item {
                     tab.loadStatus = "ok";
                     statusOverlay.hide();
                     if (wasAuthing || arrivedAtTargetFromElsewhere) {
-                        console.info("iframe-plasma[load] authSucceeded"
+                        console.info(Log.load, "iframe-plasma[load] authSucceeded"
                             + " wasAuthing=" + wasAuthing
                             + " arrivedAtTarget=" + arrivedAtTargetFromElsewhere
-                            + " from=" + JSON.stringify(tab._lastSuccessUrl)
-                            + " to=" + JSON.stringify(finalUrl));
+                            + " from=" + Log.redactUrl(tab._lastSuccessUrl)
+                            + " to=" + Log.redactUrl(finalUrl));
                         tab.authSucceeded();
                     }
                 }
@@ -616,7 +616,7 @@ Item {
                 tab._captureNavTiming();
                 tab._applyPopupSelector();
             } else if (info.status === WebEngineView.LoadFailedStatus) {
-                console.warn("iframe-plasma[load] FAILED url=" + info.url
+                console.warn(Log.load, "iframe-plasma[load] FAILED url=" + Log.redactUrl(info.url)
                     + " code=" + info.errorCode + " msg=" + info.errorString);
                 // Clear the login-in-progress latch so the next LoadSucceeded
                 // on Authelia surfaces the auth-required overlay instead of
@@ -648,12 +648,12 @@ Item {
         // bug-class as bb69913's broadcast-reload latch leak.
         property double _lastRenderRetryMs: 0
         onRenderProcessTerminated: function(status, exitCode) {
-            console.warn("iframe-plasma[render] terminated status=" + status
+            console.warn(Log.load, "iframe-plasma[render] terminated status=" + status
                 + " exitCode=" + exitCode);
             if (status === WebEngineView.NormalTerminationStatus) return;
             const now = Date.now();
             if (now - _lastRenderRetryMs < 60000) {
-                console.warn("iframe-plasma[render] crash within 60s window, not retrying");
+                console.warn(Log.load, "iframe-plasma[render] crash within 60s window, not retrying");
                 tab.loadStatus = "err";
                 statusOverlay.showError("Renderer crashed");
                 return;
@@ -664,7 +664,7 @@ Item {
         }
 
         onAuthenticationDialogRequested: function(request) {
-            console.info("iframe-plasma[auth] dialog requested type=" + request.type
+            console.debug(Log.auth, "iframe-plasma[auth] dialog requested type=" + request.type
                 + " url=" + request.url + " realm=" + request.realm);
             tab.basicAuthRequested(request);
         }
@@ -675,8 +675,8 @@ Item {
         // clarity (the C0 widening + scheme allowlist already block dataloss
         // paths, so we never want to ignoreCertificateError).
         onCertificateError: function(error) {
-            console.warn("iframe-plasma[cert] error type=" + error.type
-                + " url=" + error.url + " overridable=" + error.overridable
+            console.warn(Log.load, "iframe-plasma[cert] error type=" + error.type
+                + " url=" + Log.redactUrl(error.url) + " overridable=" + error.overridable
                 + " desc=" + error.description);
             tab.lastCertError = true;
             error.rejectCertificate();
@@ -684,7 +684,9 @@ Item {
 
         onJavaScriptConsoleMessage: function(level, message, lineNumber, sourceID) {
             const safe = String(message || "").replace(/[\x00-\x1f\x7f]/g, '?').slice(0, 512);
-            console.info("iframe-plasma[popup-console] " + safe);
+            // Untrusted, unbounded third-party output: debug-only trace in
+            // the `page` category (page errors surface as warnings).
+            Log.pageConsole(level, "iframe-plasma[popup-console] " + safe);
         }
 
         // Defense-in-depth: deny every page-driven permission upgrade. The
@@ -694,32 +696,32 @@ Item {
         // grant. Cover both per-origin (onFeaturePermissionRequested) and
         // per-frame (onPermissionRequested, Qt 6.8+) shapes.
         onFeaturePermissionRequested: function(securityOrigin, feature) {
-            console.warn("iframe-plasma[perm] denied feature=" + feature
+            console.warn(Log.policy, "iframe-plasma[perm] denied feature=" + feature
                 + " origin=" + securityOrigin);
             webview.grantFeaturePermission(securityOrigin, feature, false);
         }
         onPermissionRequested: function(perm) {
-            console.warn("iframe-plasma[perm] denied permission=" + perm.permissionType
+            console.warn(Log.policy, "iframe-plasma[perm] denied permission=" + perm.permissionType
                 + " origin=" + perm.origin);
             perm.deny();
         }
         // Fullscreen takeover by a hostile dashboard could mimic the lock
         // screen / fake an Authelia prompt; reject unconditionally.
         onFullScreenRequested: function(request) {
-            console.warn("iframe-plasma[fs] rejected fullScreen request toggleOn=" + request.toggleOn);
+            console.warn(Log.policy, "iframe-plasma[fs] rejected fullScreen request toggleOn=" + request.toggleOn);
             request.reject();
         }
         // Reject custom-protocol registration; widget never wants page-driven
         // mailto/web+xxx hijacking.
         onRegisterProtocolHandlerRequested: function(request) {
-            console.warn("iframe-plasma[proto] rejected scheme=" + request.scheme
+            console.warn(Log.policy, "iframe-plasma[proto] rejected scheme=" + request.scheme
                 + " url=" + request.url);
             request.reject();
         }
         // Reject page-initiated file dialogs — closes the exfiltration vector
         // from a compromised panel that auto-clicks an <input type=file>.
         onFileDialogRequested: function(request) {
-            console.warn("iframe-plasma[file] rejected dialog mode=" + request.mode);
+            console.warn(Log.policy, "iframe-plasma[file] rejected dialog mode=" + request.mode);
             request.dialogReject();
         }
         // Suppress the default Chromium context menu. Kiosk has no need for
@@ -728,7 +730,7 @@ Item {
         // file-save dialog that bypasses onDownloadRequested under some
         // Qt 6.x builds.
         onContextMenuRequested: function(request) {
-            console.info("iframe-plasma[ctx] suppressed menu pos=" + request.position
+            console.debug(Log.policy, "iframe-plasma[ctx] suppressed menu pos=" + request.position
                 + " mediaType=" + request.mediaType);
             request.accepted = true;
         }
@@ -738,7 +740,7 @@ Item {
         // which would leak the kiosk identity to any origin that flips on
         // optional client-auth.
         onSelectClientCertificate: function(selection) {
-            console.warn("iframe-plasma[cert] rejected client-cert request host="
+            console.warn(Log.policy, "iframe-plasma[cert] rejected client-cert request host="
                 + selection.host + " count=" + selection.certificates.length);
             selection.selectNone();
         }
@@ -746,7 +748,7 @@ Item {
         // escapes the kiosk chrome and the widget never legitimately needs
         // WebAuthn (basic-auth via interceptor only).
         onWebAuthUxRequested: function(request) {
-            console.warn("iframe-plasma[webauth] cancelled state=" + request.state);
+            console.warn(Log.policy, "iframe-plasma[webauth] cancelled state=" + request.state);
             request.cancel();
         }
         // Suppress page-controlled tooltips. Default Qt behaviour renders the
@@ -765,7 +767,7 @@ Item {
         // surprise auth dialog, with no UX path to surface it to the
         // operator. The widget never legitimately needs a colour picker.
         onColorDialogRequested: function(request) {
-            console.warn("iframe-plasma[color] rejected color dialog");
+            console.warn(Log.policy, "iframe-plasma[color] rejected color dialog");
             request.dialogReject();
         }
         // Reject getDisplayMedia / screen-capture requests outright. The
@@ -776,7 +778,7 @@ Item {
         // fires. A hostile page calling navigator.mediaDevices.getDisplay-
         // Media() over the SSO origin must not get any UI surface here.
         onDesktopMediaRequested: function(request) {
-            console.warn("iframe-plasma[dispmedia] cancelled screen-capture request");
+            console.warn(Log.policy, "iframe-plasma[dispmedia] cancelled screen-capture request");
             request.cancel();
         }
         // Reject File System Access API (showOpenFilePicker / showSave-
@@ -786,7 +788,7 @@ Item {
         // API — same exfiltration / write surface, separate hook. The
         // widget never legitimately writes to disk.
         onFileSystemAccessRequested: function(request) {
-            console.warn("iframe-plasma[fs-access] rejected origin=" + request.origin
+            console.warn(Log.policy, "iframe-plasma[fs-access] rejected origin=" + request.origin
                 + " handleType=" + request.handleType);
             request.reject();
         }
@@ -795,7 +797,7 @@ Item {
         // but the signal still fires from old pages. Default is to ignore,
         // but explicit reject pins it against future Qt default-flips.
         onQuotaRequested: function(request) {
-            console.warn("iframe-plasma[quota] rejected origin=" + request.origin
+            console.warn(Log.policy, "iframe-plasma[quota] rejected origin=" + request.origin
                 + " requestedSize=" + request.requestedSize);
             request.reject();
         }
@@ -811,7 +813,7 @@ Item {
             if (safe) {
                 Qt.openUrlExternally(request.requestedUrl);
             } else {
-                console.warn("iframe-plasma[nav] blocked external open; scheme=" + scheme);
+                console.warn(Log.policy, "iframe-plasma[nav] blocked external open; scheme=" + scheme);
             }
             request.action = WebEngineNewWindowRequest.IgnoreRequest;
         }
@@ -855,12 +857,12 @@ Item {
         const s = String(sel || "");
         if (s.length === 0) {
             webview.runJavaScript(CropEngine.buildClearJs(), function(r) {
-                console.info("iframe-plasma[popup] applyImmediately(clear) = " + r);
+                console.debug(Log.thumb, "iframe-plasma[popup] applyImmediately(clear) = " + r);
             });
             return;
         }
         webview.runJavaScript(CropEngine.buildApplyJs(s), function(r) {
-            console.info("iframe-plasma[popup] applyImmediately(" + JSON.stringify(s) + ") = " + r);
+            console.debug(Log.thumb, "iframe-plasma[popup] applyImmediately(" + JSON.stringify(s) + ") = " + r);
         });
     }
 
@@ -899,7 +901,7 @@ Item {
         if (tab.debugPort > 0) {
             // remote debugging is enabled via env var when plasmashell starts;
             // we just surface the URL here as a hint
-            console.info("iframe-plasma: DevTools at http://localhost:" + tab.debugPort);
+            console.info(Log.config, "iframe-plasma: DevTools at http://localhost:" + tab.debugPort);
         }
     }
 }

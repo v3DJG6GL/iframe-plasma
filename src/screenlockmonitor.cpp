@@ -10,7 +10,7 @@
 #include <QDebug>
 #include <QLoggingCategory>
 
-Q_LOGGING_CATEGORY(lcIframeLock, "iframeplasma.lock")
+Q_LOGGING_CATEGORY(lcIframeLock, "io.github.v3djg6gl.iframe.lifecycle", QtInfoMsg)
 
 namespace
 {

@@ -200,7 +200,7 @@ KCM.SimpleKCM {
                 _reloading = true;
             }
         } catch (e) {
-            console.warn("ConfigUrls: parse error", e.message);
+            console.warn(Log.config, "ConfigUrls: parse error", e.message);
         } finally {
             _reloading = false;
         }
@@ -1486,7 +1486,7 @@ KCM.SimpleKCM {
             });
             if (out === "" && (input || "").trim().length > 0
                 && /[\r\n\0]/.test(input)) {
-                console.warn("iframe-plasma[config-urls] rejected pasted URL with CR/LF/NUL");
+                console.warn(Log.config, "iframe-plasma[config-urls] rejected pasted URL with CR/LF/NUL");
             }
             return out;
         }

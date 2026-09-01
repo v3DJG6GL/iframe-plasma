@@ -33,6 +33,9 @@ KCM.SimpleKCM {
         FormHintLabel {
             text: i18n("Set a non-zero port (e.g. 9222) and start plasmashell with QTWEBENGINE_REMOTE_DEBUGGING=&lt;port&gt;. Then open http://localhost:&lt;port&gt; in any browser to inspect the embedded view.")
         }
+        FormHintLabel {
+            text: i18n("Widget logging is quiet by default. For a detailed trace, enable the \"iframe Plasma\" categories in KDebugSettings (then restart plasmashell), or start plasmashell with QT_LOGGING_RULES=\"io.github.v3djg6gl.iframe.*.debug=true\" and read the journal with: journalctl --user -f -t plasmashell")
+        }
 
         Item { Kirigami.FormData.isSection: true }
 

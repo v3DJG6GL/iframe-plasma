@@ -37,7 +37,7 @@ QtObject {
     function createInterceptor() {
         const comp = Qt.createComponent("io.github.v3DJG6GL.iframe", "BasicAuthInterceptor");
         if (comp.status !== Component.Ready) {
-            console.warn("iframe-plasma[auth] createInterceptor failed:", comp.errorString());
+            console.error(Log.auth, "iframe-plasma[auth] createInterceptor failed:", comp.errorString());
             return null;
         }
         return comp.createObject(support);
