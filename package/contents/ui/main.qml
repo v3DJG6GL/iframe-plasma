@@ -2271,17 +2271,22 @@ PlasmoidItem {
                 // AND for any tab holding a live keyword exclusion (so it keeps
                 // monitoring for the keyword clearing — see ownIsRuntimeExcluded),
                 // AND only while the slot is observable. Other non-current thumbs
-                // freeze after freezeDelaySec → discard after discardDelaySec.
-                // Switching back reveals the existing renderer instantly (no
-                // spinner flash) when within stalenessSec, or reloads on resume.
+                // freeze after the short thumbnail freeze delay → discard after
+                // discardDelaySec. The freeze delay must be shorter than one
+                // rotation: every landing stops the timer, so with the popup's
+                // (long) delay a rotating thumbnail never froze at all.
+                // Switching back resumes the frozen renderer as-is (Grafana
+                // refreshes itself on becoming visible); it reloads only when
+                // the last load failed/blanked or, if configured, after
+                // sitting Frozen for thumbnailReloadAfterSec.
                 WebViewLifecycle {
                     target: miniView
                     label: "thumb[" + miniView.ownIndex + "]"
                     desiredActive: (miniView.ownIsCurrent || miniView.ownIsRuntimeExcluded)
                                    && root.compactObservable
-                    freezeDelaySec: Plasmoid.configuration.webViewFreezeDelaySec
+                    freezeDelaySec: Plasmoid.configuration.thumbnailFreezeDelaySec
                     discardDelaySec: Plasmoid.configuration.webViewDiscardDelaySec
-                    stalenessSec: Math.max(5, Plasmoid.configuration.autoCycleIntervalSec)
+                    stalenessSec: Plasmoid.configuration.thumbnailReloadAfterSec
                     // A failed/blank thumbnail must reload on promotion even if
                     // it was frozen for less than stalenessSec, otherwise it
                     // resumes its stale blank frame and never recovers.

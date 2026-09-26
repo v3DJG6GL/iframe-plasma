@@ -10,7 +10,7 @@ import org.kde.kcmutils as KCM
 import org.kde.kirigami as Kirigami
 import io.github.v3DJG6GL.iframe 1.0 as IframePlasma
 
-// KCM page: configuration backup / restore. Round-trips the 15 active
+// KCM page: configuration backup / restore. Round-trips the active
 // kcfg entries through a versioned JSON file via the C++ BackupBridge
 // singleton. Secrets in KWallet are deliberately omitted — the user
 // re-enters them on the Authentication page after import.
@@ -36,6 +36,8 @@ KCM.SimpleKCM {
     property alias cfg_remoteDebuggingPort: _debugPort.value
     property alias cfg_webViewFreezeDelaySec: _freeze.value
     property alias cfg_webViewDiscardDelaySec: _discard.value
+    property alias cfg_thumbnailFreezeDelaySec: _thumbnailFreezeDelaySec.value
+    property alias cfg_thumbnailReloadAfterSec: _thumbnailReloadAfterSec.value
 
     // Off-screen scratch items that own the alias backing values. Using
     // hidden controls (rather than `property var`) lets the KCM treat
@@ -58,6 +60,8 @@ KCM.SimpleKCM {
         QQC.SpinBox      { id: _debugPort;      from: 0;     to: 65535 }
         QQC.SpinBox      { id: _freeze;         from: 1;     to: 3600 }
         QQC.SpinBox      { id: _discard;        from: 1;     to: 86400 }
+        QQC.SpinBox      { id: _thumbnailFreezeDelaySec; from: 1; to: 3600 }
+        QQC.SpinBox      { id: _thumbnailReloadAfterSec; from: 0; to: 86400 }
     }
 
     // Build a flat key->value map from the current alias state. This is
@@ -79,7 +83,9 @@ KCM.SimpleKCM {
             userAgentOverride:         cfg_userAgentOverride,
             remoteDebuggingPort:       cfg_remoteDebuggingPort,
             webViewFreezeDelaySec:     cfg_webViewFreezeDelaySec,
-            webViewDiscardDelaySec:    cfg_webViewDiscardDelaySec
+            webViewDiscardDelaySec:    cfg_webViewDiscardDelaySec,
+            thumbnailFreezeDelaySec:   cfg_thumbnailFreezeDelaySec,
+            thumbnailReloadAfterSec:   cfg_thumbnailReloadAfterSec
         };
     }
 

@@ -80,15 +80,30 @@
         <entry name="remoteDebuggingPort" type="Int">
             <default>0</default>
         </entry>
-        <!-- Seconds a not-observed WebEngineView waits before it is frozen
+        <!-- Seconds a not-observed popup tab waits before it is frozen
              (JS/timers suspended) and, later, discarded (renderer subprocess
              killed, memory reclaimed). Set discard very high to effectively
-             freeze-only. See WebViewLifecycle.qml. -->
+             freeze-only. Panel thumbnails freeze after
+             thumbnailFreezeDelaySec. See WebViewLifecycle.qml. -->
         <entry name="webViewFreezeDelaySec" type="Int">
             <default>30</default>
         </entry>
         <entry name="webViewDiscardDelaySec" type="Int">
             <default>600</default>
+        </entry>
+        <!-- Panel thumbnail: seconds a thumbnail that rotated out (or was
+             switched away from) stays Active before it is frozen. Short on purpose:
+             with the auto-cycle a tab returns within one rotation, so a delay
+             longer than that never fires. Popup tabs use webViewFreezeDelaySec. -->
+        <entry name="thumbnailFreezeDelaySec" type="Int">
+            <default>5</default>
+        </entry>
+        <!-- Panel thumbnail: reload a thumbnail that sat Frozen at least this
+             many seconds when it is shown again. 0 = never; it resumes as-is
+             (Grafana refreshes itself on becoming visible). A failed/blank
+             thumbnail always reloads. -->
+        <entry name="thumbnailReloadAfterSec" type="Int">
+            <default>0</default>
         </entry>
     </group>
 </kcfg>

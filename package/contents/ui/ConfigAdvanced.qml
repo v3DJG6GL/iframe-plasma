@@ -13,6 +13,8 @@ KCM.SimpleKCM {
     property alias cfg_remoteDebuggingPort: debugPortBox.value
     property alias cfg_webViewFreezeDelaySec: freezeBox.value
     property alias cfg_webViewDiscardDelaySec: discardBox.value
+    property alias cfg_thumbnailFreezeDelaySec: thumbFreezeBox.value
+    property alias cfg_thumbnailReloadAfterSec: thumbReloadBox.value
 
     Kirigami.FormLayout {
         QQC.TextField {
@@ -39,9 +41,14 @@ KCM.SimpleKCM {
 
         Item { Kirigami.FormData.isSection: true }
 
+        Item {
+            Kirigami.FormData.isSection: true
+            Kirigami.FormData.label: i18n("Popup")
+        }
+
         UnitSpinBox {
             id: freezeBox
-            Kirigami.FormData.label: i18n("Freeze hidden views after:")
+            Kirigami.FormData.label: i18n("Freeze hidden tabs after:")
             from: 1; to: 3600; value: 30
             textFormatter: (v) => i18np("%1 second", "%1 seconds", v)
         }
@@ -53,6 +60,27 @@ KCM.SimpleKCM {
         }
         FormHintLabel {
             text: i18n("A tab you are not looking at is frozen (its JavaScript and auto-refresh suspended) after the first delay, then discarded (its renderer process shut down to reclaim memory; it reloads when shown again) after the second. Set the discard delay very high to only ever freeze.")
+        }
+
+        Item {
+            Kirigami.FormData.isSection: true
+            Kirigami.FormData.label: i18n("Panel thumbnail")
+        }
+
+        UnitSpinBox {
+            id: thumbFreezeBox
+            Kirigami.FormData.label: i18n("Freeze hidden thumbnails after:")
+            from: 1; to: 3600; value: 5
+            textFormatter: (v) => i18np("%1 second", "%1 seconds", v)
+        }
+        UnitSpinBox {
+            id: thumbReloadBox
+            Kirigami.FormData.label: i18n("Reload on return if frozen for:")
+            from: 0; to: 86400; value: 0
+            textFormatter: (v) => v === 0 ? i18n("never") : i18np("%1 second", "%1 seconds", v)
+        }
+        FormHintLabel {
+            text: i18n("With the auto-cycle, each thumbnail is frozen shortly after it rotates out and resumes where it left off when it comes back; Grafana refreshes itself when shown. Keep the freeze delay below the auto-cycle interval, or thumbnails never freeze. Set a reload time only for pages that do not refresh on their own. A thumbnail that failed to load always reloads.")
         }
     }
 }

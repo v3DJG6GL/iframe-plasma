@@ -275,6 +275,48 @@ TestCase {
         compare(change.scheduleMs, 30000);
     }
 
+    // ============================================================
+    //  Rotating panel thumbnail (fix A): 7 tabs × 10 s cycle, thumbnail
+    //  freeze 5 s, thumbnailReloadAfterSec 0. A tab is away ~60 s.
+    // ============================================================
+    function test_rotation_leavingSchedulesShortFreeze() {
+        const a = P.decideOnChange("active", false, 0, 5, 10800, 0, 1000);
+        compare(a.scheduleMs, 5000);
+        verify(a.scheduleMs < 60000);   // fires before the tab comes back
+    }
+    function test_rotation_timerFreezesBeforeReturn() {
+        const t = P.decideOnTimer("active", "frozen", 5, 6000, 10800);
+        compare(t.setState, "frozen");
+        compare(t.frozenAtMs, 6000);
+    }
+    function test_rotation_returnResumesWithoutReload() {
+        // Frozen at t=6 s, back at t=61 s, staleness 0 → resume as-is.
+        const a = P.decideOnChange("frozen", true, 6000, 5, 10800, 0, 61000, false);
+        compare(a.setState, "active");
+        compare(a.stopTimer, true);
+        verify(!a.reload);
+    }
+    function test_rotation_returnAfterFailedLoadReloads() {
+        const a = P.decideOnChange("frozen", true, 6000, 5, 10800, 0, 61000, true);
+        compare(a.reload, true);
+    }
+    function test_rotation_reloadAfterSecBelowFrozenTime_noReload() {
+        // thumbnailReloadAfterSec = 300, frozen 60 s → no reload.
+        const a = P.decideOnChange("frozen", true, 1000, 5, 10800, 300, 61000, false);
+        verify(!a.reload);
+    }
+    function test_rotation_reloadAfterSecExceeded_reloads() {
+        // thumbnailReloadAfterSec = 300, frozen 301 s → reload.
+        const a = P.decideOnChange("frozen", true, 1000, 5, 10800, 300, 302000, false);
+        compare(a.reload, true);
+    }
+    function test_rotation_frozenThumbSchedulesDiscardStep() {
+        // After freezing, the chained re-evaluation schedules the discard
+        // step (cancelled again by the next landing unless recycling).
+        const a = P.decideOnChange("frozen", false, 6000, 5, 10800, 0, 6000);
+        compare(a.scheduleMs, 10795000);
+    }
+
     function test_sequence_resumeAfterStalenessReloads() {
         // Frozen at t=1000, resume at t=12000, staleness=10s → reload.
         const change = P.decideOnChange("frozen", true, 1000, 30, 600, 10, 12000);

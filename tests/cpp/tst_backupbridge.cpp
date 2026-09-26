@@ -40,6 +40,8 @@ QVariantMap fullSchemaSeed()
     m.insert(u"remoteDebuggingPort"_s, 9222);
     m.insert(u"webViewFreezeDelaySec"_s, 45);
     m.insert(u"webViewDiscardDelaySec"_s, 900);
+    m.insert(u"thumbnailFreezeDelaySec"_s, 7);
+    m.insert(u"thumbnailReloadAfterSec"_s, 120);
     return m;
 }
 
@@ -99,7 +101,7 @@ private Q_SLOTS:
         QVERIFY(root.value(u"config"_s).isObject());
     }
 
-    void export_writesAllFifteenWhitelistedKeys()
+    void export_writesAllWhitelistedKeys()
     {
         BackupBridge b;
         const QString path = m_xdg.filePath(u"export2.json"_s);
@@ -115,7 +117,10 @@ private Q_SLOTS:
         for (auto it = groups.constBegin(); it != groups.constEnd(); ++it) {
             totalKeys += it.value().toObject().size();
         }
-        QCOMPARE(totalKeys, 15);
+        // Every schema key, once — the seed covers the whole schema
+        // (schema_matchesMainXmlMinusExclusions pins schema == main.xml).
+        QCOMPARE(totalKeys, int(b.schemaKeys().size()));
+        QCOMPARE(totalKeys, int(fullSchemaSeed().size()));
     }
 
     void export_groupsKeysByMainXmlGroup()

@@ -7,9 +7,9 @@
  * memory. Pattern follows Qt's official "WebEngine Lifecycle Example": a
  * single debounce Timer whose interval is chosen by the next target state.
  *
- *   desiredActive true  -> Active immediately. If the view sat Frozen longer
- *                          than stalenessSec it is reloaded, so a rotating
- *                          thumbnail never resumes showing stale data.
+ *   desiredActive true  -> Active immediately. If the view sat Frozen at
+ *                          least stalenessSec (when > 0) or its last load
+ *                          failed, it is reloaded.
  *   desiredActive false -> Frozen   after freezeDelaySec  (JS/timers suspended,
  *                                                          instant no-reload
  *                                                          resume, memory kept)
@@ -52,7 +52,7 @@ QtObject {
 
     // On resume, if the view was Frozen longer than this, reload it so stale
     // content is refreshed. 0 disables the reload (Frozen->Active stays
-    // instant). The thumbnail wires this to the auto-cycle interval.
+    // instant). The thumbnail wires this to thumbnailReloadAfterSec.
     property int stalenessSec: 0
 
     // True when the view's last load failed or rendered blank. Forces a
