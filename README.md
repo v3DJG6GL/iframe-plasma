@@ -42,7 +42,9 @@ support for **Authelia SSO** and **HTTP Basic Auth** behind a reverse proxy.
 - **Load-aware**: web views freeze (JavaScript and auto-refresh suspended)
   when their tab isn't on screen, when the popup is collapsed, or when the
   session is locked — and are discarded after a longer idle to reclaim
-  renderer memory. See [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
+  renderer memory. Popup tabs load only when first opened; rotating panel
+  thumbnails freeze right after they rotate out and their renderers are
+  recycled periodically. See [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
 
 ## Requirements
 
@@ -188,11 +190,14 @@ Deleting a profile that's still referenced by URLs warns you and unlinks the URL
 
 User-Agent override; remote DevTools port (for debugging embedded pages — set
 port then run plasmashell with `QTWEBENGINE_REMOTE_DEBUGGING=<port> kstart
-plasmashell`); and the **freeze / discard delays** that control how soon a tab
-you are not looking at has its JavaScript suspended and, later, its renderer
-process shut down. There is deliberately no log-level setting here: verbosity
-is controlled the standard Qt/KDE way, see [Logging](#logging). See [docs/PERFORMANCE.md](docs/PERFORMANCE.md) for tuning
-guidance, including the `--process-per-site` flag for multi-tab setups.
+plasmashell`); the **freeze / discard delays** — separately for popup tabs
+and panel thumbnails — that control how soon a view you are not looking at
+has its JavaScript suspended and, later, its renderer process shut down; the
+thumbnail **renderer recycle** age; and the **garbage-collection** workaround
+for Qt WebEngine 6.10 (needs a plasmashell environment flag). There is
+deliberately no log-level setting here: verbosity is controlled the standard
+Qt/KDE way, see [Logging](#logging). See [docs/PERFORMANCE.md](docs/PERFORMANCE.md) for tuning
+guidance and the Qt WebEngine 6.10 memory workaround.
 
 ## Grafana server-side setup
 

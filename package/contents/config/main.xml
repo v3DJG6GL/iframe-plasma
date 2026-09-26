@@ -121,5 +121,13 @@
         <entry name="popupDiscardDelaySec" type="Int">
             <default>900</default>
         </entry>
+        <!-- Seconds between forced garbage collections in every embedded page
+             (Qt WebEngine 6.10 GC regression, QTBUG-141377). Only takes effect
+             when plasmashell runs with the V8 flag expose-gc set through
+             QTWEBENGINE_CHROMIUM_FLAGS (see docs/PERFORMANCE.md). 0 = off.
+             Applies on the next page load. -->
+        <entry name="gcIntervalSec" type="Int">
+            <default>20</default>
+        </entry>
     </group>
 </kcfg>

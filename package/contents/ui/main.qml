@@ -12,6 +12,7 @@ import org.kde.plasma.plasmoid 2.0
 import org.kde.plasma.core as PlasmaCore
 import org.kde.kirigami as Kirigami
 import "./CropEngine.js" as CropEngine
+import "./PageScripts.js" as PageScripts
 import "./RowSchema.js" as RowSchema
 import "./ThumbRetryPolicy.js" as ThumbRetryPolicy
 import "./UrlUtils.js" as UrlUtils
@@ -1710,6 +1711,23 @@ PlasmoidItem {
                 id: miniView
                 anchors.fill: parent
 
+                // Qt 6.10 GC workaround — a no-op unless plasmashell runs
+                // with --js-flags=--expose-gc. See PageScripts.js. Unlike
+                // the popup's WebTab, thumbnails get no other user scripts.
+                Component.onCompleted: {
+                    const gcSrc = PageScripts.gcWorkaroundSource(
+                        Plasmoid.configuration.gcIntervalSec);
+                    if (gcSrc.length > 0) {
+                        const gs = WebEngine.script();
+                        gs.name = "iframe-plasma-gc";
+                        gs.injectionPoint = WebEngineScript.DocumentCreation;
+                        gs.worldId = WebEngineScript.MainWorld;
+                        gs.runOnSubFrames = false;
+                        gs.sourceCode = gcSrc;
+                        miniView.userScripts.insert(gs);
+                    }
+                }
+
                 readonly property var ownTab: parent.ownTab
                 readonly property int ownIndex: parent.ownIndex
                 readonly property bool ownIsCurrent: parent.ownIsCurrent
@@ -2715,6 +2733,7 @@ PlasmoidItem {
                     freezeDelaySec: Plasmoid.configuration.webViewFreezeDelaySec
                     discardDelaySec: Plasmoid.configuration.popupDiscardDelaySec
                     lifecycleLabel: "popup[" + index + "]"
+                    gcIntervalSec: Plasmoid.configuration.gcIntervalSec
                     onBasicAuthRequested: req => root.handleBasicAuth(req, modelData)
                     onAuthRequired: () => root.expanded = true
                     onLoadStatusChanged: root.setTabStatus(index, loadStatus)

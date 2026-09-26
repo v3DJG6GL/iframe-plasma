@@ -17,6 +17,7 @@ KCM.SimpleKCM {
     property alias cfg_thumbnailFreezeDelaySec: thumbFreezeBox.value
     property alias cfg_thumbnailReloadAfterSec: thumbReloadBox.value
     property alias cfg_thumbnailRecycleMin: thumbRecycleBox.value
+    property alias cfg_gcIntervalSec: gcBox.value
 
     Kirigami.FormLayout {
         QQC.TextField {
@@ -93,6 +94,21 @@ KCM.SimpleKCM {
         }
         FormHintLabel {
             text: i18n("With the auto-cycle, each thumbnail is frozen shortly after it rotates out and resumes where it left off when it comes back; Grafana refreshes itself when shown. Keep the freeze delay below the auto-cycle interval, or thumbnails never freeze. Set a reload time only for pages that do not refresh on their own. A thumbnail that failed to load always reloads. Recycling restarts a thumbnail's renderer process once it is that old, the next time it rotates out, which caps memory that a long-running page accumulates.")
+        }
+
+        Item {
+            Kirigami.FormData.isSection: true
+            Kirigami.FormData.label: i18n("Memory")
+        }
+
+        UnitSpinBox {
+            id: gcBox
+            Kirigami.FormData.label: i18n("Force garbage collection every:")
+            from: 0; to: 300; value: 20
+            textFormatter: (v) => v === 0 ? i18n("disabled") : i18np("%1 second", "%1 seconds", v)
+        }
+        FormHintLabel {
+            text: i18n("Works around a Qt WebEngine 6.10 bug that makes constantly updating pages (such as live Grafana panels) grow toward 2 GB each. Only takes effect when plasmashell is started with QTWEBENGINE_CHROMIUM_FLAGS=\"--js-flags=--expose-gc\"; see docs/PERFORMANCE.md. Applies to pages loaded after the change.")
         }
     }
 }

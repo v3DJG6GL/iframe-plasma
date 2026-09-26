@@ -5,6 +5,7 @@
 import QtQuick
 import QtWebEngine
 import "./CropEngine.js" as CropEngine
+import "./PageScripts.js" as PageScripts
 import "./QueryUtils.js" as QueryUtils
 
 Item {
@@ -28,6 +29,9 @@ Item {
     property int  discardDelaySec: 600
     // Name used in lifecycle log lines, e.g. "popup[2]".
     property string lifecycleLabel: ""
+    // Qt 6.10 GC workaround interval (PageScripts.gcWorkaroundSource);
+    // 0 = off. Read once when the view is created.
+    property int gcIntervalSec: 0
 
     // True once the user clicked "Log in here" — suppresses the overlay for
     // subsequent Authelia subpages (TOTP, WebAuthn) until we land off-host.
@@ -570,6 +574,19 @@ Item {
                         "  window.addEventListener('hashchange', fire);\n" +
                         "})();";
                     webview.userScripts.insert(nb);
+
+                    // Qt 6.10 GC workaround — a no-op unless plasmashell runs
+                    // with --js-flags=--expose-gc. See PageScripts.js.
+                    const gcSrc = PageScripts.gcWorkaroundSource(tab.gcIntervalSec);
+                    if (gcSrc.length > 0) {
+                        const gs = WebEngine.script();
+                        gs.name = "iframe-plasma-gc";
+                        gs.injectionPoint = WebEngineScript.DocumentCreation;
+                        gs.worldId = WebEngineScript.MainWorld;
+                        gs.runOnSubFrames = false;
+                        gs.sourceCode = gcSrc;
+                        webview.userScripts.insert(gs);
+                    }
                 }
 
                 onLoadingChanged: function(info) {

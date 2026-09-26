@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 v3DJG6GL <72495210+v3DJG6GL@users.noreply.github.com>
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
-# Node + jsdom tests for CropEngine.js. Run via `node --test` (Node 18+)
+# Node + jsdom tests for CropEngine.js and PageScripts.js. Run via `node --test` (Node 18+)
 # against the production library — no copy, no shim. devDependency on jsdom
 # is installed once via `npm install` (CTest's setup fixture does that on
 # first run if the node_modules tree is missing).
@@ -29,5 +29,12 @@ add_test(NAME iframe-js-cropengine
     COMMAND ${NODEJS} --test cropengine.test.mjs
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 set_tests_properties(iframe-js-cropengine PROPERTIES
+    FIXTURES_REQUIRED js_deps
+    LABELS "js")
+
+add_test(NAME iframe-js-pagescripts
+    COMMAND ${NODEJS} --test pagescripts.test.mjs
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+set_tests_properties(iframe-js-pagescripts PROPERTIES
     FIXTURES_REQUIRED js_deps
     LABELS "js")

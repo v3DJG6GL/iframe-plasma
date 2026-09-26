@@ -44,6 +44,7 @@ QVariantMap fullSchemaSeed()
     m.insert(u"thumbnailReloadAfterSec"_s, 120);
     m.insert(u"thumbnailRecycleMin"_s, 90);
     m.insert(u"popupDiscardDelaySec"_s, 1200);
+    m.insert(u"gcIntervalSec"_s, 30);
     return m;
 }
 

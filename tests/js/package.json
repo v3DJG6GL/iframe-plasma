@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "test": "node --test cropengine.test.mjs"
+    "test": "node --test cropengine.test.mjs pagescripts.test.mjs"
   },
   "devDependencies": {
     "jsdom": "^24.1.0"
