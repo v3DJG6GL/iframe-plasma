@@ -49,6 +49,29 @@ TestCase {
         verify(js.indexOf("return true;") !== -1);
     }
 
+    function test_cropLog_onlyOnGeometryChange() {
+        const js = CropEngine.buildApplyJs(".u-wrap > canvas", {});
+        // CROP is logged only when the geometry differs from the last one…
+        const idxCompare = js.indexOf("if (geom !== window.__ifpLastCropKey)");
+        const idxLog = js.indexOf("console.info('[ifp-thumb] CROP '");
+        verify(idxCompare !== -1);
+        verify(idxLog !== -1);
+        verify(idxCompare < idxLog);
+        // …and a failed crop forgets it, so the next success (which heals a
+        // "blank" placeholder on the QML side) is always logged.
+        const idxFail = js.indexOf("if (!geom) {");
+        verify(idxFail !== -1);
+        verify(js.indexOf("window.__ifpLastCropKey = null;", idxFail) < idxCompare);
+    }
+
+    function test_teardown_forgetsCropGeometry() {
+        // Re-inject and clear both run the teardown; a new install must log
+        // its first crop.
+        verify(CropEngine.buildApplyJs(".u-wrap > canvas", {})
+                   .indexOf("window.__ifpLastCropKey = null;") !== -1);
+        verify(CropEngine.buildClearJs().indexOf("window.__ifpLastCropKey = null;") !== -1);
+    }
+
     function test_iifeReturn_propagatesCanvasPending() {
         const js = CropEngine.buildApplyJs(".u-wrap > canvas", {});
         // The top-level return distinguishes canvas-pending from the

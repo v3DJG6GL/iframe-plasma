@@ -515,3 +515,84 @@ test("picker: clear returns prior value and resets to null", () => {
     assert.equal(v, "#chosen");
     assert.equal(dom.window.__ifpPicked, null);
 });
+
+// ============================================================
+// CROP logging only on geometry change
+// ============================================================
+
+// A uPlot-shaped page (.u-wrap > canvas + .u-over). jsdom has no layout or
+// 2D context, so the canvas/overlay rects and drawImage are stubbed; `rect`
+// is mutable so a test can resize the canvas between ticks.
+function runCanvasApply() {
+    const dom = new JSDOM(
+        "<!doctype html><html><body><div class='u-wrap'>" +
+        "<canvas id='c' width='600' height='300'></canvas>" +
+        "<div class='u-over'></div></div></body></html>",
+        { runScripts: "outside-only" });
+    const w = dom.window;
+    const rect = { width: 600, height: 300 };
+    w.HTMLCanvasElement.prototype.getContext = () => ({ drawImage() {} });
+    const canvas = w.document.getElementById("c");
+    canvas.getBoundingClientRect = () =>
+        ({ left: 0, top: 0, width: rect.width, height: rect.height });
+    w.document.querySelector(".u-over").getBoundingClientRect = () =>
+        ({ left: 40, top: 0, width: rect.width - 40, height: rect.height - 20 });
+    w.MutationObserver = class { observe() {} disconnect() {} };
+    w.ResizeObserver = class { observe() {} disconnect() {} };
+    w.requestAnimationFrame = (cb) => { cb(); return 0; };
+    w.cancelAnimationFrame = () => {};
+    w.setInterval = () => 0;
+    w.clearInterval = () => {};
+    const logs = [];
+    w.console = { info: (m) => logs.push(String(m)), warn: () => {}, error: () => {} };
+    const result = w.eval(`(${ce.buildApplyJs("#c")})`);
+    const crops = () => logs.filter(l => l.indexOf("[ifp-thumb] CROP") !== -1);
+    const tick = () => w.__ifpThumbSchedule();
+    return { dom, rect, result, crops, tick };
+}
+
+test("CROP: logged once while the geometry stays the same", () => {
+    const t = runCanvasApply();
+    assert.equal(t.result, "matched-and-observing");
+    t.tick();
+    t.tick();
+    t.tick();
+    assert.equal(t.crops().length, 1, t.crops().join(" | "));
+});
+
+test("CROP: logged again when the canvas is resized", () => {
+    const t = runCanvasApply();
+    t.tick();
+    t.rect.width = 500;
+    t.tick();
+    t.tick();
+    assert.equal(t.crops().length, 2, t.crops().join(" | "));
+});
+
+test("CROP: a failed crop re-arms the log for the same geometry", () => {
+    // QML heals a "blank" placeholder only on a CROP line. After a
+    // canvas-pending (not painted yet) the next success must log even
+    // though its geometry equals the last logged one.
+    const t = runCanvasApply();
+    assert.equal(t.crops().length, 1);
+    t.rect.width = 0;                 // canvas not laid out → cropAxes fails
+    t.tick();
+    assert.equal(t.crops().length, 1);
+    t.rect.width = 600;               // same geometry as the first CROP
+    t.tick();
+    assert.equal(t.crops().length, 2, t.crops().join(" | "));
+});
+
+test("CROP: a fresh apply (re-inject) logs its first crop", () => {
+    const t = runCanvasApply();
+    assert.equal(t.crops().length, 1);
+    t.dom.window.eval(`(${ce.buildApplyJs("#c")})`);
+    assert.equal(t.crops().length, 2, t.crops().join(" | "));
+});
+
+test("CROP: clear resets the remembered geometry", () => {
+    const t = runCanvasApply();
+    assert.ok(t.dom.window.__ifpLastCropKey);
+    t.dom.window.eval(`(${ce.buildClearJs()})`);
+    assert.equal(t.dom.window.__ifpLastCropKey, null);
+});

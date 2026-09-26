@@ -63,6 +63,7 @@ const _TEARDOWN_BODY = `
     window.__ifpThumbInterval = null;
     window.__ifpThumbRaf = 0;
     window.__ifpThumbSchedule = null;
+    window.__ifpLastCropKey = null;
     document.documentElement.removeAttribute('data-ifp-thumb');
     document.documentElement.removeAttribute('data-ifp-isolate');
     document.documentElement.removeAttribute('data-ifp-scale');
@@ -198,7 +199,28 @@ const _APPLY_BODY = `(function(sel, opts){
   // any not-yet-ready condition (canvas 0x0, overlay missing, empty buffer).
   // The caller uses this to decide whether to blank the page chrome — see the
   // canvas branch in apply().
+  //
+  // The frame is redrawn on every call (the 3 s interval is what copies new
+  // chart pixels), but the '[ifp-thumb] CROP …' line is logged only when the
+  // crop geometry changes: each console message crosses into plasmashell.
+  // The QML side treats CROP as "a frame is on screen" (heals a "blank"
+  // placeholder, refills the retry budget), so any failed crop clears the
+  // remembered geometry and the next success is always logged.
   function cropAxes(srcCanvas) {
+    const geom = drawCrop(srcCanvas);
+    if (!geom) {
+      window.__ifpLastCropKey = null;
+      return false;
+    }
+    if (geom !== window.__ifpLastCropKey) {
+      window.__ifpLastCropKey = geom;
+      console.info('[ifp-thumb] CROP ' + geom);
+    }
+    return true;
+  }
+
+  // Draws one cropped frame; returns its geometry as a string, or false.
+  function drawCrop(srcCanvas) {
     if (!srcCanvas || srcCanvas.tagName !== 'CANVAS') return false;
     const wrap = srcCanvas.parentElement;
     const over = wrap && wrap.querySelector(':scope > .u-over');
@@ -243,11 +265,10 @@ const _APPLY_BODY = `(function(sel, opts){
     const ctx = disp.getContext('2d');
     try { ctx.drawImage(srcCanvas, sL, sT, sW, sH, 0, 0, disp.width, disp.height); }
     catch (e) { console.warn('[ifp-thumb] drawImage failed:', e.message); return false; }
-    console.info('[ifp-thumb] CROP canvas-css=' + cr.width.toFixed(0) + 'x' + cr.height.toFixed(0)
+    return 'canvas-css=' + cr.width.toFixed(0) + 'x' + cr.height.toFixed(0)
       + ' src=' + bufW + 'x' + bufH + ' scale=' + scaleX.toFixed(3) + ',' + scaleY.toFixed(3)
       + ' srcRect=' + sL.toFixed(0) + ',' + sT.toFixed(0) + ',' + sW.toFixed(0) + ',' + sH.toFixed(0)
-      + ' disp=' + disp.width + 'x' + disp.height);
-    return true;
+      + ' disp=' + disp.width + 'x' + disp.height;
   }
 
   // Generic isolation. Walks ancestors of \`el\` up to <body>, tagging
