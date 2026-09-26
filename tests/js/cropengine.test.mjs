@@ -596,3 +596,133 @@ test("CROP: clear resets the remembered geometry", () => {
     t.dom.window.eval(`(${ce.buildClearJs()})`);
     assert.equal(t.dom.window.__ifpLastCropKey, null);
 });
+
+// ============================================================
+// Hidden page: keyword scan without animation frames (H1)
+// ============================================================
+
+// Chromium runs no rAF on a hidden page (a keyword-excluded thumbnail is
+// invisible), so the 3 s interval must scan directly while hidden.
+// rAF is stubbed to never fire; the interval callback is captured.
+function runKeywordApply(hidden) {
+    const dom = new JSDOM(
+        "<!doctype html><html><body><div id='t'>No active streams</div></body></html>",
+        { runScripts: "outside-only" });
+    const w = dom.window;
+    Object.defineProperty(w.document, "hidden", { configurable: true, get: () => hidden.value });
+    w.MutationObserver = class { observe() {} disconnect() {} };
+    w.ResizeObserver = class { observe() {} disconnect() {} };
+    let rafCalls = 0;
+    w.requestAnimationFrame = () => { rafCalls++; return 7; };   // never fires
+    w.cancelAnimationFrame = () => {};
+    let intervalCb = null;
+    w.setInterval = (cb) => { intervalCb = cb; return 1; };
+    w.clearInterval = () => {};
+    const logs = [];
+    w.console = { info: (m) => logs.push(String(m)), warn: () => {}, error: () => {} };
+    w.eval(`(${ce.buildApplyJs("#t", { keywords: ["No active streams"] })})`);
+    return {
+        w, logs,
+        tickInterval: () => intervalCb(),
+        rafCalls: () => rafCalls,
+        kw: () => logs.filter(l => l.indexOf("[ifp-keyword]") !== -1),
+    };
+}
+
+test("hidden page: interval scans keywords without rAF", () => {
+    const hidden = { value: true };
+    const t = runKeywordApply(hidden);
+    t.tickInterval();
+    assert.deepEqual(t.kw(), ["[ifp-keyword] hit=true"]);
+    t.w.document.getElementById("t").textContent = "Streaming now";
+    t.tickInterval();
+    assert.deepEqual(t.kw(), ["[ifp-keyword] hit=true", "[ifp-keyword] hit=false"]);
+    assert.equal(t.rafCalls(), 0, "hidden page must not queue animation frames");
+});
+
+test("visible page: interval still goes through rAF", () => {
+    const hidden = { value: false };
+    const t = runKeywordApply(hidden);
+    t.tickInterval();
+    assert.equal(t.rafCalls(), 1);
+    assert.equal(t.kw().length, 0, "scan rides on the (stubbed, never-firing) rAF");
+});
+
+test("hidden page: an armed picker suppresses the scan", () => {
+    const hidden = { value: true };
+    const t = runKeywordApply(hidden);
+    t.w.__ifpPickerArmed = true;
+    t.tickInterval();
+    assert.equal(t.kw().length, 0);
+});
+
+// ============================================================
+// Fit mode: no self-retriggering (H2)
+// ============================================================
+
+// A wrapper MutationObserver stub that records takeRecords() calls, and a
+// target whose intrinsic size / viewport are stubbed (jsdom has no layout).
+function runFitApply() {
+    const dom = new JSDOM(
+        "<!doctype html><html><body><div id='wrap'><div id='t'>x</div></div></body></html>",
+        { runScripts: "outside-only" });
+    const w = dom.window;
+    const size = { cw: 100, ch: 60, vw: 400, vh: 300 };
+    const el = w.document.getElementById("t");
+    Object.defineProperty(el, "scrollWidth", { get: () => size.cw });
+    Object.defineProperty(el, "scrollHeight", { get: () => size.ch });
+    Object.defineProperty(w, "innerWidth", { configurable: true, get: () => size.vw });
+    Object.defineProperty(w, "innerHeight", { configurable: true, get: () => size.vh });
+    let takeRecords = 0;
+    w.MutationObserver = class { observe() {} disconnect() {} takeRecords() { takeRecords++; return []; } };
+    w.ResizeObserver = class { observe() {} disconnect() {} };
+    w.requestAnimationFrame = (cb) => { cb(); return 0; };
+    w.cancelAnimationFrame = () => {};
+    w.setInterval = () => 0;
+    w.clearInterval = () => {};
+    let resizes = 0;
+    w.addEventListener("resize", () => { resizes++; });
+    w.eval(`(${ce.buildApplyJs("#t", { scaleMode: "fit" })})`);
+    return {
+        w, el, size,
+        tick: () => w.__ifpThumbSchedule(),
+        resizes: () => resizes,
+        takeRecords: () => takeRecords,
+    };
+}
+
+test("fit: same scale re-applied does not dispatch resize again", () => {
+    const t = runFitApply();
+    assert.equal(t.el.style.transform, "scale(4)");   // min(400/100, 300/60)
+    assert.equal(t.resizes(), 1);
+    t.tick();   // installs the wrapper observer, re-applies
+    t.tick();
+    t.tick();
+    assert.equal(t.el.style.transform, "scale(4)");
+    assert.equal(t.resizes(), 1);
+});
+
+test("fit: a viewport change re-scales and dispatches resize once", () => {
+    const t = runFitApply();
+    t.tick();
+    t.size.vw = 200;
+    t.tick();
+    t.tick();
+    assert.equal(t.el.style.transform, "scale(2)");
+    assert.equal(t.resizes(), 2);
+});
+
+test("fit: own style writes are dropped from the wrapper observer", () => {
+    const t = runFitApply();
+    t.tick();                       // wrapper observer now installed
+    const before = t.takeRecords();
+    t.tick();
+    assert.ok(t.takeRecords() > before, "applyFitTransform must call takeRecords()");
+});
+
+test("fit: re-inject after teardown announces its scale again", () => {
+    const t = runFitApply();
+    assert.equal(t.resizes(), 1);
+    t.w.eval(`(${ce.buildApplyJs("#t", { scaleMode: "fit" })})`);
+    assert.equal(t.resizes(), 2);
+});

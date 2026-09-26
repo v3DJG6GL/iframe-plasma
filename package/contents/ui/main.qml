@@ -1735,7 +1735,9 @@ PlasmoidItem {
                 // view Active (but invisible — it is not the StackLayout's
                 // current child) so CropEngine keeps scanning and emits
                 // [ifp-keyword] hit=false the moment the keyword clears,
-                // self-clearing the exclusion. Without this an excluded tab
+                // self-clearing the exclusion. (A hidden page gets no
+                // animation frames, so CropEngine's 3 s interval scans
+                // directly while document.hidden.) Without this an excluded tab
                 // would freeze and could never report the keyword going away.
                 // Depends on the serial because _runtimeExcluded mutates in
                 // place and fires no NOTIFY (mirrors previewTabIdx).

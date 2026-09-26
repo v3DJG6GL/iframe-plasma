@@ -77,6 +77,7 @@ const _TEARDOWN_BODY = `
             _ifpFit.style.transformOrigin = '';
             _ifpFit.style.width = '';
             _ifpFit.style.height = '';
+            _ifpFit.__ifpFitKey = null;
         } catch (e) {}
     }
     window.__ifpFitTarget = null;
@@ -318,6 +319,16 @@ const _APPLY_BODY = `(function(sel, opts){
   // Idempotent re-runs (mutation observer → schedule → apply →
   // applyFitTransform) re-measure each time; React re-renders or
   // ResizeObserver-driven repaints adapt automatically.
+  //
+  // Our own style writes land in the wrapper MutationObserver's subtree
+  // (it watches 'style'), which would schedule() another apply() on the
+  // next frame and re-scale forever — 60 resize events a second on a
+  // static page (tests/e2e/tst_cropengine_e2e.cpp). So drop the records
+  // our writes queued, and dispatch 'resize' only when the scale changed.
+  function forgetOwnMutations() {
+    var wo = window.__ifpThumbWrapObserver;
+    if (wo) { try { wo.takeRecords(); } catch (e) {} }
+  }
   function applyFitTransform(el) {
     if (!el) return;
     // Reset prior inline styles so measurement reflects intrinsic content,
@@ -332,13 +343,17 @@ const _APPLY_BODY = `(function(sel, opts){
     var ch = el.scrollHeight;
     var vw = window.innerWidth;
     var vh = window.innerHeight;
-    if (cw <= 0 || ch <= 0 || vw <= 0 || vh <= 0) return;
+    if (cw <= 0 || ch <= 0 || vw <= 0 || vh <= 0) { forgetOwnMutations(); return; }
     var s = Math.min(vw / cw, vh / ch);
+    var key = (s <= 1.0001) ? 'natural' : (s + '|' + vw + '|' + vh);
+    var changed = el.__ifpFitKey !== key;
+    el.__ifpFitKey = key;
     if (s <= 1.0001) {
       // Content already overflows or matches the viewport — leave the
       // element at its natural box; overflow:auto on the CSS rule will
       // surface scrollbars on the rare oversize case.
       window.__ifpFitTarget = el;
+      forgetOwnMutations();
       return;
     }
     el.style.transformOrigin = '0 0';
@@ -349,9 +364,13 @@ const _APPLY_BODY = `(function(sel, opts){
     el.style.width  = (vw / s) + 'px';
     el.style.height = (vh / s) + 'px';
     window.__ifpFitTarget = el;
+    forgetOwnMutations();
     // Help responsive widgets (uPlot's ResizeObserver, embedded iframes)
-    // redraw at the post-scale CSS box. Cheap; no-op when nothing listens.
-    try { window.dispatchEvent(new Event('resize')); } catch (e) {}
+    // redraw at the post-scale CSS box — once per scale change: a widget
+    // that re-renders on 'resize' would otherwise feed the loop above.
+    if (changed) {
+      try { window.dispatchEvent(new Event('resize')); } catch (e) {}
+    }
   }
 
   // Compose the scope text for keyword scanning. Prefers the matched
@@ -577,8 +596,19 @@ const _APPLY_BODY = `(function(sel, opts){
   // pixel buffer via canvas 2D context calls — those do NOT fire any
   // DOM mutation, so the MutationObserver doesn't catch new data.
   // Cheap: a single drawImage + getBoundingClientRect call.
+  //
+  // While the page is hidden (a keyword-excluded thumbnail is kept Active
+  // but is not the visible tab) Chromium runs no animation frames, so
+  // schedule()'s rAF — and the keyword scan riding on it — never fires and
+  // the exclusion could never clear. Timers still run, so scan directly.
   if (window.__ifpThumbInterval) clearInterval(window.__ifpThumbInterval);
-  window.__ifpThumbInterval = setInterval(schedule, 3000);
+  window.__ifpThumbInterval = setInterval(function(){
+    if (document.hidden) {
+      if (!window.__ifpPickerArmed) runKeywordScan();
+      return;
+    }
+    schedule();
+  }, 3000);
   // Distinguish a not-yet-painted canvas ('canvas-pending') from an
   // unmatched selector ('observing') so the QML applyThumbCrop callback can
   // mark the thumbnail "blank" and arm a retry only for the canvas case.

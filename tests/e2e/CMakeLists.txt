@@ -55,3 +55,9 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tst_gc_e2e.cpp")
     target_compile_definitions(tst_gc_e2e PRIVATE
         IFRAME_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 endif()
+
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tst_cropengine_e2e.cpp")
+    iframe_add_e2e_test(tst_cropengine_e2e)
+    target_compile_definitions(tst_cropengine_e2e PRIVATE
+        IFRAME_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+endif()
