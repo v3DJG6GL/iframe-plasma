@@ -64,6 +64,29 @@ QtObject {
     // Short name for log lines, e.g. "thumb[3]" / "popup[1]".
     property string label: ""
 
+    // Seconds after which a renderer process is recycled: once it is this
+    // old, a Frozen unwanted view is discarded right away instead of after
+    // discardDelaySec, and reloads fresh on its next appearance. 0 = never.
+    // Only a view that leaves the screen regularly (rotating thumbnail) is
+    // ever recycled — a visible or wanted view is never discarded.
+    property int recycleAfterSec: 0
+
+    // Renderer pid last sampled, and Date.now() ms when that renderer was
+    // first seen (0 while there is none). Sampled at every decision point,
+    // i.e. each time the view is shown or hidden, so a rotating
+    // thumbnail's age is accurate to within one rotation.
+    property double _rendererPid: 0
+    property double _rendererSinceMs: 0
+
+    function _recycleDue() {
+        const now = Date.now();
+        const r = Policy.trackRenderer(ctl._rendererPid, ctl._rendererSinceMs,
+                                       target ? Number(target.renderProcessPid) : 0, now);
+        ctl._rendererPid = r.pid;
+        ctl._rendererSinceMs = r.sinceMs;
+        return Policy.isRecycleDue(ctl._rendererSinceMs, ctl.recycleAfterSec, now);
+    }
+
     // Date.now() ms when the view entered Frozen; 0 when not frozen.
     property double _frozenAtMs: 0
 
@@ -107,7 +130,7 @@ QtObject {
         }
         if (action.scheduleMs !== undefined) {
             if (action.reason) {
-                console.debug(Log.lifecycle, "iframe-plasma[lifecycle] " + ctl.label + " retry in "
+                console.debug(Log.lifecycle, "iframe-plasma[lifecycle] " + ctl.label + " next step in "
                     + action.scheduleMs + " ms (" + action.reason + ")");
             }
             _phaseTimer.interval = action.scheduleMs;
@@ -126,7 +149,8 @@ QtObject {
             discardDelaySec,
             stalenessSec,
             Date.now(),
-            priorFailed));
+            priorFailed,
+            _recycleDue()));
     }
 
     onTargetChanged: _reevaluate()
@@ -158,7 +182,8 @@ QtObject {
                 ctl._stateName(t.recommendedState),
                 ctl.freezeDelaySec,
                 Date.now(),
-                ctl.discardDelaySec));
+                ctl.discardDelaySec,
+                ctl._recycleDue()));
         }
     }
 }

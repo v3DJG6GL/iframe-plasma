@@ -42,6 +42,7 @@ QVariantMap fullSchemaSeed()
     m.insert(u"webViewDiscardDelaySec"_s, 900);
     m.insert(u"thumbnailFreezeDelaySec"_s, 7);
     m.insert(u"thumbnailReloadAfterSec"_s, 120);
+    m.insert(u"thumbnailRecycleMin"_s, 90);
     return m;
 }
 

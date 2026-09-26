@@ -105,5 +105,12 @@
         <entry name="thumbnailReloadAfterSec" type="Int">
             <default>0</default>
         </entry>
+        <!-- Panel thumbnail: minutes after which a thumbnail renderer process
+             is recycled (discarded right after the thumbnail freezes; it reloads
+             fresh on its next appearance). Bounds renderer memory growth, e.g.
+             the Qt WebEngine 6.10 GC regression. 0 = never. -->
+        <entry name="thumbnailRecycleMin" type="Int">
+            <default>120</default>
+        </entry>
     </group>
 </kcfg>

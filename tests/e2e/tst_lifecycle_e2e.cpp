@@ -220,6 +220,44 @@ private Q_SLOTS:
 
         fixture.stop();
     }
+
+    // Renderer recycling (WebViewLifecycle.recycleAfterSec) dates each
+    // renderer by sampling renderProcessPid and relies on Discarded
+    // killing it: the pid drops to 0, and after Discarded -> Active the
+    // page runs in a new process with a different pid.
+    // (renderProcessPidChanged was NOT observed to fire here on Qt 6.10,
+    // which is why the controller samples the pid instead.)
+    void discard_replacesRenderProcess()
+    {
+        FixtureServer fixture;
+        if (!fixture.start()) {
+            QSKIP("fixture server failed to start");
+        }
+
+        QWebEngineProfile profile;
+        QWebEnginePage page(&profile);
+        page.settings()->setAttribute(QWebEngineSettings::ErrorPageEnabled, false);
+
+        QSignalSpy loadSpy(&page, &QWebEnginePage::loadFinished);
+        page.load(QUrl(fixture.baseUrl() + u"/beat-page"_s));
+        QVERIFY(loadSpy.wait(10000));
+        const qint64 firstPid = page.renderProcessPid();
+        QVERIFY2(firstPid > 0, "no renderer after load");
+
+        page.setVisible(false);
+        page.setLifecycleState(QWebEnginePage::LifecycleState::Frozen);
+        page.setLifecycleState(QWebEnginePage::LifecycleState::Discarded);
+        QTRY_COMPARE_WITH_TIMEOUT(page.renderProcessPid(), qint64(0), 5000);
+
+        loadSpy.clear();
+        page.setVisible(true);
+        page.setLifecycleState(QWebEnginePage::LifecycleState::Active);
+        QVERIFY(loadSpy.wait(10000));
+        QTRY_VERIFY_WITH_TIMEOUT(page.renderProcessPid() > 0, 5000);
+        QVERIFY(page.renderProcessPid() != firstPid);
+
+        fixture.stop();
+    }
 };
 
 QTEST_MAIN(TestLifecycleE2E)

@@ -28,9 +28,13 @@
 // priorFailed (optional, defaults falsy) is true when the view's last load
 // failed or rendered blank — in that case promote-and-reload regardless of how
 // long it sat Frozen, since a stale blank frame must never be resumed as-is.
+// recycleDue (optional, appended) is true when the view's renderer process
+// has outlived its recycle age (isRecycleDue): a Frozen, unwanted view is then
+// discarded after 1 s instead of the full discard delay, so it reloads with a
+// fresh renderer on its next appearance.
 function decideOnChange(currentState, desiredActive, frozenAtMs,
                         freezeDelaySec, discardDelaySec, stalenessSec, now,
-                        priorFailed) {
+                        priorFailed, recycleDue) {
     if (desiredActive) {
         const out = { stopTimer: true };
         if (currentState !== "active") {
@@ -55,10 +59,33 @@ function decideOnChange(currentState, desiredActive, frozenAtMs,
     if (currentState === "discarded") {
         return { stopTimer: true };   // nothing lower to go to
     }
+    if (currentState === "frozen" && recycleDue === true) {
+        return { scheduleMs: 1000, reason: "recycle" };
+    }
     const intervalSec = (currentState === "active")
         ? Math.max(1, freezeDelaySec)
         : Math.max(1, discardDelaySec - freezeDelaySec);
     return { scheduleMs: intervalSec * 1000 };
+}
+
+// Tracks when the view's current renderer process started, from the pid
+// sampled at each decision point: a new non-zero pid restarts the clock,
+// pid 0 (no renderer, e.g. Discarded) clears it. Sampling instead of
+// renderProcessPidChanged because that signal was not observed to fire on
+// Qt 6.10 (tests/e2e/tst_lifecycle_e2e.cpp discard_replacesRenderProcess).
+// Returns { pid, sinceMs }.
+function trackRenderer(prevPid, prevSinceMs, pid, now) {
+    if (pid === prevPid) return { pid: prevPid, sinceMs: prevSinceMs };
+    return { pid: pid, sinceMs: pid > 0 ? now : 0 };
+}
+
+// Whether a renderer that started at rendererSinceMs (Date.now() ms; 0 =
+// unknown / no renderer) has reached recycleAfterSec (0 = never recycle).
+// Recycling bounds any per-renderer memory growth regardless of Qt version
+// (Qt WebEngine 6.10 GC regression, QTBUG-141377).
+function isRecycleDue(rendererSinceMs, recycleAfterSec, now) {
+    if (!(recycleAfterSec > 0) || !(rendererSinceMs > 0)) return false;
+    return (now - rendererSinceMs) >= recycleAfterSec * 1000;
 }
 
 // Called from the Timer onTriggered handler. Only invoked when

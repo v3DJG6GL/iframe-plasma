@@ -15,6 +15,7 @@ KCM.SimpleKCM {
     property alias cfg_webViewDiscardDelaySec: discardBox.value
     property alias cfg_thumbnailFreezeDelaySec: thumbFreezeBox.value
     property alias cfg_thumbnailReloadAfterSec: thumbReloadBox.value
+    property alias cfg_thumbnailRecycleMin: thumbRecycleBox.value
 
     Kirigami.FormLayout {
         QQC.TextField {
@@ -79,8 +80,14 @@ KCM.SimpleKCM {
             from: 0; to: 86400; value: 0
             textFormatter: (v) => v === 0 ? i18n("never") : i18np("%1 second", "%1 seconds", v)
         }
+        UnitSpinBox {
+            id: thumbRecycleBox
+            Kirigami.FormData.label: i18n("Recycle renderers after:")
+            from: 0; to: 1440; value: 120
+            textFormatter: (v) => v === 0 ? i18n("never") : i18np("%1 minute", "%1 minutes", v)
+        }
         FormHintLabel {
-            text: i18n("With the auto-cycle, each thumbnail is frozen shortly after it rotates out and resumes where it left off when it comes back; Grafana refreshes itself when shown. Keep the freeze delay below the auto-cycle interval, or thumbnails never freeze. Set a reload time only for pages that do not refresh on their own. A thumbnail that failed to load always reloads.")
+            text: i18n("With the auto-cycle, each thumbnail is frozen shortly after it rotates out and resumes where it left off when it comes back; Grafana refreshes itself when shown. Keep the freeze delay below the auto-cycle interval, or thumbnails never freeze. Set a reload time only for pages that do not refresh on their own. A thumbnail that failed to load always reloads. Recycling restarts a thumbnail's renderer process once it is that old, the next time it rotates out, which caps memory that a long-running page accumulates.")
         }
     }
 }

@@ -59,6 +59,7 @@ constexpr Entry kSchema[] = {
     {"Advanced", "webViewDiscardDelaySec", Kind::Int},
     {"Advanced", "thumbnailFreezeDelaySec", Kind::Int},
     {"Advanced", "thumbnailReloadAfterSec", Kind::Int},
+    {"Advanced", "thumbnailRecycleMin", Kind::Int},
 };
 
 // Strict kind check: a JSON value is accepted only if its kind matches the

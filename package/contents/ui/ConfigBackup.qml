@@ -38,6 +38,7 @@ KCM.SimpleKCM {
     property alias cfg_webViewDiscardDelaySec: _discard.value
     property alias cfg_thumbnailFreezeDelaySec: _thumbnailFreezeDelaySec.value
     property alias cfg_thumbnailReloadAfterSec: _thumbnailReloadAfterSec.value
+    property alias cfg_thumbnailRecycleMin: _thumbnailRecycleMin.value
 
     // Off-screen scratch items that own the alias backing values. Using
     // hidden controls (rather than `property var`) lets the KCM treat
@@ -62,6 +63,7 @@ KCM.SimpleKCM {
         QQC.SpinBox      { id: _discard;        from: 1;     to: 86400 }
         QQC.SpinBox      { id: _thumbnailFreezeDelaySec; from: 1; to: 3600 }
         QQC.SpinBox      { id: _thumbnailReloadAfterSec; from: 0; to: 86400 }
+        QQC.SpinBox      { id: _thumbnailRecycleMin; from: 0; to: 1440 }
     }
 
     // Build a flat key->value map from the current alias state. This is
@@ -85,7 +87,8 @@ KCM.SimpleKCM {
             webViewFreezeDelaySec:     cfg_webViewFreezeDelaySec,
             webViewDiscardDelaySec:    cfg_webViewDiscardDelaySec,
             thumbnailFreezeDelaySec:   cfg_thumbnailFreezeDelaySec,
-            thumbnailReloadAfterSec:   cfg_thumbnailReloadAfterSec
+            thumbnailReloadAfterSec:   cfg_thumbnailReloadAfterSec,
+            thumbnailRecycleMin:       cfg_thumbnailRecycleMin
         };
     }
 

@@ -12,6 +12,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **URLs are redacted in default-visible log lines.** Load-failure, certificate-error, blocked-download and auth-success messages now log scheme+host+path only (no query string or fragment).
 
 ### Added
+- **Panel thumbnail renderers are recycled.** Once a thumbnail's renderer process is older than **Configure → Advanced → Panel thumbnail → Recycle renderers after** (default 120 min, 0 = never), it is discarded right after it next rotates out and reloads fresh on its next appearance. This caps memory a long-running page accumulates regardless of Qt version (Qt WebEngine 6.10 leaks toward ~2 GB per constantly repainting page, QTBUG-141377).
 - **kdebugsettings integration.** The build installs `iframe-plasma.categories` (via ECM `ecm_qt_export_logging_category` / `ecm_qt_install_logging_categories`) so the widget's categories can be toggled in KDebugSettings; the Advanced config tab and README explain how.
 
 ### Fixed

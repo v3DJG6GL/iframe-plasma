@@ -2303,6 +2303,10 @@ PlasmoidItem {
                     freezeDelaySec: Plasmoid.configuration.thumbnailFreezeDelaySec
                     discardDelaySec: Plasmoid.configuration.webViewDiscardDelaySec
                     stalenessSec: Plasmoid.configuration.thumbnailReloadAfterSec
+                    // Discard (then reload fresh on the next landing) once
+                    // the renderer is this old; bounds per-renderer memory
+                    // growth such as the Qt 6.10 GC regression.
+                    recycleAfterSec: Plasmoid.configuration.thumbnailRecycleMin * 60
                     // A failed/blank thumbnail must reload on promotion even if
                     // it was frozen for less than stalenessSec, otherwise it
                     // resumes its stale blank frame and never recovers.

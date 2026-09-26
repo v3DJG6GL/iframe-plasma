@@ -317,6 +317,85 @@ TestCase {
         compare(a.scheduleMs, 10795000);
     }
 
+    // ============================================================
+    //  Renderer recycling (fix C)
+    // ============================================================
+    function test_recycle_offWhenZero() {
+        verify(!P.isRecycleDue(1000, 0, 1e12));
+    }
+    function test_recycle_unknownRendererStart() {
+        verify(!P.isRecycleDue(0, 7200, 1e12));
+    }
+    function test_recycle_justUnder() {
+        verify(!P.isRecycleDue(1000, 7200, 1000 + 7200 * 1000 - 1));
+    }
+    function test_recycle_exactlyAt() {
+        verify(P.isRecycleDue(1000, 7200, 1000 + 7200 * 1000));
+    }
+    function test_recycle_over() {
+        verify(P.isRecycleDue(1000, 7200, 1e12));
+    }
+    function test_trackRenderer_firstPidStartsClock() {
+        const r = P.trackRenderer(0, 0, 4242, 5000);
+        compare(r.pid, 4242);
+        compare(r.sinceMs, 5000);
+    }
+    function test_trackRenderer_samePidKeepsClock() {
+        const r = P.trackRenderer(4242, 5000, 4242, 90000);
+        compare(r.sinceMs, 5000);
+    }
+    function test_trackRenderer_discardClearsClock() {
+        const r = P.trackRenderer(4242, 5000, 0, 90000);
+        compare(r.pid, 0);
+        compare(r.sinceMs, 0);
+    }
+    function test_trackRenderer_newRendererRestartsClock() {
+        const r = P.trackRenderer(4242, 5000, 4343, 90000);
+        compare(r.pid, 4343);
+        compare(r.sinceMs, 90000);
+    }
+    function test_recycle_frozenDueDiscardsInOneSecond() {
+        const a = P.decideOnChange("frozen", false, 5000, 5, 10800, 0, 6000, false, true);
+        compare(a.scheduleMs, 1000);
+    }
+    function test_recycle_frozenNotDue_normalDiscardDelay() {
+        const a = P.decideOnChange("frozen", false, 5000, 5, 10800, 0, 6000, false, false);
+        compare(a.scheduleMs, 10795000);
+    }
+    function test_recycle_activeDue_stillFreezesFirst() {
+        // Never Active → Discarded: an aged Active view takes the freeze step.
+        const a = P.decideOnChange("active", false, 0, 5, 10800, 0, 6000, false, true);
+        compare(a.scheduleMs, 5000);
+    }
+    function test_recycle_wantedView_neverRecycled() {
+        const a = P.decideOnChange("frozen", true, 5000, 5, 10800, 0, 6000, false, true);
+        compare(a.setState, "active");
+        verify(a.scheduleMs === undefined);
+    }
+    function test_recycle_timerDiscardTaggedRecycle() {
+        const a = P.decideOnTimer("frozen", "discarded", 5, 7000, 10800, true);
+        compare(a.setState, "discarded");
+        compare(a.reason, "recycle");
+    }
+    function test_sequence_recycleRotatingThumbnail() {
+        // Renderer 2 h old; the thumbnail rotates out.
+        const due = P.isRecycleDue(1, 7200, 7200 * 1000 + 1);
+        verify(due);
+        const leave = P.decideOnChange("active", false, 0, 5, 10800, 0, 0, false, due);
+        compare(leave.scheduleMs, 5000);
+        const freeze = P.decideOnTimer("active", "frozen", 5, 5000, 10800, due);
+        compare(freeze.setState, "frozen");
+        compare(freeze.chainReevaluate, true);
+        const chained = P.decideOnChange("frozen", false, 5000, 5, 10800, 0, 5000, false, due);
+        compare(chained.scheduleMs, 1000);
+        const discard = P.decideOnTimer("frozen", "discarded", 5, 6000, 10800, due);
+        compare(discard.setState, "discarded");
+        // Next landing: Discarded → Active, QtWebEngine reloads by itself.
+        const back = P.decideOnChange("discarded", true, 0, 5, 10800, 0, 60000, false, false);
+        compare(back.setState, "active");
+        verify(!back.reload);
+    }
+
     function test_sequence_resumeAfterStalenessReloads() {
         // Frozen at t=1000, resume at t=12000, staleness=10s → reload.
         const change = P.decideOnChange("frozen", true, 1000, 30, 600, 10, 12000);
