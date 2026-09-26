@@ -23,6 +23,11 @@
  * (bind its `visible`) for any non-Active state to be reachable at all —
  * the controller only changes lifecycleState, never visibility.
  *
+ * State changes the controller did not make itself (a reload promoting a
+ * Discarded view to Active, Chromium lifting a Frozen pin) re-enter the
+ * policy while the timer is idle, so such a view is frozen again instead of
+ * staying Active and invisible until its tab is next shown.
+ *
  * The pure decision core lives in LifecyclePolicy.js so
  * tests/qml/tst_lifecycle.qml can drive every transition without spinning
  * up a real WebEngineView; this file does the enum↔string conversion and
@@ -56,8 +61,15 @@ QtObject {
     // blank frame. The thumbnail binds this to miniView.loadStatus.
     property bool priorFailed: false
 
+    // Short name for log lines, e.g. "thumb[3]" / "popup[1]".
+    property string label: ""
+
     // Date.now() ms when the view entered Frozen; 0 when not frozen.
     property double _frozenAtMs: 0
+
+    // True while _apply() runs, so the lifecycleStateChanged it causes is
+    // not mistaken for an external change.
+    property bool _applying: false
 
     function _stateName(s) {
         if (s === WebEngineView.LifecycleState.Frozen)    return "frozen";
@@ -74,7 +86,19 @@ QtObject {
         if (!target) return;
         if (action.stopTimer) _phaseTimer.stop();
         if (action.setState !== undefined) {
-            target.lifecycleState = _stateEnum(action.setState);
+            const from = _stateName(target.lifecycleState);
+            if (from !== action.setState) {
+                console.debug(Log.lifecycle, "iframe-plasma[lifecycle] " + ctl.label + " "
+                    + from + "->" + action.setState
+                    + (action.reason ? " (" + action.reason + ")" : "")
+                    + (action.reload ? " +reload" : ""));
+            }
+            ctl._applying = true;
+            try {
+                target.lifecycleState = _stateEnum(action.setState);
+            } finally {
+                ctl._applying = false;
+            }
         }
         if (action.resetFrozenAtMs) _frozenAtMs = 0;
         if (action.frozenAtMs !== undefined) _frozenAtMs = action.frozenAtMs;
@@ -82,6 +106,10 @@ QtObject {
             try { target.reload(); } catch (e) { /* view gone */ }
         }
         if (action.scheduleMs !== undefined) {
+            if (action.reason) {
+                console.debug(Log.lifecycle, "iframe-plasma[lifecycle] " + ctl.label + " retry in "
+                    + action.scheduleMs + " ms (" + action.reason + ")");
+            }
             _phaseTimer.interval = action.scheduleMs;
             _phaseTimer.restart();
         }
@@ -105,6 +133,21 @@ QtObject {
     onDesiredActiveChanged: _reevaluate()
     Component.onCompleted: _reevaluate()
 
+    function _onExternalChange() {
+        if (!target) return;
+        if (Policy.shouldReevaluateOnExternalChange(
+                ctl.desiredActive, _phaseTimer.running, ctl._applying,
+                _stateName(target.lifecycleState))) {
+            _reevaluate();
+        }
+    }
+
+    property Connections _targetSignals: Connections {
+        target: ctl.target
+        function onLifecycleStateChanged() { ctl._onExternalChange(); }
+        function onRecommendedStateChanged() { ctl._onExternalChange(); }
+    }
+
     property Timer _phaseTimer: Timer {
         repeat: false
         onTriggered: {
@@ -114,7 +157,8 @@ QtObject {
                 ctl._stateName(t.lifecycleState),
                 ctl._stateName(t.recommendedState),
                 ctl.freezeDelaySec,
-                Date.now()));
+                Date.now(),
+                ctl.discardDelaySec));
         }
     }
 }

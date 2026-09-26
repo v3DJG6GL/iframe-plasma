@@ -16,6 +16,7 @@
  *   resetFrozenAtMs : bool                          — _frozenAtMs = 0
  *   frozenAtMs      : number                        — _frozenAtMs = <ms>
  *   chainReevaluate : bool                          — caller should _reevaluate()
+ *   reason          : string                        — short tag for the log line
  *
  * State names are strings rather than enum integers so the policy is
  * QtWebEngine-independent. WebViewLifecycle.qml does the small
@@ -62,8 +63,13 @@ function decideOnChange(currentState, desiredActive, frozenAtMs,
 
 // Called from the Timer onTriggered handler. Only invoked when
 // desiredActive === false (the caller's timer wouldn't run otherwise).
+//
+// discardDelaySec / recycleDue (optional, appended) size the retry when
+// Chromium pins a Frozen view at Frozen (form input, PDF, …). Without a
+// retry the view would never be discarded: nothing else re-arms the timer
+// once it has fired. Old 4-arg callers get a 60 s retry.
 function decideOnTimer(currentState, recommendedState,
-                       freezeDelaySec, now) {
+                       freezeDelaySec, now, discardDelaySec, recycleDue) {
     // A loading or audible view is pinned Active by Chromium —
     // reschedule for the freeze interval, try again then.
     if (recommendedState === "active") {
@@ -73,8 +79,27 @@ function decideOnTimer(currentState, recommendedState,
         return { setState: "frozen", frozenAtMs: now, chainReevaluate: true };
     }
     if (currentState === "frozen" && recommendedState === "discarded") {
-        return { setState: "discarded", resetFrozenAtMs: true };
+        return { setState: "discarded", resetFrozenAtMs: true,
+                 reason: recycleDue === true ? "recycle" : "idle" };
     }
-    // recommendedState pins it at Frozen (form input / PDF, etc.) — leave alone.
+    if (currentState === "frozen") {
+        // recommendedState pins it at Frozen — retry the discard later.
+        const retrySec = (recycleDue === true || discardDelaySec === undefined)
+            ? 60
+            : Math.max(60, discardDelaySec - freezeDelaySec);
+        return { scheduleMs: retrySec * 1000, reason: "pinned-frozen" };
+    }
     return {};
+}
+
+// Whether a lifecycleState / recommendedState change the controller did not
+// cause itself should trigger _reevaluate(). Covers views forced awake
+// behind the controller's back (WebTab.reload() / miniView promote a
+// Discarded view straight to Active) and a Frozen view whose pin lifted.
+// Never restarts a running timer: restarting on every signal would reset
+// the countdown before it can fire — the same bug the auto-cycle had.
+function shouldReevaluateOnExternalChange(desiredActive, timerRunning,
+                                          applying, stateName) {
+    if (desiredActive || timerRunning || applying) return false;
+    return stateName === "active" || stateName === "frozen";
 }

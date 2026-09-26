@@ -2276,6 +2276,7 @@ PlasmoidItem {
                 // spinner flash) when within stalenessSec, or reloads on resume.
                 WebViewLifecycle {
                     target: miniView
+                    label: "thumb[" + miniView.ownIndex + "]"
                     desiredActive: (miniView.ownIsCurrent || miniView.ownIsRuntimeExcluded)
                                    && root.compactObservable
                     freezeDelaySec: Plasmoid.configuration.webViewFreezeDelaySec
@@ -2687,6 +2688,7 @@ PlasmoidItem {
                                    && !root.screenLocked
                     freezeDelaySec: Plasmoid.configuration.webViewFreezeDelaySec
                     discardDelaySec: Plasmoid.configuration.webViewDiscardDelaySec
+                    lifecycleLabel: "popup[" + index + "]"
                     onBasicAuthRequested: req => root.handleBasicAuth(req, modelData)
                     onAuthRequired: () => root.expanded = true
                     onLoadStatusChanged: root.setTabStatus(index, loadStatus)

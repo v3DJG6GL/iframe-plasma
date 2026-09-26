@@ -26,6 +26,8 @@ Item {
     property bool desiredActive: true
     property int  freezeDelaySec: 30
     property int  discardDelaySec: 600
+    // Name used in lifecycle log lines, e.g. "popup[2]".
+    property string lifecycleLabel: ""
 
     // True once the user clicked "Log in here" — suppresses the overlay for
     // subsequent Authelia subpages (TOTP, WebAuthn) until we land off-host.
@@ -832,6 +834,7 @@ Item {
     // page state intact (Hybrid intent); only Discarded->Active reloads.
     WebViewLifecycle {
         target: webview
+        label: tab.lifecycleLabel
         desiredActive: tab.desiredActive
         freezeDelaySec: tab.freezeDelaySec
         discardDelaySec: tab.discardDelaySec

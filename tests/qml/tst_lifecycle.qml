@@ -168,11 +168,36 @@ TestCase {
         compare(a.setState, "discarded");
         compare(a.resetFrozenAtMs, true);
     }
-    function test_onTimer_frozen_andRecommendedFrozen_isNoOp() {
-        // Form-input or PDF pin keeps it at Frozen — don't try to discard.
-        const a = P.decideOnTimer("frozen", "frozen", 30, 5000);
+    function test_onTimer_frozen_andRecommendedFrozen_reschedulesDiscardRetry() {
+        // Form-input or PDF pin keeps it at Frozen. Don't discard now, but
+        // retry later — returning {} left the view Frozen forever (nothing
+        // else re-arms the timer once it has fired).
+        const a = P.decideOnTimer("frozen", "frozen", 30, 5000, 600);
         verify(a.setState === undefined);
-        verify(!a.scheduleMs);
+        compare(a.scheduleMs, 570000);   // (600-30)*1000
+    }
+    function test_onTimer_frozenPinned_retryClampedToMin60() {
+        // discard <= freeze would give a zero/negative retry → clamp to 60 s.
+        const a = P.decideOnTimer("frozen", "frozen", 60, 5000, 30);
+        compare(a.scheduleMs, 60000);
+    }
+    function test_onTimer_frozenPinned_fourArgCallerRetries60s() {
+        const a = P.decideOnTimer("frozen", "frozen", 30, 5000);
+        compare(a.scheduleMs, 60000);
+    }
+    function test_onTimer_frozenPinned_recycleDueRetries60s() {
+        const a = P.decideOnTimer("frozen", "frozen", 5, 5000, 10800, true);
+        compare(a.scheduleMs, 60000);
+    }
+    function test_onTimer_frozen_recommendedDiscarded_stillDiscardsWithNewArgs() {
+        const a = P.decideOnTimer("frozen", "discarded", 30, 5000, 600, false);
+        compare(a.setState, "discarded");
+        verify(a.scheduleMs === undefined);
+    }
+    function test_onTimer_discarded_withNewArgs_isNoOp() {
+        const a = P.decideOnTimer("discarded", "frozen", 30, 5000, 600, true);
+        verify(a.setState === undefined);
+        verify(a.scheduleMs === undefined);
     }
     function test_onTimer_discarded_isNoOp() {
         const a = P.decideOnTimer("discarded", "discarded", 30, 5000);
@@ -210,6 +235,46 @@ TestCase {
         const change = P.decideOnChange("frozen", true, 1000, 30, 600, 10, 5000);
         verify(!change.reload);
     }
+    function test_sequence_frozenPinnedThenReleased_discards() {
+        // Frozen with a form-input pin: the timer retries instead of giving
+        // up, and once the pin lifts the retry discards.
+        const pinned = P.decideOnTimer("frozen", "frozen", 30, 601000, 600);
+        compare(pinned.scheduleMs, 570000);
+        const later = P.decideOnTimer("frozen", "discarded", 30, 1171000, 600);
+        compare(later.setState, "discarded");
+    }
+
+    // ============================================================
+    //  shouldReevaluateOnExternalChange — forced wake / pin lifted
+    // ============================================================
+    function test_external_desiredActive_ignored() {
+        verify(!P.shouldReevaluateOnExternalChange(true, false, false, "active"));
+    }
+    function test_external_timerRunning_ignored() {
+        // Restarting a running timer would reset its countdown.
+        verify(!P.shouldReevaluateOnExternalChange(false, true, false, "active"));
+    }
+    function test_external_ownApply_ignored() {
+        verify(!P.shouldReevaluateOnExternalChange(false, false, true, "frozen"));
+    }
+    function test_external_discarded_ignored() {
+        verify(!P.shouldReevaluateOnExternalChange(false, false, false, "discarded"));
+    }
+    function test_external_forcedActiveWhileIdle_reevaluates() {
+        // reload() promoted a Discarded view to Active behind our back.
+        verify(P.shouldReevaluateOnExternalChange(false, false, false, "active"));
+    }
+    function test_external_frozenWhileIdle_reevaluates() {
+        verify(P.shouldReevaluateOnExternalChange(false, false, false, "frozen"));
+    }
+    function test_sequence_forcedWakeIsFrozenAgain() {
+        // Discarded background view, timer idle → reload() sets Active →
+        // external change → decideOnChange schedules the freeze again.
+        verify(P.shouldReevaluateOnExternalChange(false, false, false, "active"));
+        const change = P.decideOnChange("active", false, 0, 30, 600, 0, 1000);
+        compare(change.scheduleMs, 30000);
+    }
+
     function test_sequence_resumeAfterStalenessReloads() {
         // Frozen at t=1000, resume at t=12000, staleness=10s → reload.
         const change = P.decideOnChange("frozen", true, 1000, 30, 600, 10, 12000);

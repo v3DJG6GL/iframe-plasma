@@ -10,7 +10,7 @@
  * on return; Active resumes/restarts).
  *
  * The LifecyclePolicy state machine (decideOnChange / decideOnTimer)
- * is unit-tested by tst_lifecycle.qml (28 cases). This binary verifies
+ * is unit-tested by tst_lifecycle.qml. This binary verifies
  * that Qt's underlying lifecycle API does what the policy assumes.
  */
 #include <QCoreApplication>
