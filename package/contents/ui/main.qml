@@ -2594,7 +2594,7 @@ PlasmoidItem {
             loading:         root.activeTab ? root.activeTab.loadStatus === "loading" : false
             timeRange:       root.activeTab ? root.activeTab.currentTimeRange       : ""
             refreshInterval: root.activeTab ? root.activeTab.currentRefreshInterval : ""
-            isGrafana:       root.activeTab ? root.isGrafanaEmbed(root.activeTab.webView.url) : false
+            isGrafana:       root.activeTab?.webView ? root.isGrafanaEmbed(root.activeTab.webView.url) : false
             pinned:          Plasmoid.configuration.popupPinned
             onPinToggled:    Plasmoid.configuration.popupPinned = !Plasmoid.configuration.popupPinned
             onReloadClicked:        root._tabReloadRequested(root.currentTabIndex, "soft")
@@ -2707,12 +2707,13 @@ PlasmoidItem {
                     }
                     debugPort: Plasmoid.configuration.remoteDebuggingPort
                     // Live only for the tab actually on screen; the rest are
-                    // frozen, then discarded after a long idle.
+                    // frozen, then discarded. A tab's view is only created
+                    // the first time it is shown (WebTab viewLoader).
                     desiredActive: root.fullRepVisible
                                    && index === root.currentTabIndex
                                    && !root.screenLocked
                     freezeDelaySec: Plasmoid.configuration.webViewFreezeDelaySec
-                    discardDelaySec: Plasmoid.configuration.webViewDiscardDelaySec
+                    discardDelaySec: Plasmoid.configuration.popupDiscardDelaySec
                     lifecycleLabel: "popup[" + index + "]"
                     onBasicAuthRequested: req => root.handleBasicAuth(req, modelData)
                     onAuthRequired: () => root.expanded = true

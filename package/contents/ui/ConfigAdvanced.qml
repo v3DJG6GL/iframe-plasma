@@ -12,7 +12,8 @@ KCM.SimpleKCM {
     property alias cfg_userAgentOverride: uaField.text
     property alias cfg_remoteDebuggingPort: debugPortBox.value
     property alias cfg_webViewFreezeDelaySec: freezeBox.value
-    property alias cfg_webViewDiscardDelaySec: discardBox.value
+    property alias cfg_popupDiscardDelaySec: popupDiscardBox.value
+    property alias cfg_webViewDiscardDelaySec: thumbDiscardBox.value
     property alias cfg_thumbnailFreezeDelaySec: thumbFreezeBox.value
     property alias cfg_thumbnailReloadAfterSec: thumbReloadBox.value
     property alias cfg_thumbnailRecycleMin: thumbRecycleBox.value
@@ -40,8 +41,6 @@ KCM.SimpleKCM {
             text: i18n("Widget logging is quiet by default. For a detailed trace, enable the \"iframe Plasma\" categories in KDebugSettings (then restart plasmashell), or start plasmashell with QT_LOGGING_RULES=\"io.github.v3djg6gl.iframe.*.debug=true\" and read the journal with: journalctl --user -f -t plasmashell")
         }
 
-        Item { Kirigami.FormData.isSection: true }
-
         Item {
             Kirigami.FormData.isSection: true
             Kirigami.FormData.label: i18n("Popup")
@@ -54,13 +53,13 @@ KCM.SimpleKCM {
             textFormatter: (v) => i18np("%1 second", "%1 seconds", v)
         }
         UnitSpinBox {
-            id: discardBox
-            Kirigami.FormData.label: i18n("Discard frozen views after:")
-            from: 1; to: 86400; value: 600
+            id: popupDiscardBox
+            Kirigami.FormData.label: i18n("Discard frozen tabs after:")
+            from: 60; to: 86400; value: 900
             textFormatter: (v) => i18np("%1 second", "%1 seconds", v)
         }
         FormHintLabel {
-            text: i18n("A tab you are not looking at is frozen (its JavaScript and auto-refresh suspended) after the first delay, then discarded (its renderer process shut down to reclaim memory; it reloads when shown again) after the second. Set the discard delay very high to only ever freeze.")
+            text: i18n("A tab you are not looking at is frozen (its JavaScript and auto-refresh suspended) after the first delay, then discarded (its renderer process shut down to reclaim memory; it reloads when shown again) after the second. A tab is only loaded the first time you open it. The popup stays in memory after closing, so the discard delay bounds how long closed tabs hold memory.")
         }
 
         Item {
@@ -72,6 +71,12 @@ KCM.SimpleKCM {
             id: thumbFreezeBox
             Kirigami.FormData.label: i18n("Freeze hidden thumbnails after:")
             from: 1; to: 3600; value: 5
+            textFormatter: (v) => i18np("%1 second", "%1 seconds", v)
+        }
+        UnitSpinBox {
+            id: thumbDiscardBox
+            Kirigami.FormData.label: i18n("Discard frozen thumbnails after:")
+            from: 1; to: 86400; value: 600
             textFormatter: (v) => i18np("%1 second", "%1 seconds", v)
         }
         UnitSpinBox {

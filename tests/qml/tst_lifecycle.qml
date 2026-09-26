@@ -396,6 +396,20 @@ TestCase {
         verify(!back.reload);
     }
 
+    // ============================================================
+    //  Popup tab after closing (fix D): freeze 400 s, popup discard 900 s
+    // ============================================================
+    function test_popupClosed_freezesThenDiscardsAtPopupDelay() {
+        const close = P.decideOnChange("active", false, 0, 400, 900, 0, 0);
+        compare(close.scheduleMs, 400000);
+        const freeze = P.decideOnTimer("active", "frozen", 400, 400000, 900);
+        compare(freeze.setState, "frozen");
+        const chained = P.decideOnChange("frozen", false, 400000, 400, 900, 0, 400000);
+        compare(chained.scheduleMs, 500000);   // discarded 900 s after closing
+        const discard = P.decideOnTimer("frozen", "discarded", 400, 900000, 900);
+        compare(discard.setState, "discarded");
+    }
+
     function test_sequence_resumeAfterStalenessReloads() {
         // Frozen at t=1000, resume at t=12000, staleness=10s → reload.
         const change = P.decideOnChange("frozen", true, 1000, 30, 600, 10, 12000);

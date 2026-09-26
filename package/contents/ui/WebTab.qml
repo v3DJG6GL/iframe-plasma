@@ -41,11 +41,15 @@ Item {
     // step and back does not silently re-cover the form mid-typing.
     property bool loginInProgress: false
     onDesiredActiveChanged: {
-        if (tab.desiredActive
-            && webview.lifecycleState !== WebEngineView.LifecycleState.Active) {
+        if (tab.desiredActive) tab._viewWanted = true;
+        if (tab.desiredActive && tab.webView
+            && tab.webView.lifecycleState !== WebEngineView.LifecycleState.Active) {
             tab.loginInProgress = false;
         }
     }
+
+    // Latches true the first time this tab is shown; gates viewLoader.
+    property bool _viewWanted: false
 
     // Live load state — surfaced to the tab bar so the leading status dot can
     // reflect it. Values: "idle" | "loading" | "ok" | "err" | "auth".
@@ -69,7 +73,7 @@ Item {
     property int    httpStatus: 0
     property int    latencyMs:  0
     readonly property string currentHost: {
-        try { return new URL(String(webview.url)).host } catch (e) { return "" }
+        try { return new URL(String(tab.webView ? tab.webView.url : "")).host } catch (e) { return "" }
     }
     // Cleared at every LoadStartedStatus, set true by onCertificateError.
     // Without this, tlsOk was a pure scheme-prefix check — a self-signed /
@@ -80,10 +84,12 @@ Item {
     // recorded cert error for this navigation.
     property bool lastCertError: false
     readonly property bool tlsOk: (tab.loadStatus === "ok" || tab.loadStatus === "auth")
-                                  && String(webview.url).startsWith("https://")
+                                  && tab.webView !== null
+                                  && String(tab.webView.url).startsWith("https://")
                                   && !tab.lastCertError
 
-    readonly property alias webView: webview
+    // null until the tab is first shown (see viewLoader).
+    readonly property WebEngineView webView: viewLoader.item as WebEngineView
 
     signal authRequired(string originalUrl)
     signal basicAuthRequested(var request)
@@ -113,23 +119,30 @@ Item {
     // mid-Authelia) leaves loginInProgress stuck-true; the post-reload
     // LoadSucceeded on Authelia then takes the "hide overlay" branch and
     // the operator types into a bare Authelia form with no trust signal.
+    //
+    // A tab that was never shown has no view yet: nothing to reload, it
+    // loads fresh when first shown.
     function reload() {
         tab.loginInProgress = false;
-        if (webview.lifecycleState === WebEngineView.LifecycleState.Discarded) {
-            webview.lifecycleState = WebEngineView.LifecycleState.Active;
+        const v = tab.webView;
+        if (!v) return;
+        if (v.lifecycleState === WebEngineView.LifecycleState.Discarded) {
+            v.lifecycleState = WebEngineView.LifecycleState.Active;
             return;
         }
-        webview.reload();
+        v.reload();
     }
     function hardReload() {
         tab.loginInProgress = false;
-        if (webview.lifecycleState === WebEngineView.LifecycleState.Discarded) {
+        const v = tab.webView;
+        if (!v) return;
+        if (v.lifecycleState === WebEngineView.LifecycleState.Discarded) {
             _pendingHardReload = true;
             hardReloadFallback.restart();
-            webview.lifecycleState = WebEngineView.LifecycleState.Active;
+            v.lifecycleState = WebEngineView.LifecycleState.Active;
             return;
         }
-        webview.triggerWebAction(WebEngineView.ReloadAndBypassCache);
+        v.triggerWebAction(WebEngineView.ReloadAndBypassCache);
     }
 
     // Armed by hardReload() when the view is Discarded; consumed by
@@ -153,9 +166,10 @@ Item {
         onTriggered: {
             if (!tab._pendingHardReload) return;
             tab._pendingHardReload = false;
+            if (!tab.webView) return;
             console.debug(Log.load, "iframe-plasma[popup] hard-reload fallback (no LoadStarted)");
-            webview.stop();
-            webview.triggerWebAction(WebEngineView.ReloadAndBypassCache);
+            tab.webView.stop();
+            tab.webView.triggerWebAction(WebEngineView.ReloadAndBypassCache);
         }
     }
 
@@ -176,6 +190,7 @@ Item {
     property bool pickerActive: false
     function startPicker() {
         if (tab.pickerActive) return;       // double-start no-op
+        if (!tab.webView) return;           // tab never shown
         tab.pickerActive = true;
         // Hand keyboard focus to the WebEngineView so the in-page
         // keydown handler catches Esc — when focus stays on the QML
@@ -184,8 +199,8 @@ Item {
         // shortcut fires uncontested. Page-side preventDefault +
         // stopImmediatePropagation only work when the page actually
         // has focus.
-        webview.forceActiveFocus();
-        webview.runJavaScript(CropEngine.buildPickerStartJs(), function(r) {
+        tab.webView.forceActiveFocus();
+        tab.webView.runJavaScript(CropEngine.buildPickerStartJs(), function(r) {
             console.debug(Log.picker, "iframe-plasma[picker] start=" + r);
         });
         // Defensive: restart() doesn't zero user properties, so any
@@ -203,7 +218,7 @@ Item {
     // the user clicked on the page (fires the page-side click handler
     // which calls finish itself).
     function _finishPickerInPage() {
-        webview.runJavaScript(
+        tab.webView?.runJavaScript(
             "if (typeof window.__ifpPickerFinish === 'function') window.__ifpPickerFinish('');");
     }
     function cancelPicker() {
@@ -254,7 +269,8 @@ Item {
                 tab._applyPopupSelector();   // restore isolation on timeout
                 return;
             }
-            webview.runJavaScript(CropEngine.buildPickerClearJs(), function(result) {
+            if (!tab.webView) return;
+            tab.webView.runJavaScript(CropEngine.buildPickerClearJs(), function(result) {
                 if (result === undefined || result === null) return;
                 stop();
                 pickerTimer.ticks = 0;
@@ -278,10 +294,11 @@ Item {
     // lands the view on a non-http(s) URL (data:, file:, custom xdg handlers),
     // refuse to hand it off to the system URI dispatcher.
     function openExternal() {
-        const u = String(webview.url);
+        const target = tab.webView ? tab.webView.url : tab.url;
+        const u = String(target);
         const scheme = u.split(":", 1)[0].toLowerCase();
         if (scheme === "http" || scheme === "https") {
-            Qt.openUrlExternally(webview.url);
+            Qt.openUrlExternally(target);
         } else {
             console.warn(Log.policy, "iframe-plasma[nav] refusing openExternal; scheme=" + scheme);
         }
@@ -295,7 +312,7 @@ Item {
     // Returns the unit suffix of `from=now-Xu&to=now` (e.g. "24h"), or
     // "custom" for non-standard from/to, or "" if no time params at all.
     readonly property string currentTimeRange: {
-        const u = String(webview.url);
+        const u = String(tab.webView ? tab.webView.url : tab.url);
         return QueryUtils.matchTimeRangePreset(
             _readQuery(u, 'from'),
             _readQuery(u, 'to'));
@@ -308,16 +325,18 @@ Item {
     readonly property string currentRefreshInterval: {
         if (tab.userRefreshChoice === "off")  return "";
         if (tab.userRefreshChoice.length > 0) return tab.userRefreshChoice;
-        return _readQuery(String(webview.url), 'refresh');
+        return _readQuery(String(tab.webView ? tab.webView.url : tab.url), 'refresh');
     }
 
     // Assigning the same string to `webview.url` is a no-op; reload
     // instead so the dropdown selection always takes visible effect.
     function _navigate(newStr) {
-        if (String(webview.url) === newStr) {
-            webview.reload();
+        const v = tab.webView;
+        if (!v) return;
+        if (String(v.url) === newStr) {
+            v.reload();
         } else {
-            webview.url = newStr;
+            v.url = newStr;
         }
     }
 
@@ -343,7 +362,8 @@ Item {
                     to:   origTo   ? origTo   : null
                 };
             }
-            _navigate(_editQuery(String(webview.url), updates));
+            if (!tab.webView) return;
+            _navigate(_editQuery(String(tab.webView.url), updates));
         } catch (e) { console.warn(Log.load, "iframe-plasma: setTimeRange error:", e.message); }
     }
 
@@ -356,15 +376,16 @@ Item {
                                 && interval.length > 0
                                 && interval !== 'off';
             tab.userRefreshChoice = useInterval ? interval : "off";
+            if (!tab.webView) return;
 
             // runJavaScript defaults to an isolated world in Qt 6 — must
             // target MainWorld so the page's history-patching code sees
             // the flag.
-            webview.runJavaScript("window.__iframePlasmaRefreshOff = "
+            tab.webView.runJavaScript("window.__iframePlasmaRefreshOff = "
                 + (useInterval ? "false" : "true") + ";",
                 WebEngineScript.MainWorld);
 
-            _navigate(_editQuery(String(webview.url),
+            _navigate(_editQuery(String(tab.webView.url),
                 { refresh: useInterval ? interval : null }));
         } catch (e) { console.warn(Log.load, "iframe-plasma: setRefreshInterval error:", e.message); }
     }
@@ -373,458 +394,471 @@ Item {
         return QueryUtils.isAutheliaHost(currentUrl, tab.autheliaHost);
     }
 
-    WebEngineView {
-        id: webview
+    // The WebEngineView (and its renderer process) is created only once
+    // this tab is first shown. Before that the tab is an empty Item:
+    // opening the popup used to load EVERY tab at once, and Plasma keeps
+    // the popup alive after closing, so never-viewed tabs held a renderer
+    // each until their discard delay. Once created, the view stays;
+    // WebViewLifecycle freezes and discards it like before.
+    Loader {
+        id: viewLoader
         anchors.fill: parent
-        profile: tab.profile
-        // Defense-in-depth: parseTabs already rejects non-http(s) entries
-        // before they reach here, but pin the scheme guard at the binding
-        // so a future caller-path can't smuggle data:/file:/javascript:
-        // into the shared profile.
-        url: /^https?:\/\//i.test(String(tab.url)) ? tab.url : "about:blank"
-        zoomFactor: Math.max(0.25, Math.min(5.0, tab.zoomPct / 100.0))
+        active: tab._viewWanted
+        sourceComponent: Component {
+            WebEngineView {
+                id: webview
+                anchors.fill: parent
+                profile: tab.profile
+                // Defense-in-depth: parseTabs already rejects non-http(s) entries
+                // before they reach here, but pin the scheme guard at the binding
+                // so a future caller-path can't smuggle data:/file:/javascript:
+                // into the shared profile.
+                url: /^https?:\/\//i.test(String(tab.url)) ? tab.url : "about:blank"
+                zoomFactor: Math.max(0.25, Math.min(5.0, tab.zoomPct / 100.0))
 
-        // QtWebEngine only allows a non-Active lifecycleState on an invisible
-        // view, so visibility must track desiredActive. StackLayout already
-        // hides non-current tabs; this additionally covers the screen-locked
-        // case (popup still mapped behind the locker).
-        visible: tab.desiredActive
+                // QtWebEngine only allows a non-Active lifecycleState on an invisible
+                // view, so visibility must track desiredActive. StackLayout already
+                // hides non-current tabs; this additionally covers the screen-locked
+                // case (popup still mapped behind the locker).
+                visible: tab.desiredActive
 
-        settings.javascriptEnabled: true
-        settings.localStorageEnabled: true
-        settings.pluginsEnabled: false
-        // Defense-in-depth: pin the hardened defaults explicitly so future
-        // Qt-WebEngine default-flips can't silently re-enable these.
-        settings.localContentCanAccessFileUrls: false
-        settings.localContentCanAccessRemoteUrls: false
-        settings.allowRunningInsecureContent: false
-        settings.javascriptCanOpenWindows: false
-        settings.javascriptCanAccessClipboard: false
-        settings.javascriptCanPaste: false
-        // pdfium is a recurring Chromium CVE target (e.g. CVE-2023-4863,
-        // CVE-2024-4671); the widget never legitimately needs the in-page
-        // PDF viewer, so disable that attack surface entirely.
-        settings.pdfViewerEnabled: false
-        // WebRTC isn't used here; without this pin Qt's default STUN
-        // gathering enumerates every LAN interface and leaks the kiosk's
-        // internal-network topology to any JS that opens an RTCPeerConnection.
-        settings.webRTCPublicInterfacesOnly: true
+                settings.javascriptEnabled: true
+                settings.localStorageEnabled: true
+                settings.pluginsEnabled: false
+                // Defense-in-depth: pin the hardened defaults explicitly so future
+                // Qt-WebEngine default-flips can't silently re-enable these.
+                settings.localContentCanAccessFileUrls: false
+                settings.localContentCanAccessRemoteUrls: false
+                settings.allowRunningInsecureContent: false
+                settings.javascriptCanOpenWindows: false
+                settings.javascriptCanAccessClipboard: false
+                settings.javascriptCanPaste: false
+                // pdfium is a recurring Chromium CVE target (e.g. CVE-2023-4863,
+                // CVE-2024-4671); the widget never legitimately needs the in-page
+                // PDF viewer, so disable that attack surface entirely.
+                settings.pdfViewerEnabled: false
+                // WebRTC isn't used here; without this pin Qt's default STUN
+                // gathering enumerates every LAN interface and leaks the kiosk's
+                // internal-network topology to any JS that opens an RTCPeerConnection.
+                settings.webRTCPublicInterfacesOnly: true
 
-        // Suppress Grafana's auto-refresh URL push.
-        //
-        // Grafana's TimeSrv re-injects `refresh=<dashboard-default>` via
-        // `history.replaceState` ~1 s after each dashboard load. There is
-        // no URL-only sentinel for "off" (grafana/grafana#4725, #9016,
-        // #41329, #101412 — all declined over 8 years). Workaround: patch
-        // `history.{push,replace}State` at DocumentCreation so any URL
-        // Grafana writes has `refresh=` stripped, gated on the page-side
-        // flag `__iframePlasmaRefreshOff` set by setRefreshInterval().
-        //
-        // WebEngineScript is a value type in Qt 6 and can't be inlined in
-        // QML — must build it imperatively via the WebEngine.script() factory.
-        Component.onCompleted: {
-            const s = WebEngine.script();
-            s.name = "iframe-plasma-refresh-control";
-            s.injectionPoint = WebEngineScript.DocumentCreation;
-            s.worldId = WebEngineScript.MainWorld;
-            s.runOnSubFrames = false;
-            s.sourceCode =
-                "(function(){\n" +
-                "  if (window.__iframePlasmaRefreshPatched) return;\n" +
-                "  window.__iframePlasmaRefreshPatched = true;\n" +
-                "  if (typeof window.__iframePlasmaRefreshOff === 'undefined')\n" +
-                "    window.__iframePlasmaRefreshOff = false;\n" +
-                "  const origRS = history.replaceState.bind(history);\n" +
-                "  const origPS = history.pushState.bind(history);\n" +
-                "  const strip = function(u){\n" +
-                "    if (typeof u !== 'string' || !u.length) return u;\n" +
-                "    if (!window.__iframePlasmaRefreshOff) return u;\n" +
-                "    return u\n" +
-                "      .replace(/([?&])refresh=[^&#]*/g, function(_, sep){ return sep === '?' ? '?' : ''; })\n" +
-                "      .replace(/&&+/g, '&')\n" +
-                "      .replace(/\\?&/, '?')\n" +
-                "      .replace(/[?&]$/, '');\n" +
-                "  };\n" +
-                "  history.replaceState = function(s, t, u){ return origRS(s, t, strip(u)); };\n" +
-                "  history.pushState    = function(s, t, u){ return origPS(s, t, strip(u)); };\n" +
-                "})();";
-            webview.userScripts.insert(s);
+                // Suppress Grafana's auto-refresh URL push.
+                //
+                // Grafana's TimeSrv re-injects `refresh=<dashboard-default>` via
+                // `history.replaceState` ~1 s after each dashboard load. There is
+                // no URL-only sentinel for "off" (grafana/grafana#4725, #9016,
+                // #41329, #101412 — all declined over 8 years). Workaround: patch
+                // `history.{push,replace}State` at DocumentCreation so any URL
+                // Grafana writes has `refresh=` stripped, gated on the page-side
+                // flag `__iframePlasmaRefreshOff` set by setRefreshInterval().
+                //
+                // WebEngineScript is a value type in Qt 6 and can't be inlined in
+                // QML — must build it imperatively via the WebEngine.script() factory.
+                Component.onCompleted: {
+                    const s = WebEngine.script();
+                    s.name = "iframe-plasma-refresh-control";
+                    s.injectionPoint = WebEngineScript.DocumentCreation;
+                    s.worldId = WebEngineScript.MainWorld;
+                    s.runOnSubFrames = false;
+                    s.sourceCode =
+                        "(function(){\n" +
+                        "  if (window.__iframePlasmaRefreshPatched) return;\n" +
+                        "  window.__iframePlasmaRefreshPatched = true;\n" +
+                        "  if (typeof window.__iframePlasmaRefreshOff === 'undefined')\n" +
+                        "    window.__iframePlasmaRefreshOff = false;\n" +
+                        "  const origRS = history.replaceState.bind(history);\n" +
+                        "  const origPS = history.pushState.bind(history);\n" +
+                        "  const strip = function(u){\n" +
+                        "    if (typeof u !== 'string' || !u.length) return u;\n" +
+                        "    if (!window.__iframePlasmaRefreshOff) return u;\n" +
+                        "    return u\n" +
+                        "      .replace(/([?&])refresh=[^&#]*/g, function(_, sep){ return sep === '?' ? '?' : ''; })\n" +
+                        "      .replace(/&&+/g, '&')\n" +
+                        "      .replace(/\\?&/, '?')\n" +
+                        "      .replace(/[?&]$/, '');\n" +
+                        "  };\n" +
+                        "  history.replaceState = function(s, t, u){ return origRS(s, t, strip(u)); };\n" +
+                        "  history.pushState    = function(s, t, u){ return origPS(s, t, strip(u)); };\n" +
+                        "})();";
+                    webview.userScripts.insert(s);
 
-            // Hide Grafana's per-panel 3-dot menu button (kebab) when the
-            // URL carries our internal sentinel `_ifp_hidePanelMenu=1`.
-            //
-            // Grafana has no URL flag for this: kiosk mode only hides
-            // dashboard chrome, /d-solo keeps the panel header (which is
-            // what we want — we keep the title visible), and the feature
-            // is asked-for in #12019 (open since 2018) with the Grafana
-            // team explicitly recommending CSS as the only workaround.
-            //
-            // Selectors verified stable from Grafana 9.5 through main:
-            //   [data-testid^="data-testid Panel menu "]    titled panels
-            //     (testid value is `Panel menu <title>` — prefix match
-            //     with trailing space to avoid matching "Panel menu item")
-            //   [data-testid="panel-menu-button"]            untitled fallback
-            //   button[aria-label^="Menu for panel "]        i18n safety net
-            //   [data-testid^="data-testid Panel menu item "]
-            //     the dropdown itself, portal-rendered to document.body
-            //     (so a panel-scoped rule would miss it if the menu was
-            //     already open when the style landed).
-            //
-            // Sources: PanelMenu.tsx + e2e-selectors/components.ts on
-            // grafana/grafana at tags v12.0.0, v12.4.0, main.
-            const hp = WebEngine.script();
-            hp.name = "iframe-plasma-hide-panel-menu";
-            hp.injectionPoint = WebEngineScript.DocumentCreation;
-            hp.worldId = WebEngineScript.MainWorld;
-            hp.runOnSubFrames = false;
-            hp.sourceCode =
-                "(function(){\n" +
-                "  if (window.__ifpPanelMenuStyled) return;\n" +
-                // Gate on the sentinel — same URL is reused for tabs that
-                // want the menu visible, and we don't want CSS bleed.
-                "  try { if ((window.location.search||'').indexOf('_ifp_hidePanelMenu=1') === -1) return; }\n" +
-                "  catch(e) { return; }\n" +
-                "  window.__ifpPanelMenuStyled = true;\n" +
-                "  var css = '" +
-                "[data-testid^=\"data-testid Panel menu \"]," +
-                "[data-testid=\"panel-menu-button\"]," +
-                "button[aria-label^=\"Menu for panel \"]," +
-                "[data-testid^=\"data-testid Panel menu item \"]" +
-                "{display:none!important;}';\n" +
-                "  function inject(){\n" +
-                "    if (document.getElementById('ifp-panel-menu-style')) return;\n" +
-                "    var el = document.createElement('style');\n" +
-                "    el.id = 'ifp-panel-menu-style';\n" +
-                "    el.textContent = css;\n" +
-                "    (document.head || document.documentElement).appendChild(el);\n" +
-                "  }\n" +
-                // At DocumentCreation the head may not exist yet; defer
-                // to DOMContentLoaded if the document is still parsing.
-                "  if (document.readyState === 'loading') {\n" +
-                "    document.addEventListener('DOMContentLoaded', inject, { once: true });\n" +
-                "  } else {\n" +
-                "    inject();\n" +
-                "  }\n" +
-                "})();";
-            webview.userScripts.insert(hp);
+                    // Hide Grafana's per-panel 3-dot menu button (kebab) when the
+                    // URL carries our internal sentinel `_ifp_hidePanelMenu=1`.
+                    //
+                    // Grafana has no URL flag for this: kiosk mode only hides
+                    // dashboard chrome, /d-solo keeps the panel header (which is
+                    // what we want — we keep the title visible), and the feature
+                    // is asked-for in #12019 (open since 2018) with the Grafana
+                    // team explicitly recommending CSS as the only workaround.
+                    //
+                    // Selectors verified stable from Grafana 9.5 through main:
+                    //   [data-testid^="data-testid Panel menu "]    titled panels
+                    //     (testid value is `Panel menu <title>` — prefix match
+                    //     with trailing space to avoid matching "Panel menu item")
+                    //   [data-testid="panel-menu-button"]            untitled fallback
+                    //   button[aria-label^="Menu for panel "]        i18n safety net
+                    //   [data-testid^="data-testid Panel menu item "]
+                    //     the dropdown itself, portal-rendered to document.body
+                    //     (so a panel-scoped rule would miss it if the menu was
+                    //     already open when the style landed).
+                    //
+                    // Sources: PanelMenu.tsx + e2e-selectors/components.ts on
+                    // grafana/grafana at tags v12.0.0, v12.4.0, main.
+                    const hp = WebEngine.script();
+                    hp.name = "iframe-plasma-hide-panel-menu";
+                    hp.injectionPoint = WebEngineScript.DocumentCreation;
+                    hp.worldId = WebEngineScript.MainWorld;
+                    hp.runOnSubFrames = false;
+                    hp.sourceCode =
+                        "(function(){\n" +
+                        "  if (window.__ifpPanelMenuStyled) return;\n" +
+                        // Gate on the sentinel — same URL is reused for tabs that
+                        // want the menu visible, and we don't want CSS bleed.
+                        "  try { if ((window.location.search||'').indexOf('_ifp_hidePanelMenu=1') === -1) return; }\n" +
+                        "  catch(e) { return; }\n" +
+                        "  window.__ifpPanelMenuStyled = true;\n" +
+                        "  var css = '" +
+                        "[data-testid^=\"data-testid Panel menu \"]," +
+                        "[data-testid=\"panel-menu-button\"]," +
+                        "button[aria-label^=\"Menu for panel \"]," +
+                        "[data-testid^=\"data-testid Panel menu item \"]" +
+                        "{display:none!important;}';\n" +
+                        "  function inject(){\n" +
+                        "    if (document.getElementById('ifp-panel-menu-style')) return;\n" +
+                        "    var el = document.createElement('style');\n" +
+                        "    el.id = 'ifp-panel-menu-style';\n" +
+                        "    el.textContent = css;\n" +
+                        "    (document.head || document.documentElement).appendChild(el);\n" +
+                        "  }\n" +
+                        // At DocumentCreation the head may not exist yet; defer
+                        // to DOMContentLoaded if the document is still parsing.
+                        "  if (document.readyState === 'loading') {\n" +
+                        "    document.addEventListener('DOMContentLoaded', inject, { once: true });\n" +
+                        "  } else {\n" +
+                        "    inject();\n" +
+                        "  }\n" +
+                        "})();";
+                    webview.userScripts.insert(hp);
 
-            // Bridge MainWorld history navigation into an isolated-world
-            // DOM event so CropEngine's selector re-evaluates on SPA route
-            // changes. CropEngine.js runs in the isolated world (default
-            // for runJavaScript), so a direct history-patch there would
-            // miss page-initiated pushState/replaceState calls (they
-            // happen in MainWorld). Custom DOM events DO cross worlds
-            // (window-attached, not closure-scoped), so we patch MainWorld
-            // here, dispatch `ifp-navigation`, and the IIFE listens for it.
-            // Coexists with the refresh-control history patch above —
-            // wrapping is order-independent (both call origPS/origRS).
-            const nb = WebEngine.script();
-            nb.name = "iframe-plasma-nav-bridge";
-            nb.injectionPoint = WebEngineScript.DocumentCreation;
-            nb.worldId = WebEngineScript.MainWorld;
-            nb.runOnSubFrames = false;
-            nb.sourceCode =
-                "(function(){\n" +
-                "  if (window.__ifpNavBridged) return;\n" +
-                "  window.__ifpNavBridged = true;\n" +
-                "  var origPS = history.pushState.bind(history);\n" +
-                "  var origRS = history.replaceState.bind(history);\n" +
-                "  var fire = function(){\n" +
-                "    try { window.dispatchEvent(new CustomEvent('ifp-navigation')); } catch(e) {}\n" +
-                "  };\n" +
-                "  history.pushState    = function(){ var r = origPS.apply(history, arguments); fire(); return r; };\n" +
-                "  history.replaceState = function(){ var r = origRS.apply(history, arguments); fire(); return r; };\n" +
-                "  window.addEventListener('popstate', fire);\n" +
-                "  window.addEventListener('hashchange', fire);\n" +
-                "})();";
-            webview.userScripts.insert(nb);
-        }
-
-        onLoadingChanged: function(info) {
-            if (info.status === WebEngineView.LoadStartedStatus) {
-                console.debug(Log.load, "iframe-plasma[load] STARTED url=" + info.url);
-                tab.loadStatus = "loading";
-                tab.lastCertError = false;
-                if (!tab.loginInProgress) statusOverlay.showLoading();
-                // Consume a Discarded-armed hardReload: abort the engine's
-                // cache-honoring auto-reload from the lifecycle promotion
-                // and re-issue as bypass-cache. Mirror of the miniView
-                // pattern in main.qml's webThumbComp.
-                if (tab._pendingHardReload) {
-                    tab._pendingHardReload = false;
-                    hardReloadFallback.stop();
-                    console.debug(Log.load, "iframe-plasma[popup] hard-reload (post-discard)");
-                    webview.stop();
-                    webview.triggerWebAction(WebEngineView.ReloadAndBypassCache);
-                    return;
+                    // Bridge MainWorld history navigation into an isolated-world
+                    // DOM event so CropEngine's selector re-evaluates on SPA route
+                    // changes. CropEngine.js runs in the isolated world (default
+                    // for runJavaScript), so a direct history-patch there would
+                    // miss page-initiated pushState/replaceState calls (they
+                    // happen in MainWorld). Custom DOM events DO cross worlds
+                    // (window-attached, not closure-scoped), so we patch MainWorld
+                    // here, dispatch `ifp-navigation`, and the IIFE listens for it.
+                    // Coexists with the refresh-control history patch above —
+                    // wrapping is order-independent (both call origPS/origRS).
+                    const nb = WebEngine.script();
+                    nb.name = "iframe-plasma-nav-bridge";
+                    nb.injectionPoint = WebEngineScript.DocumentCreation;
+                    nb.worldId = WebEngineScript.MainWorld;
+                    nb.runOnSubFrames = false;
+                    nb.sourceCode =
+                        "(function(){\n" +
+                        "  if (window.__ifpNavBridged) return;\n" +
+                        "  window.__ifpNavBridged = true;\n" +
+                        "  var origPS = history.pushState.bind(history);\n" +
+                        "  var origRS = history.replaceState.bind(history);\n" +
+                        "  var fire = function(){\n" +
+                        "    try { window.dispatchEvent(new CustomEvent('ifp-navigation')); } catch(e) {}\n" +
+                        "  };\n" +
+                        "  history.pushState    = function(){ var r = origPS.apply(history, arguments); fire(); return r; };\n" +
+                        "  history.replaceState = function(){ var r = origRS.apply(history, arguments); fire(); return r; };\n" +
+                        "  window.addEventListener('popstate', fire);\n" +
+                        "  window.addEventListener('hashchange', fire);\n" +
+                        "})();";
+                    webview.userScripts.insert(nb);
                 }
-            } else if (info.status === WebEngineView.LoadSucceededStatus) {
-                const finalUrl = String(webview.url);
-                const onAuthelia = tab.onAutheliaHost(finalUrl);
-                console.debug(Log.load, "iframe-plasma[load] SUCCEEDED finalUrl=" + finalUrl
-                    + " onAuthelia=" + onAuthelia + " title=\"" + webview.title + "\"");
 
-                // Capture BEFORE we mutate loadStatus / _lastSuccessUrl
-                // below so the "did we just complete an auth round-trip?"
-                // checks survive the assignments. The popup may have just
-                // completed auth in one of two shapes:
-                //   (a) Authelia round-trip — loadStatus was "auth", now back
-                //       on a non-Authelia host. wasAuthing covers this.
-                //   (b) SPA-internal login (no Authelia involvement) — popup
-                //       went configured URL → /login → ... → configured URL.
-                //       loadStatus stayed "ok" throughout; the only signal
-                //       is that we just navigated BACK to the configured URL
-                //       from a different one. arrivedAtTargetFromElsewhere
-                //       covers this.
-                // Either gate firing means: the matching slot miniView is
-                // parked on the redirected /login URL with stale cookies,
-                // so emit authSucceeded so main.qml broadcasts a soft reload.
-                const wasAuthing = (tab.loadStatus === "auth");
-                function _stripHash(u) {
-                    const i = u.indexOf('#');
-                    return i >= 0 ? u.slice(0, i) : u;
-                }
-                const finalKey = _stripHash(finalUrl);
-                const targetKey = _stripHash(String(tab.url));
-                const arrivedAtTargetFromElsewhere =
-                    !onAuthelia
-                    && finalKey === targetKey
-                    && tab._lastSuccessUrl !== ""
-                    && _stripHash(tab._lastSuccessUrl) !== finalKey;
+                onLoadingChanged: function(info) {
+                    if (info.status === WebEngineView.LoadStartedStatus) {
+                        console.debug(Log.load, "iframe-plasma[load] STARTED url=" + info.url);
+                        tab.loadStatus = "loading";
+                        tab.lastCertError = false;
+                        if (!tab.loginInProgress) statusOverlay.showLoading();
+                        // Consume a Discarded-armed hardReload: abort the engine's
+                        // cache-honoring auto-reload from the lifecycle promotion
+                        // and re-issue as bypass-cache. Mirror of the miniView
+                        // pattern in main.qml's webThumbComp.
+                        if (tab._pendingHardReload) {
+                            tab._pendingHardReload = false;
+                            hardReloadFallback.stop();
+                            console.debug(Log.load, "iframe-plasma[popup] hard-reload (post-discard)");
+                            webview.stop();
+                            webview.triggerWebAction(WebEngineView.ReloadAndBypassCache);
+                            return;
+                        }
+                    } else if (info.status === WebEngineView.LoadSucceededStatus) {
+                        const finalUrl = String(webview.url);
+                        const onAuthelia = tab.onAutheliaHost(finalUrl);
+                        console.debug(Log.load, "iframe-plasma[load] SUCCEEDED finalUrl=" + finalUrl
+                            + " onAuthelia=" + onAuthelia + " title=\"" + webview.title + "\"");
 
-                if (onAuthelia) {
-                    if (!tab.loginInProgress) {
-                        tab.loadStatus = "auth";
-                        statusOverlay.showAuthRequired();
-                        tab.authRequired(String(tab.url));
-                    } else {
-                        tab.loadStatus = "ok";
-                        statusOverlay.hide();
+                        // Capture BEFORE we mutate loadStatus / _lastSuccessUrl
+                        // below so the "did we just complete an auth round-trip?"
+                        // checks survive the assignments. The popup may have just
+                        // completed auth in one of two shapes:
+                        //   (a) Authelia round-trip — loadStatus was "auth", now back
+                        //       on a non-Authelia host. wasAuthing covers this.
+                        //   (b) SPA-internal login (no Authelia involvement) — popup
+                        //       went configured URL → /login → ... → configured URL.
+                        //       loadStatus stayed "ok" throughout; the only signal
+                        //       is that we just navigated BACK to the configured URL
+                        //       from a different one. arrivedAtTargetFromElsewhere
+                        //       covers this.
+                        // Either gate firing means: the matching slot miniView is
+                        // parked on the redirected /login URL with stale cookies,
+                        // so emit authSucceeded so main.qml broadcasts a soft reload.
+                        const wasAuthing = (tab.loadStatus === "auth");
+                        function _stripHash(u) {
+                            const i = u.indexOf('#');
+                            return i >= 0 ? u.slice(0, i) : u;
+                        }
+                        const finalKey = _stripHash(finalUrl);
+                        const targetKey = _stripHash(String(tab.url));
+                        const arrivedAtTargetFromElsewhere =
+                            !onAuthelia
+                            && finalKey === targetKey
+                            && tab._lastSuccessUrl !== ""
+                            && _stripHash(tab._lastSuccessUrl) !== finalKey;
+
+                        if (onAuthelia) {
+                            if (!tab.loginInProgress) {
+                                tab.loadStatus = "auth";
+                                statusOverlay.showAuthRequired();
+                                tab.authRequired(String(tab.url));
+                            } else {
+                                tab.loadStatus = "ok";
+                                statusOverlay.hide();
+                            }
+                        } else {
+                            tab.loginInProgress = false;
+                            tab.loadStatus = "ok";
+                            statusOverlay.hide();
+                            if (wasAuthing || arrivedAtTargetFromElsewhere) {
+                                console.info(Log.load, "iframe-plasma[load] authSucceeded"
+                                    + " wasAuthing=" + wasAuthing
+                                    + " arrivedAtTarget=" + arrivedAtTargetFromElsewhere
+                                    + " from=" + Log.redactUrl(tab._lastSuccessUrl)
+                                    + " to=" + Log.redactUrl(finalUrl));
+                                tab.authSucceeded();
+                            }
+                        }
+                        tab._lastSuccessUrl = finalUrl;
+                        tab._captureNavTiming();
+                        tab._applyPopupSelector();
+                    } else if (info.status === WebEngineView.LoadFailedStatus) {
+                        console.warn(Log.load, "iframe-plasma[load] FAILED url=" + Log.redactUrl(info.url)
+                            + " code=" + info.errorCode + " msg=" + info.errorString);
+                        // Clear the login-in-progress latch so the next LoadSucceeded
+                        // on Authelia surfaces the auth-required overlay instead of
+                        // silently hiding it. Without this, a transient network drop
+                        // mid-login leaves the flag stuck-true and subsequent
+                        // re-auth events render as a bare Authelia form with no
+                        // "Authentication required" prompt.
+                        tab.loginInProgress = false;
+                        tab.loadStatus = "err";
+                        statusOverlay.showError(info.errorString || "Load failed");
                     }
-                } else {
+                }
+
+                // Reload after a renderer crash, with a time-windowed budget: at most
+                // one retry per 60 s. Without a handler the view just goes blank — both
+                // a DoS vector (hostile page crashes its own renderer to disable the
+                // widget) and a forensics gap. The previous one-shot latch reset only
+                // on a later SUCCESS, so a tab that crashed and then kept failing to
+                // load ignored every subsequent crash for the popup-session lifetime
+                // (permanently blank until plasmashell restart). The window lets a
+                // genuine later crash recover while still stopping a crash-loop from
+                // hammering plasmashell.
+                //
+                // Reset loginInProgress for the same reason tab.reload()/hardReload()
+                // do (see contract at L90-95): the crash destroyed any in-flight form
+                // contents and the post-reload LoadSucceeded on Authelia would
+                // otherwise take the "hide overlay" branch and leave the operator
+                // typing into a bare Authelia form with no trust signal. Same
+                // bug-class as bb69913's broadcast-reload latch leak.
+                property double _lastRenderRetryMs: 0
+                onRenderProcessTerminated: function(status, exitCode) {
+                    console.warn(Log.load, "iframe-plasma[render] terminated status=" + status
+                        + " exitCode=" + exitCode);
+                    if (status === WebEngineView.NormalTerminationStatus) return;
+                    const now = Date.now();
+                    if (now - _lastRenderRetryMs < 60000) {
+                        console.warn(Log.load, "iframe-plasma[render] crash within 60s window, not retrying");
+                        tab.loadStatus = "err";
+                        statusOverlay.showError("Renderer crashed");
+                        return;
+                    }
+                    _lastRenderRetryMs = now;
                     tab.loginInProgress = false;
-                    tab.loadStatus = "ok";
-                    statusOverlay.hide();
-                    if (wasAuthing || arrivedAtTargetFromElsewhere) {
-                        console.info(Log.load, "iframe-plasma[load] authSucceeded"
-                            + " wasAuthing=" + wasAuthing
-                            + " arrivedAtTarget=" + arrivedAtTargetFromElsewhere
-                            + " from=" + Log.redactUrl(tab._lastSuccessUrl)
-                            + " to=" + Log.redactUrl(finalUrl));
-                        tab.authSucceeded();
-                    }
+                    webview.reload();
                 }
-                tab._lastSuccessUrl = finalUrl;
-                tab._captureNavTiming();
-                tab._applyPopupSelector();
-            } else if (info.status === WebEngineView.LoadFailedStatus) {
-                console.warn(Log.load, "iframe-plasma[load] FAILED url=" + Log.redactUrl(info.url)
-                    + " code=" + info.errorCode + " msg=" + info.errorString);
-                // Clear the login-in-progress latch so the next LoadSucceeded
-                // on Authelia surfaces the auth-required overlay instead of
-                // silently hiding it. Without this, a transient network drop
-                // mid-login leaves the flag stuck-true and subsequent
-                // re-auth events render as a bare Authelia form with no
-                // "Authentication required" prompt.
-                tab.loginInProgress = false;
-                tab.loadStatus = "err";
-                statusOverlay.showError(info.errorString || "Load failed");
+
+                onAuthenticationDialogRequested: function(request) {
+                    console.debug(Log.auth, "iframe-plasma[auth] dialog requested type=" + request.type
+                        + " url=" + request.url + " realm=" + request.realm);
+                    tab.basicAuthRequested(request);
+                }
+
+                // Default action for an unhandled certificateError in Qt 6 is reject;
+                // record the event so tlsOk falls to ⚠ instead of staying green from
+                // the stale onLoadStartedStatus url prefix. Explicitly reject for
+                // clarity (the C0 widening + scheme allowlist already block dataloss
+                // paths, so we never want to ignoreCertificateError).
+                onCertificateError: function(error) {
+                    console.warn(Log.load, "iframe-plasma[cert] error type=" + error.type
+                        + " url=" + Log.redactUrl(error.url) + " overridable=" + error.overridable
+                        + " desc=" + error.description);
+                    tab.lastCertError = true;
+                    error.rejectCertificate();
+                }
+
+                onJavaScriptConsoleMessage: function(level, message, lineNumber, sourceID) {
+                    const safe = String(message || "").replace(/[\x00-\x1f\x7f]/g, '?').slice(0, 512);
+                    // Untrusted, unbounded third-party output: debug-only trace in
+                    // the `page` category (page errors surface as warnings).
+                    Log.pageConsole(level, "iframe-plasma[popup-console] " + safe);
+                }
+
+                // Defense-in-depth: deny every page-driven permission upgrade. The
+                // widget is a passive dashboard viewer with no UX path to surface a
+                // permission prompt, so a panel that calls getUserMedia / geolocation
+                // / notifications must never silently inherit a future Qt default-
+                // grant. Cover both per-origin (onFeaturePermissionRequested) and
+                // per-frame (onPermissionRequested, Qt 6.8+) shapes.
+                onFeaturePermissionRequested: function(securityOrigin, feature) {
+                    console.warn(Log.policy, "iframe-plasma[perm] denied feature=" + feature
+                        + " origin=" + securityOrigin);
+                    webview.grantFeaturePermission(securityOrigin, feature, false);
+                }
+                onPermissionRequested: function(perm) {
+                    console.warn(Log.policy, "iframe-plasma[perm] denied permission=" + perm.permissionType
+                        + " origin=" + perm.origin);
+                    perm.deny();
+                }
+                // Fullscreen takeover by a hostile dashboard could mimic the lock
+                // screen / fake an Authelia prompt; reject unconditionally.
+                onFullScreenRequested: function(request) {
+                    console.warn(Log.policy, "iframe-plasma[fs] rejected fullScreen request toggleOn=" + request.toggleOn);
+                    request.reject();
+                }
+                // Reject custom-protocol registration; widget never wants page-driven
+                // mailto/web+xxx hijacking.
+                onRegisterProtocolHandlerRequested: function(request) {
+                    console.warn(Log.policy, "iframe-plasma[proto] rejected scheme=" + request.scheme
+                        + " url=" + request.url);
+                    request.reject();
+                }
+                // Reject page-initiated file dialogs — closes the exfiltration vector
+                // from a compromised panel that auto-clicks an <input type=file>.
+                onFileDialogRequested: function(request) {
+                    console.warn(Log.policy, "iframe-plasma[file] rejected dialog mode=" + request.mode);
+                    request.dialogReject();
+                }
+                // Suppress the default Chromium context menu. Kiosk has no need for
+                // Inspect / View source / Save link / Save image, and a bystander
+                // right-click otherwise exposes inline secrets and reaches a
+                // file-save dialog that bypasses onDownloadRequested under some
+                // Qt 6.x builds.
+                onContextMenuRequested: function(request) {
+                    console.debug(Log.policy, "iframe-plasma[ctx] suppressed menu pos=" + request.position
+                        + " mediaType=" + request.mediaType);
+                    request.accepted = true;
+                }
+                // Reject client-certificate auto-selection. With the shared SSO
+                // profile any imported ~/.pki cert becomes a candidate; Qt's
+                // default for a single-match CertificateRequest is silent select,
+                // which would leak the kiosk identity to any origin that flips on
+                // optional client-auth.
+                onSelectClientCertificate: function(selection) {
+                    console.warn(Log.policy, "iframe-plasma[cert] rejected client-cert request host="
+                        + selection.host + " count=" + selection.certificates.length);
+                    selection.selectNone();
+                }
+                // Cancel WebAuthn ceremonies — the system FIDO/passkey prompt
+                // escapes the kiosk chrome and the widget never legitimately needs
+                // WebAuthn (basic-auth via interceptor only).
+                onWebAuthUxRequested: function(request) {
+                    console.warn(Log.policy, "iframe-plasma[webauth] cancelled state=" + request.state);
+                    request.cancel();
+                }
+                // Suppress page-controlled tooltips. Default Qt behaviour renders the
+                // tooltip outside the WebEngineView's clipped geometry (it's a top-
+                // level platform widget), so a compromised dashboard can paint
+                // attacker-controlled text — fake UI prompts, spoofed paths — over
+                // arbitrary screen regions next to the kiosk. `accepted = true`
+                // tells Qt the QML side took ownership and prevents the default
+                // tooltip from appearing.
+                onTooltipRequested: function(request) {
+                    request.accepted = true;
+                }
+                // Reject `<input type=color>` (and any JS-driven .click() on one).
+                // The default action opens the platform's native colour picker as a
+                // modal top-level window — same modal-over-kiosk hazard as a
+                // surprise auth dialog, with no UX path to surface it to the
+                // operator. The widget never legitimately needs a colour picker.
+                onColorDialogRequested: function(request) {
+                    console.warn(Log.policy, "iframe-plasma[color] rejected color dialog");
+                    request.dialogReject();
+                }
+                // Reject getDisplayMedia / screen-capture requests outright. The
+                // generic permissionRequested/featurePermissionRequested denials
+                // already cover most permission flavours, but desktopMediaRequested
+                // is a separate signal (Qt 6.8+) that, if unhandled, can present
+                // the screen-picker chooser even before the permission dialog
+                // fires. A hostile page calling navigator.mediaDevices.getDisplay-
+                // Media() over the SSO origin must not get any UI surface here.
+                onDesktopMediaRequested: function(request) {
+                    console.warn(Log.policy, "iframe-plasma[dispmedia] cancelled screen-capture request");
+                    request.cancel();
+                }
+                // Reject File System Access API (showOpenFilePicker / showSave-
+                // FilePicker / showDirectoryPicker). FileDialogRequested handles
+                // the legacy <input type=file>, but fileSystemAccessRequested is
+                // a separate request type that wraps Chromium's modern FS-Access
+                // API — same exfiltration / write surface, separate hook. The
+                // widget never legitimately writes to disk.
+                onFileSystemAccessRequested: function(request) {
+                    console.warn(Log.policy, "iframe-plasma[fs-access] rejected origin=" + request.origin
+                        + " handleType=" + request.handleType);
+                    request.reject();
+                }
+                // Reject legacy storage-quota upgrades (window.webkitStorageInfo /
+                // navigator.webkitPersistentStorage). Deprecated in modern Chromium
+                // but the signal still fires from old pages. Default is to ignore,
+                // but explicit reject pins it against future Qt default-flips.
+                onQuotaRequested: function(request) {
+                    console.warn(Log.policy, "iframe-plasma[quota] rejected origin=" + request.origin
+                        + " requestedSize=" + request.requestedSize);
+                    request.reject();
+                }
+
+                // Open user-clicked links externally; iframe sub-resources still load normally.
+                // Restrict to web/mail/tel schemes — anything else (e.g. file:, smb:,
+                // vnc:, ssh:, custom xdg handlers) could let a compromised page invoke
+                // arbitrary system URI handlers click-less from inside the embedded view.
+                onNewWindowRequested: function(request) {
+                    const scheme = String(request.requestedUrl).split(":", 1)[0].toLowerCase();
+                    const safe = scheme === "http" || scheme === "https"
+                              || scheme === "mailto" || scheme === "tel";
+                    if (safe) {
+                        Qt.openUrlExternally(request.requestedUrl);
+                    } else {
+                        console.warn(Log.policy, "iframe-plasma[nav] blocked external open; scheme=" + scheme);
+                    }
+                    request.action = WebEngineNewWindowRequest.IgnoreRequest;
+                }
             }
-        }
-
-        // Reload after a renderer crash, with a time-windowed budget: at most
-        // one retry per 60 s. Without a handler the view just goes blank — both
-        // a DoS vector (hostile page crashes its own renderer to disable the
-        // widget) and a forensics gap. The previous one-shot latch reset only
-        // on a later SUCCESS, so a tab that crashed and then kept failing to
-        // load ignored every subsequent crash for the popup-session lifetime
-        // (permanently blank until plasmashell restart). The window lets a
-        // genuine later crash recover while still stopping a crash-loop from
-        // hammering plasmashell.
-        //
-        // Reset loginInProgress for the same reason tab.reload()/hardReload()
-        // do (see contract at L90-95): the crash destroyed any in-flight form
-        // contents and the post-reload LoadSucceeded on Authelia would
-        // otherwise take the "hide overlay" branch and leave the operator
-        // typing into a bare Authelia form with no trust signal. Same
-        // bug-class as bb69913's broadcast-reload latch leak.
-        property double _lastRenderRetryMs: 0
-        onRenderProcessTerminated: function(status, exitCode) {
-            console.warn(Log.load, "iframe-plasma[render] terminated status=" + status
-                + " exitCode=" + exitCode);
-            if (status === WebEngineView.NormalTerminationStatus) return;
-            const now = Date.now();
-            if (now - _lastRenderRetryMs < 60000) {
-                console.warn(Log.load, "iframe-plasma[render] crash within 60s window, not retrying");
-                tab.loadStatus = "err";
-                statusOverlay.showError("Renderer crashed");
-                return;
-            }
-            _lastRenderRetryMs = now;
-            tab.loginInProgress = false;
-            webview.reload();
-        }
-
-        onAuthenticationDialogRequested: function(request) {
-            console.debug(Log.auth, "iframe-plasma[auth] dialog requested type=" + request.type
-                + " url=" + request.url + " realm=" + request.realm);
-            tab.basicAuthRequested(request);
-        }
-
-        // Default action for an unhandled certificateError in Qt 6 is reject;
-        // record the event so tlsOk falls to ⚠ instead of staying green from
-        // the stale onLoadStartedStatus url prefix. Explicitly reject for
-        // clarity (the C0 widening + scheme allowlist already block dataloss
-        // paths, so we never want to ignoreCertificateError).
-        onCertificateError: function(error) {
-            console.warn(Log.load, "iframe-plasma[cert] error type=" + error.type
-                + " url=" + Log.redactUrl(error.url) + " overridable=" + error.overridable
-                + " desc=" + error.description);
-            tab.lastCertError = true;
-            error.rejectCertificate();
-        }
-
-        onJavaScriptConsoleMessage: function(level, message, lineNumber, sourceID) {
-            const safe = String(message || "").replace(/[\x00-\x1f\x7f]/g, '?').slice(0, 512);
-            // Untrusted, unbounded third-party output: debug-only trace in
-            // the `page` category (page errors surface as warnings).
-            Log.pageConsole(level, "iframe-plasma[popup-console] " + safe);
-        }
-
-        // Defense-in-depth: deny every page-driven permission upgrade. The
-        // widget is a passive dashboard viewer with no UX path to surface a
-        // permission prompt, so a panel that calls getUserMedia / geolocation
-        // / notifications must never silently inherit a future Qt default-
-        // grant. Cover both per-origin (onFeaturePermissionRequested) and
-        // per-frame (onPermissionRequested, Qt 6.8+) shapes.
-        onFeaturePermissionRequested: function(securityOrigin, feature) {
-            console.warn(Log.policy, "iframe-plasma[perm] denied feature=" + feature
-                + " origin=" + securityOrigin);
-            webview.grantFeaturePermission(securityOrigin, feature, false);
-        }
-        onPermissionRequested: function(perm) {
-            console.warn(Log.policy, "iframe-plasma[perm] denied permission=" + perm.permissionType
-                + " origin=" + perm.origin);
-            perm.deny();
-        }
-        // Fullscreen takeover by a hostile dashboard could mimic the lock
-        // screen / fake an Authelia prompt; reject unconditionally.
-        onFullScreenRequested: function(request) {
-            console.warn(Log.policy, "iframe-plasma[fs] rejected fullScreen request toggleOn=" + request.toggleOn);
-            request.reject();
-        }
-        // Reject custom-protocol registration; widget never wants page-driven
-        // mailto/web+xxx hijacking.
-        onRegisterProtocolHandlerRequested: function(request) {
-            console.warn(Log.policy, "iframe-plasma[proto] rejected scheme=" + request.scheme
-                + " url=" + request.url);
-            request.reject();
-        }
-        // Reject page-initiated file dialogs — closes the exfiltration vector
-        // from a compromised panel that auto-clicks an <input type=file>.
-        onFileDialogRequested: function(request) {
-            console.warn(Log.policy, "iframe-plasma[file] rejected dialog mode=" + request.mode);
-            request.dialogReject();
-        }
-        // Suppress the default Chromium context menu. Kiosk has no need for
-        // Inspect / View source / Save link / Save image, and a bystander
-        // right-click otherwise exposes inline secrets and reaches a
-        // file-save dialog that bypasses onDownloadRequested under some
-        // Qt 6.x builds.
-        onContextMenuRequested: function(request) {
-            console.debug(Log.policy, "iframe-plasma[ctx] suppressed menu pos=" + request.position
-                + " mediaType=" + request.mediaType);
-            request.accepted = true;
-        }
-        // Reject client-certificate auto-selection. With the shared SSO
-        // profile any imported ~/.pki cert becomes a candidate; Qt's
-        // default for a single-match CertificateRequest is silent select,
-        // which would leak the kiosk identity to any origin that flips on
-        // optional client-auth.
-        onSelectClientCertificate: function(selection) {
-            console.warn(Log.policy, "iframe-plasma[cert] rejected client-cert request host="
-                + selection.host + " count=" + selection.certificates.length);
-            selection.selectNone();
-        }
-        // Cancel WebAuthn ceremonies — the system FIDO/passkey prompt
-        // escapes the kiosk chrome and the widget never legitimately needs
-        // WebAuthn (basic-auth via interceptor only).
-        onWebAuthUxRequested: function(request) {
-            console.warn(Log.policy, "iframe-plasma[webauth] cancelled state=" + request.state);
-            request.cancel();
-        }
-        // Suppress page-controlled tooltips. Default Qt behaviour renders the
-        // tooltip outside the WebEngineView's clipped geometry (it's a top-
-        // level platform widget), so a compromised dashboard can paint
-        // attacker-controlled text — fake UI prompts, spoofed paths — over
-        // arbitrary screen regions next to the kiosk. `accepted = true`
-        // tells Qt the QML side took ownership and prevents the default
-        // tooltip from appearing.
-        onTooltipRequested: function(request) {
-            request.accepted = true;
-        }
-        // Reject `<input type=color>` (and any JS-driven .click() on one).
-        // The default action opens the platform's native colour picker as a
-        // modal top-level window — same modal-over-kiosk hazard as a
-        // surprise auth dialog, with no UX path to surface it to the
-        // operator. The widget never legitimately needs a colour picker.
-        onColorDialogRequested: function(request) {
-            console.warn(Log.policy, "iframe-plasma[color] rejected color dialog");
-            request.dialogReject();
-        }
-        // Reject getDisplayMedia / screen-capture requests outright. The
-        // generic permissionRequested/featurePermissionRequested denials
-        // already cover most permission flavours, but desktopMediaRequested
-        // is a separate signal (Qt 6.8+) that, if unhandled, can present
-        // the screen-picker chooser even before the permission dialog
-        // fires. A hostile page calling navigator.mediaDevices.getDisplay-
-        // Media() over the SSO origin must not get any UI surface here.
-        onDesktopMediaRequested: function(request) {
-            console.warn(Log.policy, "iframe-plasma[dispmedia] cancelled screen-capture request");
-            request.cancel();
-        }
-        // Reject File System Access API (showOpenFilePicker / showSave-
-        // FilePicker / showDirectoryPicker). FileDialogRequested handles
-        // the legacy <input type=file>, but fileSystemAccessRequested is
-        // a separate request type that wraps Chromium's modern FS-Access
-        // API — same exfiltration / write surface, separate hook. The
-        // widget never legitimately writes to disk.
-        onFileSystemAccessRequested: function(request) {
-            console.warn(Log.policy, "iframe-plasma[fs-access] rejected origin=" + request.origin
-                + " handleType=" + request.handleType);
-            request.reject();
-        }
-        // Reject legacy storage-quota upgrades (window.webkitStorageInfo /
-        // navigator.webkitPersistentStorage). Deprecated in modern Chromium
-        // but the signal still fires from old pages. Default is to ignore,
-        // but explicit reject pins it against future Qt default-flips.
-        onQuotaRequested: function(request) {
-            console.warn(Log.policy, "iframe-plasma[quota] rejected origin=" + request.origin
-                + " requestedSize=" + request.requestedSize);
-            request.reject();
-        }
-
-        // Open user-clicked links externally; iframe sub-resources still load normally.
-        // Restrict to web/mail/tel schemes — anything else (e.g. file:, smb:,
-        // vnc:, ssh:, custom xdg handlers) could let a compromised page invoke
-        // arbitrary system URI handlers click-less from inside the embedded view.
-        onNewWindowRequested: function(request) {
-            const scheme = String(request.requestedUrl).split(":", 1)[0].toLowerCase();
-            const safe = scheme === "http" || scheme === "https"
-                      || scheme === "mailto" || scheme === "tel";
-            if (safe) {
-                Qt.openUrlExternally(request.requestedUrl);
-            } else {
-                console.warn(Log.policy, "iframe-plasma[nav] blocked external open; scheme=" + scheme);
-            }
-            request.action = WebEngineNewWindowRequest.IgnoreRequest;
         }
     }
 
     StatusOverlay {
         id: statusOverlay
         anchors.fill: parent
-        onReloadClicked: webview.reload()
+        onReloadClicked: tab.webView?.reload()
         onOpenExternalClicked: openExternal()
         onLoginClicked: tab.loginInProgress = true
     }
@@ -833,7 +867,7 @@ Item {
     // No staleness-reload here: a full-rep tab resumes instantly with its
     // page state intact (Hybrid intent); only Discarded->Active reloads.
     WebViewLifecycle {
-        target: webview
+        target: viewLoader.item
         label: tab.lifecycleLabel
         desiredActive: tab.desiredActive
         freezeDelaySec: tab.freezeDelaySec
@@ -856,15 +890,16 @@ Item {
     // runJavaScript is safe to queue mid-load; Chromium binds it to
     // the current document.
     function applyImmediately(sel) {
-        if (!webview) return;
+        const v = tab.webView;
+        if (!v) return;   // not shown yet — applied on its first load
         const s = String(sel || "");
         if (s.length === 0) {
-            webview.runJavaScript(CropEngine.buildClearJs(), function(r) {
+            v.runJavaScript(CropEngine.buildClearJs(), function(r) {
                 console.debug(Log.thumb, "iframe-plasma[popup] applyImmediately(clear) = " + r);
             });
             return;
         }
-        webview.runJavaScript(CropEngine.buildApplyJs(s), function(r) {
+        v.runJavaScript(CropEngine.buildApplyJs(s), function(r) {
             console.debug(Log.thumb, "iframe-plasma[popup] applyImmediately(" + JSON.stringify(s) + ") = " + r);
         });
     }
@@ -876,7 +911,7 @@ Item {
         // transient sub-resource loads (the picker's teardown can
         // briefly leave loading=true with no subsequent LoadSucceeded
         // event to retry from). runJavaScript is safe to queue mid-load.
-        if (webview && String(webview.url) !== "about:blank") {
+        if (tab.webView && String(tab.webView.url) !== "about:blank") {
             _applyPopupSelector();
         }
     }
@@ -885,7 +920,8 @@ Item {
     // Chromium-only API — Firefox/Safari return undefined here, no consequence
     // since we ship our own Chromium.
     function _captureNavTiming() {
-        webview.runJavaScript(
+        if (!tab.webView) return;
+        tab.webView.runJavaScript(
             "(function(){try{var n=performance.getEntriesByType('navigation')[0];" +
             "return n?{status:n.responseStatus||0,duration:Math.round(n.duration||0)}:null;}catch(e){return null;}})()",
             function(result) {
@@ -901,6 +937,7 @@ Item {
     }
 
     Component.onCompleted: {
+        if (tab.desiredActive) tab._viewWanted = true;
         if (tab.debugPort > 0) {
             // remote debugging is enabled via env var when plasmashell starts;
             // we just surface the URL here as a hint
