@@ -13,6 +13,7 @@ import org.kde.plasma.core as PlasmaCore
 import org.kde.kirigami as Kirigami
 import "./CropEngine.js" as CropEngine
 import "./RowSchema.js" as RowSchema
+import "./ThumbRetryPolicy.js" as ThumbRetryPolicy
 import "./UrlUtils.js" as UrlUtils
 
 PlasmoidItem {
@@ -1763,11 +1764,13 @@ PlasmoidItem {
                 // bounded-backoff retry below, and force a reload-on-promotion
                 // through WebViewLifecycle.priorFailed.
                 property string loadStatus: "loading"   // loading|ok|err|blank
-                // Bounded-backoff retry counter. Reset to 0 on a successful
-                // load, on a URL change, and each time the auto-cycle lands on
-                // this tab (onOwnIsCurrentChanged) — so a transient failure
-                // self-heals but a permanently-broken URL backs off instead of
-                // hammering the server forever.
+                // Bounded-backoff retry counter. Reset to 0 once a frame is
+                // confirmed (a CROP, a "matched" crop, or a clean load that
+                // needs no crop), on a URL change, and each time the
+                // auto-cycle lands on this tab (onOwnIsCurrentChanged) — so a
+                // transient failure self-heals but a permanently-broken URL
+                // backs off instead of hammering the server forever. A bare
+                // LoadSucceeded does NOT refill it: see ThumbRetryPolicy.js.
                 property int _retryAttempt: 0
                 // Bumped every time the in-page CropEngine logs a successful
                 // CROP. applyThumbCrop snapshots this before its async
@@ -1971,12 +1974,14 @@ PlasmoidItem {
                         return;
                     }
                     if (info.status === WebEngineView.LoadSucceededStatus) {
-                        // A clean load clears the error state and resets the
-                        // bounded-backoff budget. The "blank" override may be
-                        // re-applied below by the applyThumbCrop callback if
-                        // CropEngine reports no frame was produced.
+                        // A clean load clears the error state. The retry
+                        // budget is only refilled here when there is no crop
+                        // step; a cropped page must first prove it paints
+                        // (the "blank" override may be re-applied below by
+                        // the applyThumbCrop callback).
                         miniView.loadStatus = "ok";
-                        miniView._retryAttempt = 0;
+                        miniView._retryAttempt = ThumbRetryPolicy.attemptAfterLoadSucceeded(
+                            miniView._retryAttempt, miniView.ownSelector.length > 0);
                         thumbRetryTimer.stop();
                         root.setThumbError(miniView.ownIndex, "");
                         if (miniView.ownSelector.length > 0) {
@@ -2039,7 +2044,7 @@ PlasmoidItem {
                 // Bounded-backoff retry for a failed ("err") or blank-rendered
                 // ("blank") thumbnail. arm() escalates the delay each attempt
                 // and gives up after the schedule is exhausted; the budget is
-                // reset on a successful load, on a URL change, and each time
+                // reset once a frame is confirmed, on a URL change, and each time
                 // the auto-cycle lands on this tab (so a permanently-broken URL
                 // backs off instead of being hammered, but a tab the user keeps
                 // rotating past still gets a fresh chance). Reloads bypass cache
@@ -2047,14 +2052,14 @@ PlasmoidItem {
                 Timer {
                     id: thumbRetryTimer
                     repeat: false
-                    readonly property var _backoffMs: [3000, 10000, 30000]
                     function arm() {
-                        if (miniView._retryAttempt >= _backoffMs.length) {
+                        const ms = ThumbRetryPolicy.backoffMs(miniView._retryAttempt);
+                        if (ms < 0) {
                             console.warn(Log.load, "iframe-plasma[mini-retry] backoff exhausted idx="
                                 + miniView.ownIndex);
                             return;
                         }
-                        interval = _backoffMs[miniView._retryAttempt];
+                        interval = ms;
                         miniView._retryAttempt++;
                         restart();
                     }
@@ -2101,7 +2106,9 @@ PlasmoidItem {
                         if (safe.indexOf('CROP') !== -1) {
                             // Record the crop so a still-in-flight applyThumbCrop
                             // callback can't re-blank a slot that just painted.
+                            // A painted frame also refills the retry budget.
                             miniView._cropSeenSerial++;
+                            miniView._retryAttempt = 0;
                             if (miniView.loadStatus === "blank") {
                                 miniView.loadStatus = "ok";
                                 miniView._retryAttempt = 0;
@@ -2157,19 +2164,28 @@ PlasmoidItem {
                     runJavaScript(CropEngine.buildApplyJs(selector, opts), function(r) {
                         console.debug(Log.thumb, "iframe-plasma[thumb] applyThumbCrop("
                             + JSON.stringify(selector) + ") = " + r);
+                        if (r === "matched") {
+                            miniView._retryAttempt = 0;   // frame confirmed
+                            return;
+                        }
                         // CropEngine matched the canvas but it hadn't painted a
                         // frame yet (page is un-blanked, would otherwise look
-                        // empty). Mark "blank" and arm a retry — but only while
-                        // this is still a clean load AND no CROP landed since we
-                        // dispatched (else this stale result would re-blank a
-                        // slot the canvas already painted). The in-page 3s
-                        // interval also keeps trying, but it stops once the view
-                        // freezes, so the QML retry is the durable recovery.
-                        if (r === "canvas-pending" && miniView.loadStatus === "ok"
-                            && miniView._cropSeenSerial === cropEpoch) {
+                        // empty). Mark "blank" — but only while this is still a
+                        // clean load AND no CROP landed since we dispatched
+                        // (else this stale result would re-blank a slot the
+                        // canvas already painted). Only the thumbnail on screen
+                        // arms a retry: a hidden page doesn't paint, so it is
+                        // reloaded on its next landing (priorFailed) instead.
+                        // The in-page 3s interval also keeps trying, but it
+                        // stops once the view freezes.
+                        if (ThumbRetryPolicy.shouldMarkBlank(r, miniView.loadStatus,
+                                miniView._cropSeenSerial === cropEpoch)) {
                             miniView.loadStatus = "blank";
                             root.setThumbError(miniView.ownIndex, i18n("Rendering…"));
-                            thumbRetryTimer.arm();
+                            if (ThumbRetryPolicy.shouldArmBlankRetry(miniView.ownIsCurrent,
+                                                                     root.compactObservable)) {
+                                thumbRetryTimer.arm();
+                            }
                         }
                     });
                 }
