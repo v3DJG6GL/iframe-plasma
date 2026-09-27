@@ -45,6 +45,9 @@ Item {
     // step and back does not silently re-cover the form mid-typing.
     property bool loginInProgress: false
     onDesiredActiveChanged: {
+        if (tab.desiredActive && !tab._viewWanted) {
+            console.debug(Log.lifecycle, "iframe-plasma[lifecycle] " + tab.lifecycleLabel + " view created");
+        }
         if (tab.desiredActive) tab._viewWanted = true;
         if (tab.desiredActive && tab.webView
             && tab.webView.lifecycleState !== WebEngineView.LifecycleState.Active) {

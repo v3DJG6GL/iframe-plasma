@@ -427,6 +427,12 @@ PlasmoidItem {
     readonly property bool screenLocked: root.authSupport
                                          && root.authSupport.screenLocked === true
     readonly property bool fullRepVisible: !root.inPanel || root.expanded
+    // Popup tabs are only created / woken while fullRepVisible, so trace
+    // every flip with its inputs — a location glitch (inPanel=false) wakes
+    // the popup's current tab just like opening the popup does.
+    onFullRepVisibleChanged: console.debug(Log.lifecycle, "iframe-plasma[popup] fullRepVisible="
+        + root.fullRepVisible + " expanded=" + root.expanded + " inPanel=" + root.inPanel
+        + " location=" + Plasmoid.location + " formFactor=" + Plasmoid.formFactor)
     // Set by the compact representation from its panel window's visibility;
     // defaults true so an absent window never wrongly pauses the thumbnail.
     property bool compactWindowVisible: true
