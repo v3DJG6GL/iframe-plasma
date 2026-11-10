@@ -118,6 +118,7 @@ jobs:
             libkf6i18n-dev libkf6package-dev libplasma-dev \
             qt6-webengine-dev qt6-webengine-dev-tools \
             python3-dbusmock python3-dbus \
+            appstream \
             xvfb
           # setup-node's tool-cache layout, so other jobs can reuse it.
           node_dir="/opt/hostedtoolcache/node/${NODE_VERSION}/x64"
