@@ -31,9 +31,9 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: ubuntu:26.04
-      # Persistent download cache — see ci.yml's header.
+      # Persistent apt download cache — see ci.yml's header.
       volumes:
-        - /persistent/iframe-plasma:/cache
+        - /persistent/apt:/cache/apt
     env:
       DEBIAN_FRONTEND: noninteractive
       DISTRO: ubuntu26.04
