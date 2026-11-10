@@ -72,7 +72,7 @@ jobs:
       # suite, which runs `node --test` (Node 18+; jammy/neon ship 12.22).
       # cmake's `find_program(NODEJS …)` resolves to this one.
       # renovate: datasource=node-version depName=node
-      NODE_VERSION: 24.21.0
+      NODE_VERSION: 24.22.2
     steps:
       - name: Install build + test deps and Node
         # `full-upgrade` first: the pinned kdeneon/plasma image carries
