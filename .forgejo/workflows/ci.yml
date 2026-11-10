@@ -21,9 +21,11 @@
 #       /persistent/ccache     → /cache/ccache     ccache (CCACHE_DIR)
 #       /persistent/apt        → /cache/apt        downloaded .debs, one
 #                                                  subdirectory per distro
-#       /persistent/toolcache  → /opt/hostedtoolcache  Node, in setup-node's
-#                                                  layout (node/<ver>/x64)
-#     Each must be listed in the runner config's container.valid_volumes, or
+#     Node goes into /opt/hostedtoolcache in setup-node's layout
+#     (node/<ver>/x64): the runner itself mounts its persistent tool cache
+#     there in every job container, so it must NOT be listed under
+#     `volumes:` again (duplicate mount point → the job dies before step 1).
+#     Each mount must be listed in the runner config's container.valid_volumes, or
 #     the mount is dropped with "[<path>] is not a valid volume, will be
 #     ignored" and that cache is just empty (the first step warns). Writable
 #     by every repo on this runner — accepted, all are the owner's. apt
@@ -74,7 +76,6 @@ jobs:
       volumes:
         - /persistent/ccache:/cache/ccache
         - /persistent/apt:/cache/apt
-        - /persistent/toolcache:/opt/hostedtoolcache
     env:
       QT_QPA_PLATFORM: offscreen
       # WebEngine can't use Chromium's setuid sandbox inside the
