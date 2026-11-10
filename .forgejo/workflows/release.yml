@@ -1,0 +1,122 @@
+# SPDX-FileCopyrightText: 2026 v3DJG6GL <72495210+v3DJG6GL@users.noreply.github.com>
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Release builds: a binary .deb + .tar.gz (CPack, cmake/Packaging.cmake)
+# built in an Ubuntu 26.04 container, each with a .sha256 next to it.
+#
+#   * push a tag vX.Y.Z (must equal project(VERSION) in CMakeLists.txt)
+#       → build, publish a Forgejo release with the packages, release notes
+#         taken from the `## [X.Y.Z]` section of CHANGELOG.md, then start
+#         mirror-gh-releases.yml (copies the release to GitHub).
+#   * manual run (workflow_dispatch) → build only; packages become run
+#     artifacts, nothing is published.
+#
+# The binaries link against Ubuntu 26.04's Qt/KF6 (the .deb's Depends pins
+# the minimum versions); other distros build from source (README → Install).
+# Conventions (unqualified actions, Forgejo upload-artifact): see ci.yml.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    name: Build packages (Ubuntu 26.04)
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:26.04
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      DISTRO: ubuntu26.04
+    steps:
+      - name: Install build deps (Node for the JavaScript actions)
+        run: |
+          set -eu
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential git ca-certificates curl nodejs dpkg-dev file \
+            cmake extra-cmake-modules gettext \
+            libkf6wallet-dev libkf6kcmutils-dev libkf6coreaddons-dev \
+            libkf6i18n-dev libkf6package-dev libplasma-dev \
+            qt6-webengine-dev qt6-webengine-dev-tools
+
+      - uses: actions/checkout@v6
+
+      - name: Determine version
+        run: |
+          set -eu
+          version=$(sed -nE 's/^project\(iframe-plasma VERSION ([0-9.]+).*/\1/p' CMakeLists.txt)
+          [ -n "$version" ] || { echo "::error::no project(VERSION) in CMakeLists.txt"; exit 1; }
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match CMakeLists.txt version $version"
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_TESTING=OFF
+          cmake --build build -j$(nproc)
+
+      - name: Package
+        run: |
+          set -eu
+          cpack --config build/CPackConfig.cmake -B build/cpack
+          mkdir -p dist
+          arch=$(dpkg --print-architecture)
+          cp build/cpack/iframe-plasma_*.deb "dist/iframe-plasma_${VERSION}_${DISTRO}_${arch}.deb"
+          cp build/cpack/iframe-plasma-*.tar.gz "dist/iframe-plasma-${VERSION}-${DISTRO}-${arch}.tar.gz"
+          cd dist
+          for f in *; do sha256sum "$f" > "$f.sha256"; done
+          ls -l
+          dpkg-deb -f *.deb Package Version Architecture Depends
+
+      - name: Release notes from CHANGELOG.md
+        run: |
+          set -eu
+          awk -v v="$VERSION" '
+            /^## \[/ { if (found) exit; if (index($0, "## [" v "]") == 1) { found = 1; next } }
+            found' CHANGELOG.md > release-notes.md
+          if ! grep -q '[^[:space:]]' release-notes.md; then
+            echo "::warning::CHANGELOG.md has no [$VERSION] section"
+            echo "See [CHANGELOG.md](CHANGELOG.md)." > release-notes.md
+          fi
+          cat release-notes.md
+
+      - name: Upload packages as run artifact
+        uses: forgejo/upload-artifact@v5
+        with:
+          name: iframe-plasma-${{ env.VERSION }}-${{ env.DISTRO }}
+          path: dist/
+
+      - name: Publish Forgejo release
+        if: github.ref_type == 'tag'
+        uses: https://code.forgejo.org/actions/forgejo-release@v2.13.4
+        with:
+          direction: upload
+          release-dir: dist
+          release-notes-file: release-notes.md
+          token: ${{ secrets.GITHUB_TOKEN }}
+          override: false
+
+      # Forgejo emits no `release` event for releases created with the Actions
+      # token, so start the GitHub release mirror explicitly. Non-fatal: its
+      # scheduled reconcile catches up.
+      - name: Trigger the GitHub release mirror
+        if: github.ref_type == 'tag'
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          # ref must be a branch carrying the workflow file; this run is on a tag.
+          curl -sS --fail-with-body -X POST -H "Authorization: token $TOKEN" \
+            -H 'Content-Type: application/json' \
+            "$GITHUB_API_URL/repos/$REPO/actions/workflows/mirror-gh-releases.yml/dispatches" \
+            -d '{"ref":"master"}' \
+            || echo "::warning::mirror-gh-releases dispatch failed — the scheduled reconcile will catch up"

@@ -1,6 +1,6 @@
 # iframe-plasma
 
-[![CI](https://github.com/v3DJG6GL/iframe-plasma/actions/workflows/ci.yml/badge.svg)](https://github.com/v3DJG6GL/iframe-plasma/actions/workflows/ci.yml)
+[![CI](https://forgejo.informethic.ch/v3djg6gl/iframe-plasma/actions/workflows/ci.yml/badge.svg?branch=master)](https://forgejo.informethic.ch/v3djg6gl/iframe-plasma/actions?workflow=ci.yml)
 [![REUSE status](https://api.reuse.software/badge/github.com/v3DJG6GL/iframe-plasma)](https://api.reuse.software/info/github.com/v3DJG6GL/iframe-plasma)
 
 A KDE Plasma 6 widget that embeds authenticated web pages — primarily designed
@@ -56,6 +56,22 @@ support for **Authelia SSO** and **HTTP Basic Auth** behind a reverse proxy.
   later — verify with `grep QtWebEngineProcess /etc/apparmor.d/plasmashell`).
 
 ## Install
+
+Development happens on [Forgejo](https://forgejo.informethic.ch/v3djg6gl/iframe-plasma);
+[GitHub](https://github.com/v3DJG6GL/iframe-plasma) is a read-only mirror.
+
+### Prebuilt package (Ubuntu 26.04)
+
+Each [release](https://forgejo.informethic.ch/v3djg6gl/iframe-plasma/releases)
+ships a `.deb` (and a `.tar.gz` of the same `/usr` tree) built against Ubuntu
+26.04's Qt / KF6, with a `.sha256` next to each file:
+
+```bash
+sha256sum -c iframe-plasma_*_ubuntu26.04_amd64.deb.sha256
+sudo apt install ./iframe-plasma_*_ubuntu26.04_amd64.deb
+```
+
+Other distributions: build from source as below.
 
 ### Build dependencies
 
@@ -344,8 +360,10 @@ Node 18+ and `npm` are required for the `-L js` slice (jsdom is installed by
 the first run automatically). All other layers depend only on the same Qt /
 KF6 / Plasma packages used to build the widget itself.
 
-GitHub Actions runs the full suite plus REUSE and pre-commit linting on every
-push and pull request — see [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+Forgejo Actions runs the full suite plus pre-commit linting (including REUSE)
+on every push and pull request — see [`.forgejo/workflows/ci.yml`](.forgejo/workflows/ci.yml).
+Pushing a `vX.Y.Z` tag builds the release packages
+([`.forgejo/workflows/release.yml`](.forgejo/workflows/release.yml)).
 
 ## Acknowledgements
 

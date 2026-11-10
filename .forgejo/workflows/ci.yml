@@ -1,40 +1,43 @@
 # SPDX-FileCopyrightText: 2026 v3DJG6GL <72495210+v3DJG6GL@users.noreply.github.com>
 # SPDX-License-Identifier: AGPL-3.0-or-later
-
+#
+# Forgejo Actions CI (forgejo.informethic.ch). GitHub is a push mirror only:
+# no workflows run there.
+#
+# Instance conventions (same as the other repos on this instance):
+#   * Actions are referenced unqualified (owner/repo@ref): DEFAULT_ACTIONS_URL
+#     points at this instance, so they resolve against its local pull mirrors
+#     (org `actions`, `forgejo`). Before bumping an @version, confirm the
+#     mirror has synced that tag. Actions without a local mirror use a full
+#     https:// URL.
+#   * upload-artifact comes from the Forgejo fork: GitHub's v4+ refuses
+#     non-github.com instances, so never use actions/upload-artifact here.
+#   * Container jobs: the runner executes JavaScript actions with the job
+#     container's own `node`, so a container without Node must install it
+#     before the first `uses:` step (see build-and-test).
 name: CI
 on:
   push:
-    branches: [main, master]
+    branches: [master]
   pull_request:
   workflow_dispatch:
 
-# Cancel in-flight runs for the same branch on a new push.
+# Cancel superseded runs for the same ref.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   # -------------------------------------------------------------------
-  # REUSE/SPDX compliance — every tracked file must carry copyright +
-  # licence info (inline header or REUSE.toml annotation).
-  # -------------------------------------------------------------------
-  reuse:
-    name: REUSE compliance
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: fsfe/reuse-action@v6
-
-  # -------------------------------------------------------------------
-  # pre-commit lints (whitespace, shellcheck, cmake-format/lint, reuse).
-  # qmllint runs in build-and-test where Qt is available.
+  # pre-commit lints (whitespace, REUSE/SPDX compliance, shellcheck,
+  # cmake-lint). qmllint runs in build-and-test where Qt is available.
   # -------------------------------------------------------------------
   lint:
     name: Lint (pre-commit)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: https://github.com/actions/setup-python@v6
         with:
           python-version: '3.14.8'
       - run: pip install pre-commit
@@ -47,12 +50,7 @@ jobs:
   # kdeneon/plasma:unstable is the only mainstream image that ships a
   # working combination of Qt 6.7+, KF6, plasma-workspace and qt6-
   # webengine-dev. Pinned by content digest so upstream image churn
-  # can't break CI silently — bump via:
-  #
-  #     docker pull kdeneon/plasma:unstable
-  #     docker inspect --format='{{.RepoDigests}}' kdeneon/plasma:unstable
-  #
-  # and paste the new sha256:… into the `image:` line.
+  # can't break CI silently — Renovate bumps the digest.
   # -------------------------------------------------------------------
   build-and-test:
     name: Build + test (kdeneon/plasma)
@@ -70,10 +68,13 @@ jobs:
       QT_QUICK_BACKEND: software
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       DEBIAN_FRONTEND: noninteractive
+      # Node for the JavaScript actions (see header) and for the tests/js
+      # suite, which runs `node --test` (Node 18+; jammy/neon ship 12.22).
+      # cmake's `find_program(NODEJS …)` resolves to this one.
+      # renovate: datasource=node-version depName=node
+      NODE_VERSION: 24.21.0
     steps:
-      - uses: actions/checkout@v6
-
-      - name: Install build + test deps
+      - name: Install build + test deps and Node
         # `full-upgrade` first: the pinned kdeneon/plasma image carries
         # libgpgmepp6 1.16 / libharfbuzz0b 2.7 / libgdk-pixbuf 2.36 from
         # jammy main, but neon's unstable repo has since moved kf6-kwallet
@@ -81,38 +82,30 @@ jobs:
         # a full upgrade, the targeted `apt-get install` below hits
         # "unmet dependencies: kf6-kwallet : Depends: libgpgmepp6 (>= 1.23.2)
         # but 1.16.0-1.2ubuntu4.2 is to be installed" and exits 100 before
-        # CMake ever runs.  Upgrading the neon-rebased base packages
-        # resolves the libjpeg-dev / libgdk-pixbuf-2.0-dev / libharfbuzz-dev
-        # / libgpgmepp6 conflicts in one pass.
+        # CMake ever runs.
         #
         # `--allow-downgrades` on the install step: after the full-upgrade,
         # harfbuzz0b / libjpeg-turbo8 / libraqm0 are at neon-unstable's
         # newer rebase, but jammy-main's `libharfbuzz-dev` / `libjpeg-dev`
-        # (pulled in transitively by qt6-webengine-dev → libcupsimage2-dev /
-        # libtiff-dev / libgtk-3-dev) depend on the older versions, so apt
-        # wants to step those runtime libs back down to match. Without the
-        # flag apt exits 100 with "Packages were downgraded and -y was used
-        # without --allow-downgrades".
+        # (pulled in transitively by qt6-webengine-dev) depend on the older
+        # versions, so apt wants to step those runtime libs back down.
         run: |
+          set -eu
           apt-get update
           apt-get -y full-upgrade
           apt-get install -y --no-install-recommends --allow-downgrades \
-            build-essential \
+            build-essential git ca-certificates curl xz-utils \
             cmake extra-cmake-modules gettext ccache \
             libkf6wallet-dev libkf6kcmutils-dev libkf6coreaddons-dev \
             libkf6i18n-dev libkf6package-dev libplasma-dev \
             qt6-webengine-dev qt6-webengine-dev-tools \
             python3-dbusmock python3-dbus \
             xvfb
+          curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" \
+            | tar -xJ -C /usr/local --strip-components=1
+          node --version
 
-      # Node from setup-node, NOT apt: jammy/neon ship nodejs 12.22, but the
-      # tests/js suite runs `node --test` (the built-in test runner), which
-      # only exists on Node 18+. setup-node prepends its Node to PATH before
-      # Configure, so cmake's `find_program(NODEJS …)` resolves to this one.
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '24.21.0'
+      - uses: actions/checkout@v6
 
       - name: Cache ccache
         uses: actions/cache@v5
@@ -135,7 +128,7 @@ jobs:
 
       - name: Upload CTest logs on failure
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: forgejo/upload-artifact@v5
         with:
           name: ctest-logs
           path: build/Testing/

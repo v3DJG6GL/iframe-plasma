@@ -75,4 +75,6 @@ if(BUILD_TESTING)
     add_subdirectory(tests)
 endif()
 
+include(cmake/Packaging.cmake)
+
 feature_summary(WHAT ALL FATAL_ON_MISSING_REQUIRED_PACKAGES)

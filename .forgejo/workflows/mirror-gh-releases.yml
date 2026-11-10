@@ -1,0 +1,211 @@
+# SPDX-FileCopyrightText: 2026 v3DJG6GL <72495210+v3DJG6GL@users.noreply.github.com>
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# .forgejo/workflows/mirror-gh-releases.yml
+#
+# One-way sync of published releases (metadata + package assets) from this instance to the
+# git mirror at github.com/v3DJG6GL/iframe-plasma. The push mirror only moves git data
+# (GitHub shows the v* tags but none of the releases), so this recreates each Forgejo
+# release there and fills in missing assets. It compares, copies only what drifted, and
+# never deletes on the GitHub side. Copied from futo-keyboard-remotewhisper's workflow.
+# A separate workflow rather than a job in release.yml: at publish time the new tag may not
+# have reached GitHub yet (the push mirror syncs on its own schedule), and creating a GitHub
+# release for a missing tag would silently create that tag at the default branch HEAD, i.e.
+# the wrong commit. This workflow skips tags the mirror hasn't delivered and picks them up
+# on the next run; it also backfills every earlier release.
+#
+# Triggers: release.yml dispatches it after publishing (Forgejo emits no `release` event for
+# releases created by the Actions token), manual releases/edits emit `release`, and two
+# daily crons reconcile anything missed.
+#
+# Setup: secret GH_MIRROR_TOKEN (repository or user level), a GitHub token that can write
+# releases on the mirror repo: classic with `repo` scope, or fine-grained with
+# "Contents: read and write" on that repo. Without it the job only logs a notice.
+#
+# Sync semantics:
+#   * Drafts are skipped.
+#   * Existing GitHub releases get name/body/prerelease drift patched.
+#   * Assets are matched by name and compared by size (neither API exposes a digest); every
+#     downloaded byte is verified against the release's own <asset>.sha256 file before it is
+#     uploaded. A size mismatch means an interrupted upload, so the GitHub copy is replaced.
+#     An asset without a published digest is skipped with a warning, never uploaded.
+#   * Releases are processed oldest first, so GitHub's "latest release" is the newest one.
+
+name: mirror-gh-releases
+
+on:
+  release:
+    types: [published, edited]
+  schedule:
+    # UTC. Staggered after the other mirror workflows on this instance.
+    - cron: '45 8 * * *'
+    - cron: '45 16 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: mirror-gh-releases
+  cancel-in-progress: false
+
+env:
+  DST_REPO: v3DJG6GL/iframe-plasma
+
+jobs:
+  mirror:
+    name: Sync releases to github.com
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sync releases (create missing, patch drift, fill assets)
+        env:
+          GH_MIRROR_TOKEN: ${{ secrets.GH_MIRROR_TOKEN }}
+          # The run token also covers reading releases if this repository is ever made private.
+          SRC_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          SRC_REPO="$GITHUB_REPOSITORY"
+          src_api="$GITHUB_API_URL"
+          dst_api="https://api.github.com"
+          echo "Syncing releases $SRC_REPO -> github.com/$DST_REPO"
+
+          if [ -z "$GH_MIRROR_TOKEN" ]; then
+            echo "::notice::GH_MIRROR_TOKEN secret not configured — skipping mirror"
+            exit 0
+          fi
+          command -v jq >/dev/null || { apt-get update -qq && apt-get install -y -qq jq; }
+
+          SRC_HDR="Authorization: token $SRC_TOKEN"
+          DST_HDR="Authorization: Bearer $GH_MIRROR_TOKEN"
+          # Reads retry (transient network); writes do not (a retried POST could double-create;
+          # a failed write converges on the next run).
+          sget() { curl -fsS --retry 3 --retry-delay 5 --retry-connrefused --retry-all-errors -H "$SRC_HDR" "$@"; }
+          dget() { curl -fsS --retry 3 --retry-delay 5 --retry-connrefused --retry-all-errors -H "$DST_HDR" "$@"; }
+          dput() { curl -fsS -H "$DST_HDR" "$@"; }
+
+          # ---- source releases (paginated), drafts dropped, oldest first ----
+          page=1
+          : > src.ndjson
+          while :; do
+            batch=$(sget "$src_api/repos/$SRC_REPO/releases?limit=50&page=$page")
+            jq -c '.[] | select(.draft | not)' <<<"$batch" >> src.ndjson
+            [ "$(jq 'length' <<<"$batch")" -lt 50 ] && break
+            page=$((page + 1))
+          done
+          jq -sc 'sort_by(.created_at) | .[]' src.ndjson > src-sorted.ndjson
+          if ! [ -s src-sorted.ndjson ]; then
+            echo "::notice::no published releases on $SRC_REPO yet"
+            exit 0
+          fi
+
+          # ---- destination releases (paginated) ----
+          page=1
+          : > dst.ndjson
+          while :; do
+            batch=$(dget "$dst_api/repos/$DST_REPO/releases?per_page=100&page=$page")
+            jq -c '.[]' <<<"$batch" >> dst.ndjson
+            [ "$(jq 'length' <<<"$batch")" -lt 100 ] && break
+            page=$((page + 1))
+          done
+
+          created=0 patched=0 uploaded=0 fresh=0 lagging=0 unverified=0
+          while IFS= read -r rel; do
+            tag=$(jq -r '.tag_name' <<<"$rel")
+
+            # The tag must already be on GitHub (see header). A 404 is an expected state.
+            code=$(curl -s -o /dev/null -w '%{http_code}' -H "$DST_HDR" \
+              "$dst_api/repos/$DST_REPO/git/ref/tags/$tag")
+            if [ "$code" != "200" ]; then
+              echo "::warning::[$tag] tag not on GitHub yet (push mirror lag?) — skipping until the next run"
+              lagging=$((lagging + 1))
+              continue
+            fi
+
+            want=$(jq -c '{name: (if (.name // "") == "" then .tag_name else .name end),
+                           body: (.body // ""), prerelease: (.prerelease // false)}' <<<"$rel")
+
+            dstrel=$(jq -c --arg t "$tag" 'select(.tag_name == $t)' dst.ndjson | head -n1)
+            if [ -z "$dstrel" ]; then
+              echo "[$tag] creating release"
+              dstrel=$(dput -X POST "$dst_api/repos/$DST_REPO/releases" \
+                -H 'Content-Type: application/json' \
+                -d "$(jq -c --arg t "$tag" '. + {tag_name: $t, draft: false}' <<<"$want")")
+              created=$((created + 1))
+            else
+              have=$(jq -c '{name: (.name // ""), body: (.body // ""), prerelease}' <<<"$dstrel")
+              if [ "$want" != "$have" ]; then
+                echo "[$tag] patching drifted metadata"
+                dstrel=$(dput -X PATCH "$dst_api/repos/$DST_REPO/releases/$(jq -r '.id' <<<"$dstrel")" \
+                  -H 'Content-Type: application/json' -d "$want")
+                patched=$((patched + 1))
+              fi
+            fi
+            rid=$(jq -r '.id' <<<"$dstrel")
+            dassets=$(jq -c '[.assets[] | {id, name, size}]' <<<"$dstrel")
+
+            # A plain assignment (checked by set -e), so a malformed payload fails the job
+            # instead of silently mirroring nothing; `// []` keeps an asset-less release a no-op.
+            assets=$(jq -c '.assets // [] | .[]' <<<"$rel")
+
+            # Collect the published digests (<asset>.sha256, sha256sum format) first.
+            : > allsums.txt
+            sumsfound=0
+            while IFS= read -r sasset; do
+              [ -n "$sasset" ] || continue
+              case "$(jq -r '.name' <<<"$sasset")" in
+                *.sha256) ;;
+                *) continue ;;
+              esac
+              sumsfound=$((sumsfound + 1))
+              # Not inside an `if`: a failed download must fail the job, not silently
+              # degrade the check below to a size comparison.
+              sget -o sums.txt "$(jq -r '.browser_download_url' <<<"$sasset")"
+              cat sums.txt >> allsums.txt
+              rm -f sums.txt
+            done <<<"$assets"
+
+            while IFS= read -r asset; do
+              [ -n "$asset" ] || continue
+              aname=$(jq -r '.name' <<<"$asset")
+              asize=$(jq -r '.size' <<<"$asset")
+              match=$(jq -c --arg n "$aname" '.[] | select(.name == $n)' <<<"$dassets")
+              if [ -n "$match" ] && [ "$(jq -r '.size' <<<"$match")" = "$asize" ]; then
+                fresh=$((fresh + 1))
+                continue
+              fi
+              want=$(awk -v n="$aname" '{ f = $2; sub(/^\*/, "", f) } f == n { print $1; exit }' allsums.txt)
+              if [ -z "$want" ] && [ "${aname%.sha256}" = "$aname" ]; then
+                # Skip rather than fail: releases are walked oldest first, and failing on one
+                # would block every newer release. Unverified bytes are never uploaded.
+                echo "::warning::[$tag] $aname has no published sha256 (release has $sumsfound .sha256 asset(s)) — not mirroring unverified bytes"
+                unverified=$((unverified + 1))
+                continue
+              fi
+              if [ -n "$match" ]; then
+                echo "[$tag] $aname size drifted — replacing"
+                dput -X DELETE "$dst_api/repos/$DST_REPO/releases/assets/$(jq -r '.id' <<<"$match")"
+              fi
+              echo "[$tag] uploading $aname ($asize bytes)"
+              sget -o asset.bin "$(jq -r '.browser_download_url' <<<"$asset")"
+              dl=$(stat -c%s asset.bin)
+              if [ "$dl" != "$asize" ]; then
+                echo "::error::[$tag] $aname downloaded $dl bytes, expected $asize"
+                exit 1
+              fi
+              if [ -n "$want" ]; then
+                got=$(sha256sum asset.bin | cut -d" " -f1)
+                if [ "$want" != "$got" ]; then
+                  echo "::error::[$tag] $aname sha256 $got does not match the published $want"
+                  exit 1
+                fi
+              fi
+              dput -X POST "https://uploads.github.com/repos/$DST_REPO/releases/$rid/assets?name=$aname" \
+                -H 'Content-Type: application/octet-stream' \
+                --data-binary @asset.bin > /dev/null
+              rm -f asset.bin
+              uploaded=$((uploaded + 1))
+            done <<<"$assets"
+          done < src-sorted.ndjson
+
+          summary="mirror-gh-releases: $created release(s) created, $patched patched, $uploaded asset(s) uploaded, $fresh already in sync"
+          [ "$lagging" -gt 0 ] && summary="$summary, $lagging tag(s) awaiting the push mirror"
+          [ "$unverified" -gt 0 ] && summary="$summary, $unverified asset(s) skipped for lack of a published sha256"
+          echo "::notice::$summary"
