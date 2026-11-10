@@ -23,6 +23,18 @@
   },
   "packageRules": [
     {
+      "description": "Lint job Python stays on 3.14: cmake-lint (cmakelang 0.6.13, unmaintained since 2021) crashes on Python 3.15 with 'Cannot use capturing groups in re.Scanner'. Lift once cmake-lint is replaced or fixed.",
+      "matchDepNames": ["python"],
+      "allowedVersions": "<3.15"
+    },
+    {
+      "description": "forgejo/upload-artifact is not on github.com: look its tags up on code.forgejo.org (the instance resolves it from a local mirror of that repo).",
+      "matchManagers": ["github-actions"],
+      "matchDepNames": ["forgejo/upload-artifact"],
+      "overrideDatasource": "forgejo-tags",
+      "registryUrls": ["https://code.forgejo.org"]
+    },
+    {
       "description": "Group all GitHub Actions bumps into one PR.",
       "matchManagers": ["github-actions"],
       "groupName": "github-actions"
