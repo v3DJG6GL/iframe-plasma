@@ -59,20 +59,20 @@ jobs:
       - run: pre-commit run --all-files --show-diff-on-failure
 
   # -------------------------------------------------------------------
-  # Build the C++ plugin + the test suite against KDE Neon's bleeding
-  # edge Plasma 6 image, then run every CTest target headless.
+  # Build the C++ plugin + the test suite on Ubuntu 26.04 (Qt 6.10, KF6,
+  # Plasma 6.6 — the distro the release .deb targets), then run every
+  # CTest target headless.
   #
-  # kdeneon/plasma:unstable is the only mainstream image that ships a
-  # working combination of Qt 6.7+, KF6, plasma-workspace and qt6-
-  # webengine-dev. Pinned by content digest so upstream image churn
-  # can't break CI silently — Renovate bumps the digest.
+  # Previously kdeneon/plasma: that Docker Hub image is a ~2023 desktop
+  # snapshot, so every run spent ~22 min in a full-upgrade of 847 packages
+  # (kernels, firmware, initramfs, icon themes) before building.
   # -------------------------------------------------------------------
   build-and-test:
-    name: Build + test (kdeneon/plasma)
+    name: Build + test (Ubuntu 26.04)
     runs-on: ubuntu-latest
     container:
-      image: kdeneon/plasma@sha256:4acf25665f68afc71bfdbca6c6c775664f78af23f6b3965c5759e37521e85e5c
-      options: --user 0:0 --security-opt apparmor=unconfined
+      image: ubuntu:26.04
+      options: --security-opt apparmor=unconfined
       volumes:
         - /persistent/ccache:/cache/ccache
         - /persistent/apt:/cache/apt
@@ -86,29 +86,15 @@ jobs:
       QT_QUICK_BACKEND: software
       CCACHE_DIR: /cache/ccache
       CCACHE_MAXSIZE: 2G
-      APT_ARCHIVES: /cache/apt/kdeneon
+      APT_ARCHIVES: /cache/apt/ubuntu26.04
       DEBIAN_FRONTEND: noninteractive
       # Node for the JavaScript actions (see header) and for the tests/js
-      # suite, which runs `node --test` (Node 18+; jammy/neon ship 12.22).
+      # suite, which runs `node --test`; pinned rather than the distro's.
       # cmake's `find_program(NODEJS …)` resolves to this one.
       # renovate: datasource=node-version depName=node
       NODE_VERSION: 24.21.0
     steps:
       - name: Install build + test deps and Node
-        # `full-upgrade` first: the pinned kdeneon/plasma image carries
-        # libgpgmepp6 1.16 / libharfbuzz0b 2.7 / libgdk-pixbuf 2.36 from
-        # jammy main, but neon's unstable repo has since moved kf6-kwallet
-        # and friends to libgpgmepp6 >= 1.23, harfbuzz 6.x, etc.  Without
-        # a full upgrade, the targeted `apt-get install` below hits
-        # "unmet dependencies: kf6-kwallet : Depends: libgpgmepp6 (>= 1.23.2)
-        # but 1.16.0-1.2ubuntu4.2 is to be installed" and exits 100 before
-        # CMake ever runs.
-        #
-        # `--allow-downgrades` on the install step: after the full-upgrade,
-        # harfbuzz0b / libjpeg-turbo8 / libraqm0 are at neon-unstable's
-        # newer rebase, but jammy-main's `libharfbuzz-dev` / `libjpeg-dev`
-        # (pulled in transitively by qt6-webengine-dev) depend on the older
-        # versions, so apt wants to step those runtime libs back down.
         run: |
           set -eu
           for d in /cache/ccache /cache/apt /opt/hostedtoolcache; do
@@ -119,14 +105,13 @@ jobs:
           # them after install (Ubuntu images ship docker-clean for that).
           rm -f /etc/apt/apt.conf.d/docker-clean
           # No fsync per unpacked file: the container is thrown away anyway, and
-          # syncing made the 847-package full-upgrade take ~22 of the job's 30 min.
+          # syncing only slows the install down.
           echo force-unsafe-io > /etc/dpkg/dpkg.cfg.d/90unsafe-io
           mkdir -p "$APT_ARCHIVES/partial" "$CCACHE_DIR"
           printf 'Dir::Cache::Archives "%s/";\nAPT::Keep-Downloaded-Packages "true";\n' \
             "$APT_ARCHIVES" > /etc/apt/apt.conf.d/90persistent-cache
           apt-get update
-          apt-get -y full-upgrade
-          apt-get install -y --no-install-recommends --allow-downgrades \
+          apt-get install -y --no-install-recommends \
             build-essential git ca-certificates curl xz-utils \
             cmake extra-cmake-modules gettext ccache \
             libkf6wallet-dev libkf6kcmutils-dev libkf6coreaddons-dev \
