@@ -15,6 +15,21 @@
 #   * Container jobs: the runner executes JavaScript actions with the job
 #     container's own `node`, so a container without Node must install it
 #     before the first `uses:` step (see build-and-test).
+#   * Download/compile cache: build-and-test and release.yml bind-mount
+#     /persistent/iframe-plasma (on the runner's DinD host SSD, survives the
+#     dind resets) at /cache:
+#       /cache/ccache                ccache (CCACHE_DIR)
+#       /cache/apt/<distro>          downloaded .debs (apt's archive dir)
+#       /cache/node                  Node release tarballs
+#     The runner config must list it, or the mount is dropped with the warning
+#     "[/persistent/iframe-plasma] is not a valid volume, will be ignored" and
+#     the job runs uncached (the first step then prints a ::warning::):
+#       container:
+#         valid_volumes:
+#           - /persistent/iframe-plasma
+#     The cache is writable by every repo on this runner; accepted, all of
+#     them are the owner's. apt verifies cached .debs against the signed
+#     indexes, so a tampered one is re-downloaded, not installed.
 name: CI
 on:
   push:
@@ -58,6 +73,8 @@ jobs:
     container:
       image: kdeneon/plasma@sha256:4acf25665f68afc71bfdbca6c6c775664f78af23f6b3965c5759e37521e85e5c
       options: --user 0:0 --security-opt apparmor=unconfined
+      volumes:
+        - /persistent/iframe-plasma:/cache
     env:
       QT_QPA_PLATFORM: offscreen
       # WebEngine can't use Chromium's setuid sandbox inside the
@@ -66,7 +83,9 @@ jobs:
       QTWEBENGINE_DISABLE_SANDBOX: "1"
       QTWEBENGINE_CHROMIUM_FLAGS: "--no-sandbox --disable-gpu --disable-dev-shm-usage"
       QT_QUICK_BACKEND: software
-      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_DIR: /cache/ccache
+      CCACHE_MAXSIZE: 2G
+      APT_ARCHIVES: /cache/apt/kdeneon
       DEBIAN_FRONTEND: noninteractive
       # Node for the JavaScript actions (see header) and for the tests/js
       # suite, which runs `node --test` (Node 18+; jammy/neon ship 12.22).
@@ -91,6 +110,14 @@ jobs:
         # versions, so apt wants to step those runtime libs back down.
         run: |
           set -eu
+          mountpoint -q /cache \
+            || echo "::warning::/persistent/iframe-plasma not mounted (runner valid_volumes?) — running uncached"
+          # Keep downloaded .debs in the persistent cache instead of deleting
+          # them after install (Ubuntu images ship docker-clean for that).
+          rm -f /etc/apt/apt.conf.d/docker-clean
+          mkdir -p "$APT_ARCHIVES/partial" /cache/node "$CCACHE_DIR"
+          printf 'Dir::Cache::Archives "%s/";\nAPT::Keep-Downloaded-Packages "true";\n' \
+            "$APT_ARCHIVES" > /etc/apt/apt.conf.d/90persistent-cache
           apt-get update
           apt-get -y full-upgrade
           apt-get install -y --no-install-recommends --allow-downgrades \
@@ -101,19 +128,18 @@ jobs:
             qt6-webengine-dev qt6-webengine-dev-tools \
             python3-dbusmock python3-dbus \
             xvfb
-          curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" \
-            | tar -xJ -C /usr/local --strip-components=1
+          node_tar="/cache/node/node-v${NODE_VERSION}-linux-x64.tar.xz"
+          if ! [ -s "$node_tar" ]; then
+            curl -fsSL -o "$node_tar.part" "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz"
+            mv "$node_tar.part" "$node_tar"
+          fi
+          tar -xJf "$node_tar" -C /usr/local --strip-components=1
           node --version
+          # Drop .debs no longer in the indexes (superseded versions).
+          apt-get autoclean -qq
+          ccache --zero-stats
 
       - uses: actions/checkout@v6
-
-      - name: Cache ccache
-        uses: actions/cache@v5
-        with:
-          path: ${{ env.CCACHE_DIR }}
-          key: ccache-${{ runner.os }}-${{ github.sha }}
-          restore-keys: |
-            ccache-${{ runner.os }}-
 
       - name: Configure
         run: cmake -S . -B build -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Debug
@@ -121,7 +147,9 @@ jobs:
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
       - name: Build
-        run: cmake --build build -j$(nproc)
+        run: |
+          cmake --build build -j$(nproc)
+          ccache --show-stats
 
       - name: Test
         run: ctest --test-dir build --output-on-failure --schedule-random -j$(nproc)

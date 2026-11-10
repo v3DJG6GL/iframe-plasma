@@ -31,13 +31,21 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: ubuntu:26.04
+      # Persistent download cache — see ci.yml's header.
+      volumes:
+        - /persistent/iframe-plasma:/cache
     env:
       DEBIAN_FRONTEND: noninteractive
       DISTRO: ubuntu26.04
+      APT_ARCHIVES: /cache/apt/ubuntu26.04
     steps:
       - name: Install build deps (Node for the JavaScript actions)
         run: |
           set -eu
+          rm -f /etc/apt/apt.conf.d/docker-clean
+          mkdir -p "$APT_ARCHIVES/partial"
+          printf 'Dir::Cache::Archives "%s/";\nAPT::Keep-Downloaded-Packages "true";\n' \
+            "$APT_ARCHIVES" > /etc/apt/apt.conf.d/90persistent-cache
           apt-get update
           apt-get install -y --no-install-recommends \
             build-essential git ca-certificates curl nodejs dpkg-dev file \
@@ -45,6 +53,7 @@ jobs:
             libkf6wallet-dev libkf6kcmutils-dev libkf6coreaddons-dev \
             libkf6i18n-dev libkf6package-dev libplasma-dev \
             qt6-webengine-dev qt6-webengine-dev-tools
+          apt-get autoclean -qq
 
       - uses: actions/checkout@v6
 
