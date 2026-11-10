@@ -118,6 +118,9 @@ jobs:
           # Keep downloaded .debs in the persistent cache instead of deleting
           # them after install (Ubuntu images ship docker-clean for that).
           rm -f /etc/apt/apt.conf.d/docker-clean
+          # No fsync per unpacked file: the container is thrown away anyway, and
+          # syncing made the 847-package full-upgrade take ~22 of the job's 30 min.
+          echo force-unsafe-io > /etc/dpkg/dpkg.cfg.d/90unsafe-io
           mkdir -p "$APT_ARCHIVES/partial" "$CCACHE_DIR"
           printf 'Dir::Cache::Archives "%s/";\nAPT::Keep-Downloaded-Packages "true";\n' \
             "$APT_ARCHIVES" > /etc/apt/apt.conf.d/90persistent-cache
