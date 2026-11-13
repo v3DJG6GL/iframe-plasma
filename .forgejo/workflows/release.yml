@@ -4,12 +4,25 @@
 # Release builds: a binary .deb + .tar.gz (CPack, cmake/Packaging.cmake)
 # built in an Ubuntu 26.04 container, each with a .sha256 next to it.
 #
-#   * push a tag vX.Y.Z (must equal project(VERSION) in CMakeLists.txt)
-#       → build, publish a Forgejo release with the packages, release notes
-#         taken from the `## [X.Y.Z]` section of CHANGELOG.md, then start
-#         mirror-gh-releases.yml (copies the release to GitHub).
-#   * manual run (workflow_dispatch) → build only; packages become run
-#     artifacts, nothing is published.
+#   * manual run (workflow_dispatch) → pick a version bump (patch/minor/major):
+#       the version job runs scripts/version.sh (CMakeLists.txt +
+#       package/metadata.json, CHANGELOG.md's [Unreleased] becomes [X.Y.Z]),
+#       commits "release: vX.Y.Z", tags and pushes; the package job builds the
+#       tagged commit and publishes a Forgejo release with the packages,
+#       release notes taken from the `## [X.Y.Z]` section of CHANGELOG.md, then
+#       starts mirror-gh-releases.yml (copies the release to GitHub).
+#       Pick "build-only" to just build the packages as run artifacts (no
+#       version change, no release).
+#   * push a tag vX.Y.Z by hand (must equal the version in CMakeLists.txt)
+#       → same path, no version bump.
+#
+# Setup: secret RELEASE_TOKEN (or CI_TOKEN), an owner token with
+# write:repository — the version job needs it to push to protected master.
+#
+# Forgejo swallows events pushed with the Actions token, so the version job's
+# tag push starts no second run. If one ever appears (the owner-token tag
+# fallback), the `concurrency: release` group queues it behind this one and it
+# skips publishing because the release already exists.
 #
 # The binaries link against Ubuntu 26.04's Qt/KF6 (the .deb's Depends pins
 # the minimum versions); other distros build from source (README → Install).
@@ -20,14 +33,73 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Version bump for this release'
+        type: choice
+        default: patch
+        options: [patch, minor, major, build-only]
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release
   cancel-in-progress: false
 
 jobs:
+  version:
+    name: Bump version, tag
+    if: github.event_name == 'workflow_dispatch' && inputs.bump != 'build-only'
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.bump.outputs.tag }}
+      sha: ${{ steps.bump.outputs.sha }}
+    steps:
+      # persist-credentials: false — both pushes below carry their credential
+      # explicitly, so the run token never sits in .git/config.
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Bump version, commit, tag, push
+        id: bump
+        env:
+          BUMP: ${{ inputs.bump }}
+          # Must carry write:repository (a read-only token's push 403s).
+          PUSH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.CI_TOKEN }}
+          # The run-scoped Actions token, for the tag push (see below).
+          ACTIONS_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ -z "$PUSH_TOKEN" ]; then
+            echo "::error::no RELEASE_TOKEN (or CI_TOKEN) secret — the version bump cannot be pushed to protected $GITHUB_REF_NAME"
+            exit 1
+          fi
+          scripts/version.sh --check
+          old=$(scripts/version.sh)
+          new=$(scripts/version.sh "$BUMP")
+          echo "bumping $old -> $new"
+          git config user.name "forgejo-actions"
+          git config user.email "forgejo-actions@noreply.localhost"
+          git commit -am "release: v$new"
+          git tag "v$new"
+          # master is protected: the pre-receive hook declines the run-scoped
+          # Actions token (forgejo#11159), so the branch push authenticates as
+          # the repo owner. The tag goes through the Actions token: its push
+          # events are swallowed, so no duplicate release run fires. If the
+          # tag is declined too, retry as the owner (see the header note).
+          repo_path="${GITHUB_SERVER_URL#https://}/${GITHUB_REPOSITORY}.git"
+          owner_url="https://${PUSH_TOKEN}@${repo_path}"
+          actions_url="https://x-access-token:${ACTIONS_TOKEN}@${repo_path}"
+          git push "$owner_url" "HEAD:$GITHUB_REF_NAME"
+          git push "$actions_url" "v$new" \
+            || git push "$owner_url" "v$new"
+          echo "tag=v$new" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
   package:
     name: Build packages (Ubuntu 26.04)
+    needs: version
+    # Run when version succeeded OR was skipped (tag push / build-only dispatch).
+    if: ${{ !cancelled() && needs.version.result != 'failure' }}
     runs-on: ubuntu-latest
     container:
       image: ubuntu:26.04
@@ -59,17 +131,33 @@ jobs:
           apt-get autoclean -qq
 
       - uses: actions/checkout@v6
+        with:
+          # On a bump run, build the tagged commit (not the pre-bump dispatch ref).
+          ref: ${{ needs.version.outputs.tag || github.ref }}
+          # The job never pushes; the release steps pass the token explicitly.
+          persist-credentials: false
 
-      - name: Determine version
+      # RELEASE_TAG is the tag this run publishes — empty means build-only.
+      - name: Determine version and release tag
+        env:
+          BUMP_TAG: ${{ needs.version.outputs.tag }}
         run: |
           set -eu
-          version=$(sed -nE 's/^project\(iframe-plasma VERSION ([0-9.]+).*/\1/p' CMakeLists.txt)
-          [ -n "$version" ] || { echo "::error::no project(VERSION) in CMakeLists.txt"; exit 1; }
-          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$version" ]; then
-            echo "::error::tag $GITHUB_REF_NAME does not match CMakeLists.txt version $version"
+          scripts/version.sh --check
+          version=$(scripts/version.sh)
+          if [ -n "$BUMP_TAG" ]; then
+            tag=$BUMP_TAG
+          elif [ "$GITHUB_REF_TYPE" = tag ]; then
+            tag=$GITHUB_REF_NAME
+          else
+            tag=
+          fi
+          if [ -n "$tag" ] && [ "$tag" != "v$version" ]; then
+            echo "::error::tag $tag does not match CMakeLists.txt version $version"
             exit 1
           fi
           echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "RELEASE_TAG=$tag" >> "$GITHUB_ENV"
 
       - name: Build
         run: |
@@ -107,11 +195,32 @@ jobs:
           name: iframe-plasma-${{ env.VERSION }}-${{ env.DISTRO }}
           path: dist/
 
+      # A second run for the same tag (a re-run, or the tag-push run from the
+      # header note) must not fail on "release already exists".
+      - name: Check for an existing release
+        if: env.RELEASE_TAG != ''
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -eu
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: token $TOKEN" \
+            "$GITHUB_API_URL/repos/$REPO/releases/tags/$RELEASE_TAG")
+          case "$code" in
+            404) echo "PUBLISH=true" >> "$GITHUB_ENV" ;;
+            200) echo "::notice::release $RELEASE_TAG already exists — not publishing again" ;;
+            *) echo "::error::HTTP $code while looking up release $RELEASE_TAG"; exit 1 ;;
+          esac
+
+      # Creates a draft, uploads the packages, then flips it live.
       - name: Publish Forgejo release
-        if: github.ref_type == 'tag'
+        if: env.PUBLISH == 'true'
         uses: https://code.forgejo.org/actions/forgejo-release@v2.13.4
         with:
           direction: upload
+          # A bump run is on the branch ref, so name the tag and its commit.
+          tag: ${{ env.RELEASE_TAG }}
+          sha: ${{ needs.version.outputs.sha || github.sha }}
           release-dir: dist
           release-notes-file: release-notes.md
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -121,12 +230,12 @@ jobs:
       # token, so start the GitHub release mirror explicitly. Non-fatal: its
       # scheduled reconcile catches up.
       - name: Trigger the GitHub release mirror
-        if: github.ref_type == 'tag'
+        if: env.PUBLISH == 'true'
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
         run: |
-          # ref must be a branch carrying the workflow file; this run is on a tag.
+          # ref must be a branch carrying the workflow file; this run may be on a tag.
           curl -sS --fail-with-body -X POST -H "Authorization: token $TOKEN" \
             -H 'Content-Type: application/json' \
             "$GITHUB_API_URL/repos/$REPO/actions/workflows/mirror-gh-releases.yml/dispatches" \

@@ -362,8 +362,12 @@ KF6 / Plasma packages used to build the widget itself.
 
 Forgejo Actions runs the full suite plus pre-commit linting (including REUSE)
 on every push and pull request — see [`.forgejo/workflows/ci.yml`](.forgejo/workflows/ci.yml).
-Pushing a `vX.Y.Z` tag builds the release packages
-([`.forgejo/workflows/release.yml`](.forgejo/workflows/release.yml)).
+Releases are cut by running the `release` workflow by hand
+([`.forgejo/workflows/release.yml`](.forgejo/workflows/release.yml)) and picking
+a version bump (patch / minor / major): it bumps the version
+([`scripts/version.sh`](scripts/version.sh)), turns the changelog's
+`[Unreleased]` section into the new version, tags, builds the packages and
+publishes the release. "build-only" just builds the packages as run artifacts.
 
 ## Acknowledgements
 

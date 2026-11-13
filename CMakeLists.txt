@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 cmake_minimum_required(VERSION 3.20)
-project(iframe-plasma VERSION 0.1.0 LANGUAGES CXX)
+project(iframe-plasma VERSION 0.5.0 LANGUAGES CXX)
 
 set(QT_MIN_VERSION "6.7.0")
 set(KF6_MIN_VERSION "6.0.0")
