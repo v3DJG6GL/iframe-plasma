@@ -92,7 +92,7 @@ jobs:
       # suite, which runs `node --test`; pinned rather than the distro's.
       # cmake's `find_program(NODEJS …)` resolves to this one.
       # renovate: datasource=node-version depName=node
-      NODE_VERSION: 24.22.2
+      NODE_VERSION: 24.22.3
     steps:
       - name: Install build + test deps and Node
         run: |
