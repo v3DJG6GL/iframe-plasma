@@ -42,6 +42,9 @@ public:
     bool hasFolder(const QString &f) override { return m_folders.contains(f); }
     bool createFolder(const QString &f) override
     {
+        if (m_createFolderWillFail) {
+            return false;
+        }
         m_folders.insert(f);
         return true;
     }
@@ -86,6 +89,7 @@ public:
     void setOpenWillFail(bool b) { m_openWillFail = b; }
     void setReadWillFail(bool b) { m_readWillFail = b; }
     void setWriteWillFail(bool b) { m_writeWillFail = b; }
+    void setCreateFolderWillFail(bool b) { m_createFolderWillFail = b; }
     void closeForTest() { m_open = false; }
     // Seed entries directly (bypasses ensureOpen).
     void seedPassword(const QString &folder, const QString &key, const QString &v)
@@ -116,6 +120,7 @@ private:
     bool m_openWillFail = false;
     bool m_readWillFail = false;
     bool m_writeWillFail = false;
+    bool m_createFolderWillFail = false;
     QString m_folder;
     QSet<QString> m_folders;
     QHash<QString, QString> m_passwords;          // folder/key -> password

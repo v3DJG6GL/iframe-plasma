@@ -110,6 +110,7 @@ bool SecretsBridge::ensureOpen()
                 m_wallet->createFolder(kFolder);
             }
             if (!m_wallet->setFolder(kFolder)) {
+                Q_EMIT error(tr("Failed to open the wallet folder."));
                 return false;
             }
         }
@@ -130,9 +131,11 @@ bool SecretsBridge::ensureOpen()
     // settled on — the exact silent-failure that the warm-path fix
     // eliminates.
     if (!m_wallet->hasFolder(kFolder) && !m_wallet->createFolder(kFolder)) {
+        Q_EMIT error(tr("Failed to open the wallet folder."));
         return false;
     }
     if (!m_wallet->setFolder(kFolder)) {
+        Q_EMIT error(tr("Failed to open the wallet folder."));
         return false;
     }
     return true;

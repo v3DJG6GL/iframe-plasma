@@ -245,6 +245,44 @@ private Q_SLOTS:
     }
 
     // ---------------------------------------------------------------
+    // error signal — every ensureOpen failure exit names its cause
+    // (AuthSupport.qml logs it; a silent exit leaves only the generic
+    // "wallet not available" line in the journal).
+    // ---------------------------------------------------------------
+    void error_walletDisabled_emitsOnce()
+    {
+        auto w = makeWallet();
+        w->setEnabled(false);
+        SecretsBridge b{std::move(w)};
+        QSignalSpy errSpy(&b, &SecretsBridge::error);
+        QVERIFY(!b.has(u"k"_s));
+        QCOMPARE(errSpy.count(), 1);
+    }
+
+    void error_coldPath_folderCannotBeCreated_emitsOnce()
+    {
+        auto w = makeWallet();
+        w->setCreateFolderWillFail(true);
+        SecretsBridge b{std::move(w)};
+        QSignalSpy errSpy(&b, &SecretsBridge::error);
+        QVERIFY(!b.has(u"k"_s));
+        QCOMPARE(errSpy.count(), 1);
+    }
+
+    void error_warmPath_folderCannotBeRecreated_emitsOnce()
+    {
+        auto w = makeWallet();
+        auto *raw = w.get();
+        SecretsBridge b{std::move(w)};
+        b.has(u"k"_s);  // prime warm-path
+        raw->removeFolderForTest(QString(kFolder));
+        raw->setCreateFolderWillFail(true);
+        QSignalSpy errSpy(&b, &SecretsBridge::error);
+        QVERIFY(!b.has(u"k"_s));
+        QCOMPARE(errSpy.count(), 1);
+    }
+
+    // ---------------------------------------------------------------
     // secretsChanged signal — load-bearing for the prime-after-write
     // chain (AuthSupport.qml wires this into the QML support signal,
     // which main.qml uses to re-fire primeAuthProfiles so a freshly

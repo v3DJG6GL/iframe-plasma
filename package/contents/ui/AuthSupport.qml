@@ -23,6 +23,12 @@ QtObject {
 
     Component.onCompleted: {
         IframePlasma.SecretsBridge.secretsChanged.connect(support.secretsChanged);
+        // The bridge's only channel for WHY a wallet call failed (disabled,
+        // unlock refused, folder unusable); the text never holds a secret.
+        // `support` as receiver so the connection dies with this object.
+        IframePlasma.SecretsBridge.error.connect(support, function (message) {
+            console.warn(Log.auth, "iframe-plasma[auth] wallet:", message);
+        });
     }
 
     // Screen-lock state, bridged from the C++ plugin's D-Bus monitor
