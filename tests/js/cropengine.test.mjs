@@ -174,6 +174,37 @@ test("apply: selector that doesn't match returns observing/wait status", () => {
         `expected fail-open status, got: ${result}`);
 });
 
+test("miss: a former target still in the page is no longer pinned to the viewport", () => {
+    // The selector stops matching while its old element stays in the DOM
+    // (the class moved away). "Showing full page" must then be true.
+    for (const scaleMode of ["stretch", "fit", "original"]) {
+        const dom = new JSDOM(
+            "<!doctype html><html><body><div><div id='t' class='a on'>x</div></div><p>rest</p></body></html>",
+            { runScripts: "outside-only" });
+        const w = dom.window;
+        w.MutationObserver = class { observe() {} disconnect() {} takeRecords() { return []; } };
+        w.ResizeObserver = class { observe() {} disconnect() {} };
+        w.requestAnimationFrame = (cb) => { cb(); return 0; };
+        w.cancelAnimationFrame = () => {};
+        w.setInterval = () => 0;
+        w.clearInterval = () => {};
+        w.console = { info: () => {}, warn: () => {}, error: () => {} };
+        const el = w.document.getElementById("t");
+
+        w.eval(`(${ce.buildApplyJs(".a.on", { scaleMode })})`);
+        assert.equal(w.getComputedStyle(el).position, "fixed", scaleMode);
+
+        el.classList.remove("on");
+        w.__ifpThumbSchedule();
+        assert.notEqual(w.getComputedStyle(el).position, "fixed", scaleMode);
+
+        // The crop comes back when the selector matches again.
+        el.classList.add("on");
+        w.__ifpThumbSchedule();
+        assert.equal(w.getComputedStyle(el).position, "fixed", scaleMode);
+    }
+});
+
 test("apply: re-injection clears previous data-ifp-keep markers", () => {
     const dom = new JSDOM(
         "<!doctype html><html><body><section id='a'><div id='t1'/></section><article id='b'><div id='t2'/></article></body></html>",
@@ -797,4 +828,18 @@ test("fit: a match that moves to another element un-scales the old one", () => {
     t.w.eval(ce.buildClearJs());
     assert.equal(t.el.style.transform, "");
     assert.equal(next.style.transform, "");
+});
+
+test("fit: a selector miss un-scales the former target", () => {
+    const t = runFitApply();
+    t.tick();
+    assert.equal(t.el.style.transform, "scale(4)");
+    t.el.id = "renamed";          // still in the DOM, no longer matched
+    t.tick();
+    assert.equal(t.el.style.transform, "");
+    assert.equal(t.el.style.width, "");
+    assert.equal(t.el.style.height, "");
+    t.el.id = "t";
+    t.tick();
+    assert.equal(t.el.style.transform, "scale(4)");
 });

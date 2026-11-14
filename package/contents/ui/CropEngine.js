@@ -197,9 +197,12 @@ const _APPLY_BODY = `(function(sel, opts){
       // stretch rule via the trailing :not([data-ifp-scale]) clause,
       // preserving identical behavior for the single-arg buildApplyJs
       // call shape that existing JS tests assert.
-      'html[data-ifp-scale="stretch"] [data-ifp-target="1"],html[data-ifp-isolate="1"]:not([data-ifp-scale]) [data-ifp-target="1"]{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:100vw!important;max-height:100vh!important;margin:0!important;z-index:2147483647!important;overflow:auto!important;}',
-      'html[data-ifp-scale="fit"] [data-ifp-target="1"]{position:fixed!important;top:0!important;left:0!important;margin:0!important;z-index:2147483647!important;overflow:auto!important;}',
-      'html[data-ifp-scale="original"] [data-ifp-target="1"]{position:fixed!important;top:0!important;left:0!important;margin:0!important;z-index:2147483647!important;overflow:auto!important;}'
+      // All three are gated on data-ifp-isolate as well: a selector miss
+      // drops only that attribute, and a former target still in the page
+      // must then fall back into the normal flow instead of covering it.
+      'html[data-ifp-isolate="1"][data-ifp-scale="stretch"] [data-ifp-target="1"],html[data-ifp-isolate="1"]:not([data-ifp-scale]) [data-ifp-target="1"]{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:100vw!important;max-height:100vh!important;margin:0!important;z-index:2147483647!important;overflow:auto!important;}',
+      'html[data-ifp-isolate="1"][data-ifp-scale="fit"] [data-ifp-target="1"]{position:fixed!important;top:0!important;left:0!important;margin:0!important;z-index:2147483647!important;overflow:auto!important;}',
+      'html[data-ifp-isolate="1"][data-ifp-scale="original"] [data-ifp-target="1"]{position:fixed!important;top:0!important;left:0!important;margin:0!important;z-index:2147483647!important;overflow:auto!important;}'
     ].join('');
     (document.head||document.documentElement).appendChild(s);
   }
@@ -493,6 +496,9 @@ const _APPLY_BODY = `(function(sel, opts){
       // mutation if/when the target eventually appears.
       document.documentElement.removeAttribute('data-ifp-isolate');
       document.documentElement.removeAttribute('data-ifp-thumb');
+      // A former fit target may still be in the page (its class moved
+      // away): take the inline scale off it too.
+      if (window.__ifpFitTarget) { releaseFitTarget(); forgetOwnMutations(); }
       return 'wait';
     }
     ensureStyle();
