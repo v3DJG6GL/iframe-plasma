@@ -36,6 +36,22 @@ TestCase {
     }
 
     // ============================================================
+    //  shouldFireRetry
+    // ============================================================
+    function test_fireRetry_failedOrBlankSlot() {
+        verify(R.shouldFireRetry("err"));
+        verify(R.shouldFireRetry("blank"));
+    }
+    function test_fireRetry_loadInFlight_skipped() {
+        // Landing on a failed tab reloads it at once; the retry armed on
+        // the same landing must not abort that load 3 s later.
+        verify(!R.shouldFireRetry("loading"));
+    }
+    function test_fireRetry_recoveredSlot_skipped() {
+        verify(!R.shouldFireRetry("ok"));
+    }
+
+    // ============================================================
     //  isFrameConfirmed
     // ============================================================
     function test_frameConfirmed_engineMatchResult() {

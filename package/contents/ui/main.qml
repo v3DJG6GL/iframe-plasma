@@ -2022,6 +2022,9 @@ PlasmoidItem {
                         // Clear any prior error placeholder the moment a fresh
                         // navigation begins (manual reload, retry, range pick).
                         root.setThumbError(miniView.ownIndex, "");
+                        // This load supersedes a pending retry, which would
+                        // otherwise abort it mid-flight (a landing reload, Ctrl+R).
+                        thumbRetryTimer.stop();
                         if (miniView._pendingHardReload) {
                             miniView._pendingHardReload = false;
                             hardReloadFallback.stop();
@@ -2122,6 +2125,7 @@ PlasmoidItem {
                         restart();
                     }
                     onTriggered: {
+                        if (!ThumbRetryPolicy.shouldFireRetry(miniView.loadStatus)) return;
                         console.debug(Log.load, "iframe-plasma[mini-retry] attempt=" + miniView._retryAttempt
                             + " idx=" + miniView.ownIndex);
                         miniView.stop();

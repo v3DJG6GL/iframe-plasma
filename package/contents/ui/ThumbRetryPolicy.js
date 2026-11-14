@@ -27,6 +27,13 @@ function attemptAfterLoadSucceeded(attempt, needsCrop) {
     return needsCrop ? attempt : 0;
 }
 
+// Whether a due retry still reloads. It exists for a slot that is failed
+// or blank; once another navigation is under way ("loading") or has
+// landed, reloading would abort that load and start it over.
+function shouldFireRetry(loadStatus) {
+    return loadStatus === "err" || loadStatus === "blank";
+}
+
 // Whether an applyThumbCrop result confirms a frame on screen, which
 // refills the retry budget. The string is what CropEngine.buildApplyJs
 // returns for a matched selector; a bare "matched" never leaves the page.
