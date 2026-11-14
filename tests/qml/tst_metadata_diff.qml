@@ -169,4 +169,27 @@ TestCase {
             [_tab("https://a/"), _tab("https://b/", { label: "X" })],
             [_tab("https://changed/"), _tab("https://b/", { label: "Y" })]), false);
     }
+
+    // ===== thumbRangeFor: the range an in-place Apply must land ======
+    function test_thumbRange_followsInPlaceMutation() {
+        // _applyTabsMetadataInPlace writes thumbTimeRange onto the live row.
+        const row = _tab("https://a/", { thumbTimeRange: "1h" });
+        compare(U.thumbRangeFor(row, ""), "1h");
+        row.thumbTimeRange = "24h";
+        compare(U.thumbRangeFor(row, ""), "24h");
+    }
+    function test_thumbRange_fixedBeatsStaleSessionOverride() {
+        // auto → fixed in place while the thumbnail still carries the
+        // range it followed from the popup.
+        compare(U.thumbRangeFor(_tab("https://a/", { thumbTimeRange: "24h" }), "6h"), "24h");
+    }
+    function test_thumbRange_autoFollowsSessionOverride() {
+        compare(U.thumbRangeFor(_tab("https://a/", { thumbTimeRange: "auto" }), "6h"), "6h");
+        compare(U.thumbRangeFor(_tab("https://a/"), "6h"), "6h");
+    }
+    function test_thumbRange_autoWithoutOverride_keepsUrlRange() {
+        compare(U.thumbRangeFor(_tab("https://a/", { thumbTimeRange: "auto" }), ""), "");
+        compare(U.thumbRangeFor(_tab("https://a/"), ""), "");
+        compare(U.thumbRangeFor(null, undefined), "");
+    }
 }

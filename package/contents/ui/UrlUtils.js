@@ -171,6 +171,15 @@ function substituteTheme(url, theme) {
     return String(url).replace(/\$\{theme\}/g, theme);
 }
 
+// Relative range ("24h", "7d", …) a thumbnail URL's from/to is rewritten to;
+// "" keeps the URL's own. A fixed per-tab thumbTimeRange wins: the session
+// override only lets an "auto" tab follow the popup, and one left over from
+// before an in-place switch to a fixed range must not mask that range.
+function thumbRangeFor(tab, overrideRange) {
+    if (tab && tab.thumbTimeRange && tab.thumbTimeRange !== "auto") return tab.thumbTimeRange;
+    return (overrideRange && overrideRange.length > 0) ? overrideRange : "";
+}
+
 // Same heuristic main.qml's toolbar uses to gate Time-range / Refresh
 // dropdowns: only enable them for Grafana-shaped URLs. Matches /d/ and
 // /d-solo/ followed by an alphanumeric uid segment.

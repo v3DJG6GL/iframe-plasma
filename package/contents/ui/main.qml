@@ -191,12 +191,7 @@ PlasmoidItem {
     function resolveThumbUrlWith(tab, overrideRange) {
         if (!tab || !tab.url) return "about:blank";
         let url = String(tab.url);
-        let range = "";
-        if (overrideRange && overrideRange.length > 0) {
-            range = overrideRange;
-        } else if (tab.thumbTimeRange && tab.thumbTimeRange !== "auto") {
-            range = tab.thumbTimeRange;
-        }
+        let range = UrlUtils.thumbRangeFor(tab, overrideRange);
         // Validate `range` before splicing into the query string. The popup
         // path (WebTab.currentTimeRange) regex-validates to /^now-(\d+[smhdwMy])$/
         // before exposing the suffix; thumbTimeRange came from raw config and
@@ -1822,7 +1817,16 @@ PlasmoidItem {
                 property bool _suppressRangePropagation: false
 
                 profile: root.profileForAuthId(ownTab ? ownTab.authProfileId : "")
-                url: root.resolveThumbUrlWith(ownTab, sessionRangeOverride)
+                // Live row + serial so an in-place thumbTimeRange Apply lands.
+                // Held as a string because every other serial bump resolves
+                // to the same URL: a string elides the equal write, whereas
+                // assigning WebEngineView.url re-navigates even when equal.
+                readonly property string ownUrl: {
+                    const _tick = root._tabsMetadataSerial;
+                    return root.resolveThumbUrlWith(
+                        root._liveRow(miniView.ownIndex, ownTab), sessionRangeOverride);
+                }
+                url: ownUrl
 
                 Connections {
                     target: root
