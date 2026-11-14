@@ -60,6 +60,8 @@ Rectangle {
         anchors.centerIn: parent
         spacing: 4
         QQC.Label {
+            id: iconLabel
+            objectName: "chipIcon"
             anchors.verticalCenter: parent.verticalCenter
             text: chip.icon
             font.pixelSize: chip.iconPixelSize
@@ -69,6 +71,10 @@ Rectangle {
                 loops: Animation.Infinite
                 NumberAnimation { from: 0.55; to: 1.0; duration: 1400; easing.type: Easing.InOutSine }
                 NumberAnimation { from: 1.0; to: 0.55; duration: 1400; easing.type: Easing.InOutSine }
+                // "Animation on property" retains its last animated frame
+                // when stopped; without this reset the icon stays dimmed
+                // at whatever point of the pulse it was caught.
+                onRunningChanged: if (!running) iconLabel.opacity = 1.0
             }
         }
         QQC.Label {

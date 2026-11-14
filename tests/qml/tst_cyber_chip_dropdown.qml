@@ -41,6 +41,8 @@ Item {
 
         function init() {
             chip.visible = true;
+            chip.pulseEnabled = false;
+            chip.fullRepVisible = false;
             dropdown.close();
             tryCompare(dropdown, "visible", false);
         }
@@ -67,6 +69,28 @@ Item {
             tryCompare(dropdown, "opened", true);
             chip.visible = false;
             tryCompare(dropdown, "visible", false);
+        }
+
+        // ============================================================
+        //  icon pulse
+        // ============================================================
+        function test_pulseStopped_restoresIconOpacity() {
+            const icon = findChild(chip, "chipIcon");
+            verify(icon !== null);
+            chip.fullRepVisible = true;
+            chip.pulseEnabled = true;
+            tryVerify(function() { return icon.opacity < 1.0; });
+            chip.pulseEnabled = false;
+            compare(icon.opacity, 1.0);
+        }
+
+        function test_pulseHiddenWithFullRep_restoresIconOpacity() {
+            const icon = findChild(chip, "chipIcon");
+            chip.fullRepVisible = true;
+            chip.pulseEnabled = true;
+            tryVerify(function() { return icon.opacity < 1.0; });
+            chip.fullRepVisible = false;
+            compare(icon.opacity, 1.0);
         }
     }
 }
