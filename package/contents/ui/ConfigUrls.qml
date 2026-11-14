@@ -133,6 +133,23 @@ KCM.SimpleKCM {
         cur.splice(pos, 1);
         _setRowField(idx, "thumbExcludeKeywords", JSON.stringify(cur));
     }
+    // Click-to-edit: load `chipText` into `field` and drop its chip, first
+    // committing whatever the field already held so that work isn't lost.
+    // Runs here with the field passed in, and writes the model exactly once
+    // as the last step: the write rebuilds the chip Repeater, which destroys
+    // the clicked chip and makes every id unresolvable from its handler.
+    function _editKeyword(idx, chipText, field) {
+        const cur = _parseKeywordsAt(idx);
+        const pos = cur.indexOf(chipText);
+        if (pos >= 0) cur.splice(pos, 1);
+        const pending = String(field.text || "").trim();
+        if (pending.length > 0 && pending !== chipText && cur.indexOf(pending) < 0)
+            cur.push(pending);
+        field.text = chipText;
+        field.forceActiveFocus();
+        field.cursorPosition = chipText.length;
+        _setRowField(idx, "thumbExcludeKeywords", JSON.stringify(cur));
+    }
 
     // Raised in two situations, both of which must suppress the
     // onJsonChanged → repopulate path:
@@ -1002,25 +1019,7 @@ KCM.SimpleKCM {
                                             anchors.right: deleteBtn.left
                                             hoverEnabled: true
                                             cursorShape: Qt.IBeamCursor
-                                            onClicked: {
-                                                // Safety net: if the user
-                                                // had typed something in
-                                                // the input before
-                                                // clicking, commit it
-                                                // first so click-to-edit
-                                                // doesn't silently drop
-                                                // their work. Duplicate
-                                                // entries are a no-op in
-                                                // _addKeyword.
-                                                if (newKeywordField.text.length > 0
-                                                    && newKeywordField.text !== modelData) {
-                                                    page._addKeyword(urlRow.index, newKeywordField.text);
-                                                }
-                                                newKeywordField.text = modelData;
-                                                newKeywordField.forceActiveFocus();
-                                                newKeywordField.cursorPosition = newKeywordField.text.length;
-                                                page._removeKeyword(urlRow.index, modelData);
-                                            }
+                                            onClicked: page._editKeyword(urlRow.index, modelData, newKeywordField)
                                         }
                                         // The label sits inside the edit
                                         // zone so its visible bounds match
