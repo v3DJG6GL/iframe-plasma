@@ -478,8 +478,7 @@ KCM.SimpleKCM {
                                 const referencing = page.profileUsageHosts(card.id);
                                 if (referencing.length === 0) {
                                     // No URLs to warn about — just delete.
-                                    if (page.authSupport) page.authSupport.removeKey(page.authSupport.profileKey(card.id));
-                                    page.cfg_authProfilesSecretsSerial = page.cfg_authProfilesSecretsSerial + 1;
+                                    page.queueSecretRemoval(card.id);
                                     listModel.remove(card.index);
                                     store.serialize();
                                     return;
@@ -500,6 +499,31 @@ KCM.SimpleKCM {
                 text: i18n("No profiles yet")
                 explanation: i18n("Click \"Add profile\" to define your first set of credentials.")
                 icon.name: "list-add"
+            }
+        }
+    }
+
+    // Wallet entries of profiles deleted on this page. Removing one cannot be
+    // undone, so it waits for Apply/OK: Plasma's config dialog calls
+    // saveConfig() on the current page then, and never on Cancel/Discard,
+    // where the profile row comes back and must still find its secret.
+    property var _pendingSecretRemovals: []
+    function queueSecretRemoval(profileId) {
+        _pendingSecretRemovals.push(profileId);
+        // Dirties the page; once applied, the widget re-primes its profiles.
+        cfg_authProfilesSecretsSerial = cfg_authProfilesSecretsSerial + 1;
+    }
+    function saveConfig() {
+        const ids = _pendingSecretRemovals;
+        _pendingSecretRemovals = [];
+        if (!authSupport) return;
+        for (const id of ids) {
+            const key = authSupport.profileKey(id);
+            if (authSupport.removeKey(key)) continue;
+            // false also means "nothing was stored". A failure is a wallet
+            // that did not open, or an entry that is still there.
+            if (!authSupport.isWalletReady() || authSupport.has(key)) {
+                console.warn(Log.auth, "iframe-plasma[auth] could not remove the wallet entry of deleted profile", id);
             }
         }
     }
@@ -528,8 +552,7 @@ KCM.SimpleKCM {
         }
 
         onAccepted: {
-            if (page.authSupport) page.authSupport.removeKey(page.authSupport.profileKey(deleteConfirm.profileId));
-            page.cfg_authProfilesSecretsSerial = page.cfg_authProfilesSecretsSerial + 1;
+            page.queueSecretRemoval(deleteConfirm.profileId);
             // Patch urlsJson to unlink the orphaned references
             try {
                 const tabs = JSON.parse(page.cfg_urlsJson || "[]");
