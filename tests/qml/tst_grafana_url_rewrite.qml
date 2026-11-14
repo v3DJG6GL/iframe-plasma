@@ -329,4 +329,27 @@ TestCase {
         const out = G.transform("https://g/d/abc/slug?panelId=1&panelId=2&viewPanel=panel-7", opts);
         compare(out, "https://g/d-solo/abc/slug?panelId=7");
     }
+
+    // ===== optsFor (dialog mode → transform options) ==================
+    function test_optsFor_addMode_keepsControls() {
+        const controls = _off(); controls.convertDSolo = true; controls.kiosk = true;
+        compare(G.optsFor(false, controls), controls);
+        controls.convertDSolo = false;
+        compare(G.optsFor(false, controls).convertDSolo, false);
+    }
+    function test_optsFor_editMode_neverConvertsDSolo() {
+        // In Edit mode the "Single panel" switch is hidden and always
+        // checked; a /d/ row that kept its viewPanel (Add with the switch
+        // off, or typed by hand) must not be turned into /d-solo/ by an
+        // unrelated edit.
+        const controls = _off();
+        controls.convertDSolo = true; controls.refresh = true; controls.refreshSeconds = 30;
+        const opts = G.optsFor(true, controls);
+        compare(opts.convertDSolo, false);
+        compare(opts.refresh, true);
+        compare(opts.refreshSeconds, 30);
+        compare(controls.convertDSolo, true);   // input not mutated
+        compare(G.transform("https://g/d/abc/dash?orgId=1&viewPanel=panel-5", opts),
+                "https://g/d/abc/dash?orgId=1&viewPanel=panel-5&refresh=30s");
+    }
 }

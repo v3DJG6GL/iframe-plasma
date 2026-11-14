@@ -1488,7 +1488,7 @@ KCM.SimpleKCM {
         // so tests/qml/tst_grafana_url_rewrite.qml can drive every branch
         // without instantiating this Dialog tree.
         function transformUrl(input) {
-            const out = GrafanaUrl.transform(input, {
+            const out = GrafanaUrl.transform(input, GrafanaUrl.optsFor(grafanaHelper.editingIndex >= 0, {
                 convertDSolo:   convertDSolo.checked,
                 timeRange:      timeRangeCombo.currentValue,
                 kiosk:          addKiosk.checked,
@@ -1497,7 +1497,7 @@ KCM.SimpleKCM {
                 refreshSeconds: refreshInterval.value,
                 hideLogo:       addHideLogo.checked,
                 hidePanelMenu:  addHidePanelMenu.checked,
-            });
+            }));
             if (out === "" && (input || "").trim().length > 0
                 && /[\r\n\0]/.test(input)) {
                 console.warn(Log.config, "iframe-plasma[config-urls] rejected pasted URL with CR/LF/NUL");
@@ -1634,13 +1634,10 @@ KCM.SimpleKCM {
                 // Edit mode: rebuild the URL from the row's current value
                 // (NOT pastedUrl, which is hidden + empty in this path)
                 // by stripping every managed param and reapplying through
-                // transformUrl's append pipeline. The /d/→/d-solo/
-                // conversion step in transformUrl is gated on
-                // convertDSolo.checked, which is hidden+true in Edit
-                // mode — but the conversion is a no-op on a URL that's
-                // already /d-solo/, and a no-op on /d/ URLs without a
-                // viewPanel param (the viewPanel match guards it). So the
-                // existing transformUrl handles both cleanly.
+                // transformUrl's append pipeline. transformUrl never
+                // runs the /d/→/d-solo/ conversion in Edit mode
+                // (GrafanaUrl.optsFor), so a /d/ row that still carries
+                // viewPanel stays a full dashboard.
                 const row = listModel.get(editingIndex);
                 const stripped = stripManagedParams(row.url);
                 const out = transformUrl(stripped);

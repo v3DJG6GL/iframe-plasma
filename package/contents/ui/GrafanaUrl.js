@@ -12,6 +12,9 @@
  *                            kiosk, theme, refresh, refreshSeconds,
  *                            hideLogo, hidePanelMenu).
  *
+ *   optsFor(isEdit, controls) — the opts transform() gets for the
+ *                            dialog's Add or Edit mode.
+ *
  *   splitFragment(u) → [base, "#frag"] — preserves an anchor through
  *                            subsequent stripParam/appendParam ops.
  *
@@ -143,4 +146,14 @@ function transform(input, opts) {
     }
 
     return base + frag;
+}
+
+// transform() options for the dialog's control state. Edit mode never
+// converts /d/ to /d-solo/: the switch is hidden there, the conversion
+// cannot be undone, and a /d/ row that still carries viewPanel is one the
+// user chose to keep as a full dashboard.
+function optsFor(isEdit, controls) {
+    const opts = Object.assign({}, controls);
+    opts.convertDSolo = !isEdit && !!opts.convertDSolo;
+    return opts;
 }
