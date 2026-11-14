@@ -77,6 +77,16 @@ jobs:
           old=$(scripts/version.sh)
           new=$(scripts/version.sh "$BUMP")
           echo "bumping $old -> $new"
+          repo_path="${GITHUB_SERVER_URL#https://}/${GITHUB_REPOSITORY}.git"
+          owner_url="https://${PUSH_TOKEN}@${repo_path}"
+          # The checkout carries no tags, so `git tag` below cannot notice a
+          # v$new that already exists on the server: its push would be rejected
+          # only after the release commit had landed on $GITHUB_REF_NAME.
+          existing=$(git ls-remote --tags "$owner_url" "refs/tags/v$new")
+          if [ -n "$existing" ]; then
+            echo "::error::tag v$new already exists on the server — nothing was pushed"
+            exit 1
+          fi
           git config user.name "forgejo-actions"
           git config user.email "forgejo-actions@noreply.localhost"
           git commit -am "release: v$new"
@@ -86,8 +96,6 @@ jobs:
           # the repo owner. The tag goes through the Actions token: its push
           # events are swallowed, so no duplicate release run fires. If the
           # tag is declined too, retry as the owner (see the header note).
-          repo_path="${GITHUB_SERVER_URL#https://}/${GITHUB_REPOSITORY}.git"
-          owner_url="https://${PUSH_TOKEN}@${repo_path}"
           actions_url="https://x-access-token:${ACTIONS_TOKEN}@${repo_path}"
           git push "$owner_url" "HEAD:$GITHUB_REF_NAME"
           git push "$actions_url" "v$new" \
