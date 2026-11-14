@@ -266,6 +266,20 @@ function isMetadataOnlyTabsChange(oldArr, newArr) {
     return true;
 }
 
+// The popup crop selector a row puts into effect; "" means no crop.
+function effectivePopupSelector(tab) {
+    return (tab && tab.popupMode === "custom") ? (tab.popupSelector || "") : "";
+}
+
+// Whether a picker save has to re-apply the popup isolation itself. Starting
+// the picker tore it down, and the save re-engages it only through the
+// popupSelector change signal — which stays silent when the effective
+// selector comes out the same (thumb-only save, or the same element picked
+// again). Not unconditional: a changed selector would then be applied twice.
+function pickerSaveNeedsPopupRestore(scope, prevPopupSelector, newPopupSelector) {
+    return scope === "thumb" || prevPopupSelector === newPopupSelector;
+}
+
 // Auto-cycle stepper. Given the current tab index and the live `tabs`
 // array, return the next index whose tab is not marked
 // excludeFromRotation AND not present in the optional

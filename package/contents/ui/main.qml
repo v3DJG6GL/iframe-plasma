@@ -1067,6 +1067,7 @@ PlasmoidItem {
             // (the proven-working `_applyTabsMetadataInPlace` uses the
             // same captured-reference pattern, hence the mirror here).
             const liveRow = root.tabs[tabIdx];
+            const prevPopup = UrlUtils.effectivePopupSelector(liveRow);
             if (liveRow) {
                 liveRow.thumbMode     = entry.thumbMode;
                 liveRow.thumbSelector = entry.thumbSelector;
@@ -1103,12 +1104,14 @@ PlasmoidItem {
                 + " liveRow.thumbSelector=" + JSON.stringify(liveRow && liveRow.thumbSelector)
                 + " liveRow.popupSelector=" + JSON.stringify(liveRow && liveRow.popupSelector));
 
-            // Thumb-only save edge case: the picker's _PICKER_START_BODY
+            // Unchanged popup selector (thumb-only save, or the same element
+            // picked again for the popup): the picker's _PICKER_START_BODY
             // teardown stripped popup isolation BEFORE the dialog opened.
             // popupSelector hasn't changed, so the binding update above
             // produces an identical value — onPopupSelectorChanged elides
             // and nothing re-applies the isolation. Force it back here.
-            if (scope === "thumb") {
+            if (UrlUtils.pickerSaveNeedsPopupRestore(scope, prevPopup,
+                    UrlUtils.effectivePopupSelector(liveRow))) {
                 if (fr && typeof fr.restorePopupSelectorAt === "function") {
                     fr.restorePopupSelectorAt(tabIdx);
                 }

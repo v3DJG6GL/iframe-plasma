@@ -192,4 +192,49 @@ TestCase {
         compare(U.thumbRangeFor(_tab("https://a/"), ""), "");
         compare(U.thumbRangeFor(null, undefined), "");
     }
+
+    // ===== Picker save: popup isolation restore ======================
+    // Replays savePickedSelector's in-place write on a live row and
+    // returns whether it must re-apply the popup isolation itself.
+    function _pickerSaveNeedsRestore(row, scope, sel) {
+        const prev = U.effectivePopupSelector(row);
+        if (scope === "thumb" || scope === "both") {
+            row.thumbMode = "custom";
+            row.thumbSelector = sel;
+        }
+        if (scope === "popup" || scope === "both") {
+            row.popupMode = "custom";
+            row.popupSelector = sel;
+        }
+        return U.pickerSaveNeedsPopupRestore(scope, prev, U.effectivePopupSelector(row));
+    }
+    function test_effectivePopupSelector_onlyInCustomMode() {
+        compare(U.effectivePopupSelector(_tab("https://a/", { popupMode: "custom", popupSelector: ".x" })), ".x");
+        compare(U.effectivePopupSelector(_tab("https://a/", { popupMode: "fullPanel", popupSelector: ".x" })), "");
+        compare(U.effectivePopupSelector(_tab("https://a/", { popupMode: "custom" })), "");
+        compare(U.effectivePopupSelector(null), "");
+    }
+    function test_pickerSave_popupSameSelector_restores() {
+        // Same element picked again: the popupSelector binding yields an
+        // identical string, so no change signal re-applies the crop.
+        const row = _tab("https://a/", { popupMode: "custom", popupSelector: ".x" });
+        verify(_pickerSaveNeedsRestore(row, "popup", ".x"));
+    }
+    function test_pickerSave_bothSameSelector_restores() {
+        const row = _tab("https://a/", { popupMode: "custom", popupSelector: ".x" });
+        verify(_pickerSaveNeedsRestore(row, "both", ".x"));
+    }
+    function test_pickerSave_thumbOnly_restores() {
+        const row = _tab("https://a/", { popupMode: "custom", popupSelector: ".x" });
+        verify(_pickerSaveNeedsRestore(row, "thumb", ".y"));
+    }
+    function test_pickerSave_popupNewSelector_leftToBinding() {
+        const row = _tab("https://a/", { popupMode: "custom", popupSelector: ".x" });
+        verify(!_pickerSaveNeedsRestore(row, "popup", ".y"));
+    }
+    function test_pickerSave_popupModeFlipsToCustom_leftToBinding() {
+        // fullPanel → custom: the effective selector goes "" → ".x".
+        const row = _tab("https://a/", { popupMode: "fullPanel", popupSelector: ".x" });
+        verify(!_pickerSaveNeedsRestore(row, "popup", ".x"));
+    }
 }
