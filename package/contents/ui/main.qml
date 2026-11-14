@@ -608,7 +608,7 @@ PlasmoidItem {
     // the painted bitmap, guaranteed non-transparent.
     function thumbSelectorFor(tab) {
         if (!tab) return "";
-        switch (tab.thumbMode || "chartOnly") {
+        switch (UrlUtils.effectiveThumbMode(tab.thumbMode || "chartOnly", tab.url)) {
         case "chartOnly":     return ".u-wrap > canvas";
         case "chartWithAxes": return ".u-wrap";
         case "custom":        return tab.thumbSelector || "";

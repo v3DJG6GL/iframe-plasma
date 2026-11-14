@@ -314,3 +314,13 @@ function nextCycleTabIndex(currentIndex, tabs, runtimeExcluded) {
     }
     return -1;
 }
+
+// Thumbnail mode a row actually renders with. The chart presets crop to
+// Grafana's uPlot DOM, so on any other URL their selector can never match;
+// such a row renders (and is shown on the config page) as full page. The
+// stored value is left alone so pointing the URL back at Grafana restores it.
+function effectiveThumbMode(mode, url) {
+    if ((mode === "chartOnly" || mode === "chartWithAxes") && !isGrafanaEmbed(url))
+        return "fullPanel";
+    return mode;
+}

@@ -288,9 +288,10 @@ KCM.SimpleKCM {
     // header + the Thumbnail section's collapsed summary. `presets` is the
     // delegate-scoped, Grafana-aware `thumbModePresets` array (already i18n'd
     // in QML scope — the lookup MUST stay here, not in a .js singleton, since
-    // KCM's engine context has no KLocalizedContext for i18n()). Falls back to
-    // the raw token if it isn't in the filtered set (a Grafana-only preset
-    // shown on a non-Grafana URL) — same edge the combo's currentIndex handles.
+    // KCM's engine context has no KLocalizedContext for i18n()). Callers pass
+    // the delegate's `shownThumbMode`, so a Grafana-only preset stored on a
+    // non-Grafana URL already arrives as "fullPanel"; the raw-token fallback is
+    // only for a value no preset knows.
     function _displayForThumbMode(presets, value) {
         for (const p of presets) if (p.value === value) return p.display;
         return value;
@@ -477,6 +478,11 @@ KCM.SimpleKCM {
                         { value: "chartWithAxes", display: i18n("Chart + axes") }
                     ].concat(generic);
                 }
+                // The mode the widget renders for this row, which is what the
+                // section summary and the combo must both show: a chart preset
+                // stored on a non-Grafana URL (the "Add URL" default) renders
+                // as full page.
+                readonly property string shownThumbMode: UrlUtils.effectiveThumbMode(thumbMode, url)
 
                 // Popup-mode presets, hoisted to delegate scope so BOTH the
                 // collapsed card-header summary and the popup ComboBox read
@@ -756,7 +762,7 @@ KCM.SimpleKCM {
                     CollapsibleSection {
                         Layout.fillWidth: true
                         title: i18n("Thumbnail (panel slot)")
-                        summary: page._displayForThumbMode(thumbModePresets, thumbMode)
+                        summary: page._displayForThumbMode(thumbModePresets, shownThumbMode)
 
                         RowLayout {
                             Layout.fillWidth: true
@@ -768,14 +774,14 @@ KCM.SimpleKCM {
                                 textRole: "display"
                                 valueRole: "value"
                                 currentIndex: {
-                                    const idx = thumbModePresets.findIndex(x => x.value === thumbMode);
-                                    // Stored thumbMode might be a Grafana-only
+                                    const idx = thumbModePresets.findIndex(x => x.value === shownThumbMode);
+                                    // shownThumbMode already maps a Grafana-only
                                     // preset (chartOnly / chartWithAxes) on a
-                                    // non-Grafana URL — those aren't in the
-                                    // filtered list, so fall back to the
-                                    // fullPanel index. We don't auto-rewrite
-                                    // the JSON; switching the URL back to
-                                    // Grafana later should restore the value.
+                                    // non-Grafana URL to fullPanel; the fallback
+                                    // below is for a value no preset knows. We
+                                    // don't auto-rewrite the JSON; switching the
+                                    // URL back to Grafana later should restore
+                                    // the value.
                                     if (idx >= 0) return idx;
                                     const fp = thumbModePresets.findIndex(x => x.value === "fullPanel");
                                     return fp >= 0 ? fp : 0;

@@ -216,4 +216,23 @@ TestCase {
     function test_displayUrl_queryOnlyNoFragment() {
         compare(U.displayUrl("https://h.example/p?a=1"), "h.example/p");
     }
+
+    // ----- effectiveThumbMode (chart presets only exist on Grafana) -----
+    function test_effectiveThumbMode_chartPresetOnNonGrafanaIsFullPanel() {
+        // "Add URL" stores thumbMode "chartOnly"; on a non-Grafana URL the
+        // uPlot selector can never match, so the row renders as full page.
+        compare(U.effectiveThumbMode("chartOnly", "https://ha.local/lovelace"), "fullPanel");
+        compare(U.effectiveThumbMode("chartWithAxes", "https://ha.local/lovelace"), "fullPanel");
+        compare(U.effectiveThumbMode("chartOnly", "https://"), "fullPanel");
+    }
+    function test_effectiveThumbMode_chartPresetOnGrafanaIsKept() {
+        compare(U.effectiveThumbMode("chartOnly", "https://g/d-solo/abc/x"), "chartOnly");
+        compare(U.effectiveThumbMode("chartWithAxes", "https://g/d/abc/x?viewPanel=2"), "chartWithAxes");
+    }
+    function test_effectiveThumbMode_genericModesPassThrough() {
+        compare(U.effectiveThumbMode("custom", "https://ha.local/lovelace"), "custom");
+        compare(U.effectiveThumbMode("text", "https://ha.local/lovelace"), "text");
+        compare(U.effectiveThumbMode("icon", "https://g/d-solo/abc/x"), "icon");
+        compare(U.effectiveThumbMode("fullPanel", "https://g/d-solo/abc/x"), "fullPanel");
+    }
 }
