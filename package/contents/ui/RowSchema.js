@@ -190,6 +190,19 @@ const AUTH_FIELDS = [
     "id", "name", "authType", "username", "autheliaHost", "preempt",
 ];
 
+// Whether a stored auth-profile entry pre-empts (sends its credentials with
+// the first request). An explicit boolean wins; a missing or non-bool field
+// defaults by type: bearer/raw MUST pre-empt because Qt's 401 dialog can
+// only collect user+password, so a token mismatch is otherwise
+// unrecoverable. The widget reads raw entries, not normalised rows, so it
+// asks this too — otherwise the KCM shows the default while no header is sent.
+function effectivePreempt(entry) {
+    entry = entry || {};
+    if (typeof entry.preempt === "boolean") return entry.preempt;
+    const authType = _str(entry.authType) || "basic";
+    return authType === "bearer" || authType === "raw";
+}
+
 function normaliseAuthProfileRow(entry, uuidGen) {
     entry = entry || {};
     let synthesized = false;
@@ -199,16 +212,7 @@ function normaliseAuthProfileRow(entry, uuidGen) {
         synthesized = true;
     }
     const authType = _str(entry.authType) || "basic";
-
-    // Defensive default for preempt when the field is missing or non-bool.
-    // Bearer/raw MUST pre-empt because Qt's 401 dialog can only collect
-    // user+password, so a token mismatch is otherwise unrecoverable.
-    let preempt;
-    if (typeof entry.preempt === "boolean") {
-        preempt = entry.preempt;
-    } else {
-        preempt = (authType === "bearer" || authType === "raw");
-    }
+    const preempt = effectivePreempt(entry);
 
     return {
         row: {

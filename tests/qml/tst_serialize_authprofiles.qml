@@ -89,6 +89,34 @@ TestCase {
         verify(!out.synthesized);
     }
 
+    // ===== effectivePreempt: the same default at runtime =============
+    //
+    // main.qml reads raw authProfilesJson entries, never normalised rows,
+    // and gates the header interceptor on this function. An entry without
+    // a boolean `preempt` (backup import, hand edit) must get the type
+    // default there too, or the KCM shows "on, locked" for a bearer
+    // profile whose token is never sent.
+    function test_effectivePreempt_data() {
+        return [
+            { tag: "bearerMissing",       e: { authType: "bearer" },                   want: true },
+            { tag: "rawMissing",          e: { authType: "raw" },                      want: true },
+            { tag: "rawNonBool",          e: { authType: "raw", preempt: "yes" },      want: true },
+            { tag: "bearerStringFalse",   e: { authType: "bearer", preempt: "false" }, want: true },
+            { tag: "bearerExplicitFalse", e: { authType: "bearer", preempt: false },   want: false },
+            { tag: "basicMissing",        e: { authType: "basic" },                    want: false },
+            { tag: "basicNonBool",        e: { authType: "basic", preempt: 1 },        want: false },
+            { tag: "basicExplicitTrue",   e: { authType: "basic", preempt: true },     want: true },
+            { tag: "noneMissing",         e: { authType: "none" },                     want: false },
+            { tag: "noAuthType",          e: {},                                       want: false },
+            { tag: "nullEntry",           e: null,                                     want: false },
+        ];
+    }
+    function test_effectivePreempt(d) {
+        compare(Schema.effectivePreempt(d.e), d.want);
+        // The KCM row and the runtime gate must not disagree.
+        compare(Schema.normaliseAuthProfileRow(d.e, _gen).row.preempt, d.want);
+    }
+
     // ===== passthrough field defaults ===============================
     function test_nameAndUsernameKept() {
         const out = Schema.normaliseAuthProfileRow(

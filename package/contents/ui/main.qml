@@ -530,7 +530,7 @@ PlasmoidItem {
         // basic defaults false (the 401-dialog fallback in handleBasicAuth
         // handles those without leaking the header to cross-origin requests).
         const profileEntry = root.profileById(key);
-        const wantsPreempt = profileEntry && profileEntry.preempt === true;
+        const wantsPreempt = RowSchema.effectivePreempt(profileEntry);
         if (root.authSupport && wantsPreempt) {
             const interceptor = root.authSupport.createInterceptor();
             if (interceptor && interceptor.attachTo(profile)) {
@@ -865,7 +865,7 @@ PlasmoidItem {
             if (key.length === 0) continue;
             const profile = root._profiles[key];
             const entry = root.profileById(key);
-            const wantsPreempt = entry && entry.preempt === true;
+            const wantsPreempt = RowSchema.effectivePreempt(entry);
             let interceptor = root._interceptors[key];
             if (wantsPreempt) {
                 if (!interceptor) {
@@ -1167,7 +1167,7 @@ PlasmoidItem {
             // if a 401 still happens (e.g. wrong token), Qt would prompt the
             // user for user+password which can't fix it. Let Qt prompt
             // anyway in that case; user can cancel.
-            if (profile.authType !== "basic") {
+            if ((profile.authType || "basic") !== "basic") {
                 console.debug(Log.auth, "iframe-plasma[auth] non-basic profile type=" + profile.authType
                     + " -> letting Qt prompt");
                 return;
