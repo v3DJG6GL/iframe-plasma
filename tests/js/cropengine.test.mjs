@@ -731,6 +731,28 @@ test("hidden page: interval scans keywords without rAF", () => {
     assert.equal(t.rafCalls(), 0, "hidden page must not queue animation frames");
 });
 
+test("hidden page: a re-mounted target is scanned instead of the detached node", () => {
+    // An SPA usually ends an "offline" state by replacing the node, not by
+    // editing its text; the scan must not keep reading the old one.
+    const hidden = { value: true };
+    const t = runKeywordApply(hidden);
+    t.tickInterval();
+    assert.deepEqual(t.kw(), ["[ifp-keyword] hit=true"]);
+    t.w.document.body.innerHTML = "<div id='t'>Streaming now</div>";
+    t.tickInterval();
+    assert.deepEqual(t.kw(), ["[ifp-keyword] hit=true", "[ifp-keyword] hit=false"]);
+    assert.equal(t.rafCalls(), 0, "hidden page must not queue animation frames");
+});
+
+test("hidden page: a removed target falls back to scanning the body", () => {
+    const hidden = { value: true };
+    const t = runKeywordApply(hidden);
+    t.tickInterval();
+    t.w.document.body.innerHTML = "<p>Streaming now</p>";
+    t.tickInterval();
+    assert.deepEqual(t.kw(), ["[ifp-keyword] hit=true", "[ifp-keyword] hit=false"]);
+});
+
 test("visible page: interval still goes through rAF", () => {
     const hidden = { value: false };
     const t = runKeywordApply(hidden);

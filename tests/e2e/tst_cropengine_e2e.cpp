@@ -164,6 +164,26 @@ private Q_SLOTS:
                                      .contains(u"[ifp-keyword] hit=false"_s), 8000);
     }
 
+    // Same, when the page replaces the node instead of editing its text (how
+    // an SPA re-render ends an "offline" state): the hidden scan must follow
+    // the new element, not keep reading the detached one.
+    void hiddenView_keywordClearSurvivesRemount()
+    {
+        QVERIFY(loadHtml(u"<!doctype html><body><div id='root'>"
+                         "<div id='t'>No active streams</div></div></body>"_s));
+        const QString apply = buildApplyJs(u"#t"_s, u"{\"keywords\":[\"No active streams\"]}"_s);
+        QVERIFY(!apply.isEmpty());
+        run(apply);
+        QTRY_VERIFY_WITH_TIMEOUT(m_win->property("consoleLog").toString()
+                                     .contains(u"[ifp-keyword] hit=true"_s), 5000);
+
+        view()->setVisible(false);
+        QTest::qWait(300);
+        run(u"document.getElementById('root').innerHTML = \"<div id='t'>Streaming now</div>\";"_s);
+        QTRY_VERIFY_WITH_TIMEOUT(m_win->property("consoleLog").toString()
+                                     .contains(u"[ifp-keyword] hit=false"_s), 8000);
+    }
+
     // Fit mode must go idle on a static page: re-applying the same scale
     // must not re-trigger the wrapper observer every frame.
     void fitMode_isIdleOnStaticPage()
