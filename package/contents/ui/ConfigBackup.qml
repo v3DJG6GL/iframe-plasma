@@ -9,6 +9,7 @@ import QtQuick.Layouts
 import org.kde.kcmutils as KCM
 import org.kde.kirigami as Kirigami
 import io.github.v3DJG6GL.iframe 1.0 as IframePlasma
+import "BackupPage.js" as BackupPage
 
 // KCM page: configuration backup / restore. Round-trips the active
 // kcfg entries through a versioned JSON file via the C++ BackupBridge
@@ -163,15 +164,11 @@ KCM.SimpleKCM {
                 // user into hunting for a greyed-out button.
                 const before = page._collectConfig();
                 page._applyConfig(result.config);
-                let changed = false;
-                for (const k in result.config) {
-                    if (page.hasOwnProperty("cfg_" + k) && before[k] !== result.config[k]) {
-                        changed = true;
-                        break;
-                    }
-                }
+                // Judge by the values the page holds now, not by the file:
+                // a hidden SpinBox clamps an out-of-range value on assignment.
+                const outcome = BackupPage.importOutcome(before, result.config, page._collectConfig());
                 const backup = IframePlasma.BackupBridge.lastBackupPath();
-                let msg = changed
+                let msg = outcome.changed
                     ? i18n("Configuration imported. Click Apply to persist.")
                     : i18n("Imported file matches the current configuration — nothing to apply.");
                 if (backup) {
@@ -183,6 +180,11 @@ KCM.SimpleKCM {
                     // the import type guard), so the wording stays generic.
                     msg += " " + i18np("%1 key skipped.", "%1 keys skipped.",
                                        result.skipped.length);
+                }
+                if (outcome.adjusted.length) {
+                    msg += " " + i18np("%1 value adjusted to its allowed range.",
+                                       "%1 values adjusted to their allowed range.",
+                                       outcome.adjusted.length);
                 }
                 if (result.warning) {
                     // Non-fatal snapshot caveat (e.g. FAT-target perms).
