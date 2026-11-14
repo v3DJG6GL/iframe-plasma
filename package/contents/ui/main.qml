@@ -2224,6 +2224,11 @@ PlasmoidItem {
                             + JSON.stringify(selector) + ") = " + r);
                         if (ThumbRetryPolicy.isFrameConfirmed(r)) {
                             miniView._retryAttempt = 0;   // frame confirmed
+                            if (ThumbRetryPolicy.shouldHealBlank(r, miniView.loadStatus)) {
+                                miniView.loadStatus = "ok";
+                                thumbRetryTimer.stop();
+                                root.setThumbError(miniView.ownIndex, "");
+                            }
                             return;
                         }
                         // CropEngine matched the canvas but it hadn't painted a

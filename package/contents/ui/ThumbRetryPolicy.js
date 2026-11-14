@@ -41,6 +41,13 @@ function shouldMarkBlank(applyResult, loadStatus, cropEpochUnchanged) {
     return applyResult === "canvas-pending" && loadStatus === "ok" && cropEpochUnchanged;
 }
 
+// Whether an applyThumbCrop result clears a "blank" slot. A non-canvas
+// match logs no CROP line, so this result is the only signal that can
+// take the placeholder down again (e.g. a new selector saved in place).
+function shouldHealBlank(applyResult, loadStatus) {
+    return isFrameConfirmed(applyResult) && loadStatus === "blank";
+}
+
 // Whether a blank slot arms a reload retry. Only the thumbnail on screen
 // retries: a hidden page does not paint, so reloading it cannot help —
 // it reloads on its next landing instead (WebViewLifecycle.priorFailed).

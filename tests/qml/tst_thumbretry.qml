@@ -65,6 +65,20 @@ TestCase {
     function test_markBlank_alreadyFailed_ignored() {
         verify(!R.shouldMarkBlank("canvas-pending", "err", true));
     }
+    function test_healBlank_matchOnBlankSlot() {
+        // Blank from a canvas selector, then a non-canvas selector saved
+        // in place matches: no CROP line will ever heal it.
+        verify(R.shouldHealBlank("matched-and-observing", "blank"));
+    }
+    function test_healBlank_onlyBlankSlots() {
+        verify(!R.shouldHealBlank("matched-and-observing", "ok"));
+        verify(!R.shouldHealBlank("matched-and-observing", "loading"));
+        verify(!R.shouldHealBlank("matched-and-observing", "err"));
+    }
+    function test_healBlank_unconfirmedResult_staysBlank() {
+        verify(!R.shouldHealBlank("canvas-pending", "blank"));
+        verify(!R.shouldHealBlank("observing", "blank"));
+    }
     function test_armBlank_onlyCurrentAndObservable() {
         verify(R.shouldArmBlankRetry(true, true));
         verify(!R.shouldArmBlankRetry(false, true));   // hidden: reload on landing
