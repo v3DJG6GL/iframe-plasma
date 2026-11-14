@@ -49,7 +49,7 @@ support for **Authelia SSO** and **HTTP Basic Auth** behind a reverse proxy.
 ## Requirements
 
 - KDE Plasma 6.4+ (developed against 6.4.5)
-- Qt 6.7+ with QtWebEngine (developed against 6.9.2)
+- Qt 6.8+ with QtWebEngine (developed against 6.9.2)
 - KDE Frameworks 6 (Wallet, KCMUtils, I18n, CoreAddons, Package)
 - For Ubuntu 25.04+: the AppArmor fix that allows `plasmashell` to spawn
   `QtWebEngineProcess` (shipped in `apparmor 4.1.0~beta5-0ubuntu14.1` and
