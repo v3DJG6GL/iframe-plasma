@@ -706,8 +706,9 @@ function runFitApply(targetStyle = "") {
     const w = dom.window;
     const size = { cw: 100, ch: 60, vw: 400, vh: 300 };
     const el = w.document.getElementById("t");
-    Object.defineProperty(el, "scrollWidth", { get: () => size.cw });
-    Object.defineProperty(el, "scrollHeight", { get: () => size.ch });
+    // On the prototype, so an element a test adds later is measurable too.
+    Object.defineProperty(w.Element.prototype, "scrollWidth", { configurable: true, get: () => size.cw });
+    Object.defineProperty(w.Element.prototype, "scrollHeight", { configurable: true, get: () => size.ch });
     Object.defineProperty(w, "innerWidth", { configurable: true, get: () => size.vw });
     Object.defineProperty(w, "innerHeight", { configurable: true, get: () => size.vh });
     let takeRecords = 0;
@@ -775,4 +776,25 @@ test("fit: clear puts the page's own inline styles back", () => {
     assert.equal(t.el.style.height, "200px");
     assert.equal(t.el.style.transform, "translate(10px, 20px)");
     assert.equal(t.el.style.transformOrigin, "");
+});
+
+test("fit: a match that moves to another element un-scales the old one", () => {
+    const t = runFitApply();
+    t.tick();
+    assert.equal(t.el.style.transform, "scale(4)");
+    // The selector now resolves to a new element; the old one stays in the DOM.
+    const doc = t.w.document;
+    t.el.removeAttribute("id");
+    const next = doc.createElement("div");
+    next.id = "t";
+    doc.getElementById("wrap").insertBefore(next, t.el);
+    t.tick();
+    assert.equal(next.style.transform, "scale(4)");
+    assert.equal(t.el.style.transform, "");
+    assert.equal(t.el.style.width, "");
+    assert.equal(t.el.style.height, "");
+    // ...and stays un-scaled after a clear.
+    t.w.eval(ce.buildClearJs());
+    assert.equal(t.el.style.transform, "");
+    assert.equal(next.style.transform, "");
 });

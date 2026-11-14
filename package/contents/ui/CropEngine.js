@@ -340,8 +340,21 @@ const _APPLY_BODY = `(function(sel, opts){
     var wo = window.__ifpThumbWrapObserver;
     if (wo) { try { wo.takeRecords(); } catch (e) {} }
   }
+  // Un-scales the current fit target and forgets it.
+  function releaseFitTarget() {
+    var t = window.__ifpFitTarget;
+    if (!t) return;
+    _ifpFitRestore(t);
+    t.__ifpFitKey = null;
+    t.__ifpFitOrig = null;
+    window.__ifpFitTarget = null;
+  }
   function applyFitTransform(el) {
     if (!el) return;
+    // The match moved to another element: un-scale the former target, or it
+    // stays scaled and oversized on the page once the crop is cleared
+    // (teardown only knows the latest target).
+    if (window.__ifpFitTarget !== el) releaseFitTarget();
     // Remember the page's own inline values once, before the first write.
     if (!el.__ifpFitOrig) {
       el.__ifpFitOrig = {
