@@ -50,6 +50,11 @@ Rectangle {
     Behavior on color       { ColorAnimation { duration: 100 } }
     Behavior on border.color { ColorAnimation { duration: 100 } }
 
+    // The menu is a Popup in the window overlay, so it does not follow the
+    // chip's visibility on its own — it would stay open, anchored to a
+    // chip that is gone, and still emit selections.
+    onVisibleChanged: if (!visible && menu) menu.close()
+
     Row {
         id: row
         anchors.centerIn: parent

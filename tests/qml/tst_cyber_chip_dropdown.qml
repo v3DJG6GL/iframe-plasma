@@ -40,6 +40,7 @@ Item {
         when: windowShown
 
         function init() {
+            chip.visible = true;
             dropdown.close();
             tryCompare(dropdown, "visible", false);
         }
@@ -58,6 +59,13 @@ Item {
             mouseClick(chip);
             tryCompare(dropdown, "opened", true);
             mouseClick(root, root.width - 10, root.height - 10);
+            tryCompare(dropdown, "visible", false);
+        }
+
+        function test_chipHidden_whileOpen_closesMenu() {
+            mouseClick(chip);
+            tryCompare(dropdown, "opened", true);
+            chip.visible = false;
             tryCompare(dropdown, "visible", false);
         }
     }
