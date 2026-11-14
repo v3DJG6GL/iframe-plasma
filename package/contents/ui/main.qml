@@ -1739,6 +1739,10 @@ PlasmoidItem {
             WebEngineView {
                 id: miniView
                 anchors.fill: parent
+                // QtWebEngine pins a visible view Active, and under screen
+                // lock the panel window stays mapped: without this the
+                // on-screen thumbnail could never freeze while locked.
+                visible: root.compactObservable
 
                 // Qt 6.10 GC workaround — a no-op unless plasmashell runs
                 // with --js-flags=--expose-gc. See PageScripts.js. Unlike
