@@ -6,6 +6,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.5.1] — 2026-11-14
+
 ### Changed
 - **Thumbnails log `[ifp-thumb] CROP` only when the crop geometry changes.** Every visible thumbnail used to send this line to plasmashell every 3 s (and on every observer tick); each one crosses the renderer→plasmashell boundary even when the `page` category is off. The frame is still redrawn every 3 s.
 - **`--process-per-site` is no longer recommended.** With it, discarding a view can't shut its shared renderer down, and on Qt 6.10 every page's leak and every crash lands in one process. docs/PERFORMANCE.md explains the trade-off.
