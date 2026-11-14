@@ -120,10 +120,18 @@ bool SecretsBridge::ensureOpen()
         Q_EMIT error(tr("KDE Wallet is not enabled."));
         return false;
     }
+    // A refused unlock must not be retried by the rest of the same burst:
+    // one prime loop or one config page asks once per profile, and every
+    // open() blocks the GUI thread on a fresh kwalletd prompt.
+    if (m_openDeniedAt.isValid() && m_openDeniedAt.elapsed() < m_openRetryBackoffMs) {
+        return false;
+    }
     if (!m_wallet->open()) {
+        m_openDeniedAt.start();
         Q_EMIT error(tr("Failed to open the network wallet."));
         return false;
     }
+    m_openDeniedAt.invalidate();
     // Mirror the warm-path recovery: propagate setFolder failure. Without
     // this, a kwalletd that has the folder but rejects setFolder (e.g.
     // racing with kwalletmanager state) returns success here and every

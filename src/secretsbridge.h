@@ -4,6 +4,7 @@
  */
 #pragma once
 
+#include <QElapsedTimer>
 #include <QObject>
 #include <QString>
 #include <QVariantMap>
@@ -46,6 +47,10 @@ public:
     // hiding the much more actionable autostart-with-locked-wallet case.
     Q_INVOKABLE bool isWalletReady() const;
 
+    // How long a refused wallet open suppresses further open attempts.
+    // Tests set 0 to step past the window without sleeping.
+    void setOpenRetryBackoffMs(qint64 ms) { m_openRetryBackoffMs = ms; }
+
 Q_SIGNALS:
     void error(const QString &message);
 
@@ -62,5 +67,8 @@ private:
     bool ensureOpen();
 
     std::unique_ptr<IWallet> m_wallet;
+    // Running since the last refused open(); invalid when none is pending.
+    QElapsedTimer m_openDeniedAt;
+    qint64 m_openRetryBackoffMs = 3000;
     static const QString kFolder;
 };

@@ -245,6 +245,56 @@ private Q_SLOTS:
     }
 
     // ---------------------------------------------------------------
+    // Refused unlock: one prompt per burst, not one per caller
+    // ---------------------------------------------------------------
+    void deniedOpen_notRetriedInsideBackoffWindow()
+    {
+        auto w = makeWallet();
+        auto *raw = w.get();
+        raw->setOpenWillFail(true);
+        SecretsBridge b{std::move(w)};
+        QVERIFY(b.getMap(u"profile:1"_s).isEmpty());
+        QVERIFY(b.getMap(u"profile:2"_s).isEmpty());
+        QVERIFY(!b.has(u"profile:3"_s));
+        QCOMPARE(raw->openCalls(), 1);
+        QVERIFY(!b.isWalletReady());
+    }
+
+    void deniedOpen_retriedOnceWindowElapsed()
+    {
+        auto w = makeWallet();
+        auto *raw = w.get();
+        raw->setOpenWillFail(true);
+        SecretsBridge b{std::move(w)};
+        b.setOpenRetryBackoffMs(0);
+        QVERIFY(!b.has(u"k"_s));
+        QVERIFY(!b.has(u"k"_s));
+        QCOMPARE(raw->openCalls(), 2);
+    }
+
+    void successfulOpen_clearsDeniedState()
+    {
+        auto w = makeWallet();
+        auto *raw = w.get();
+        raw->setOpenWillFail(true);
+        SecretsBridge b{std::move(w)};
+        b.setOpenRetryBackoffMs(0);
+        QVERIFY(!b.has(u"k"_s));
+        raw->setOpenWillFail(false);
+        b.has(u"k"_s);
+        QVERIFY(b.isWalletReady());
+        QCOMPARE(raw->openCalls(), 2);
+        // The wallet closes again later (kwalletd timeout). The earlier
+        // refusal is history: the next call must attempt the unlock even
+        // though the window, measured from that refusal, is still running.
+        b.setOpenRetryBackoffMs(3600 * 1000);
+        raw->closeForTest();
+        b.has(u"k"_s);
+        QCOMPARE(raw->openCalls(), 3);
+        QVERIFY(b.isWalletReady());
+    }
+
+    // ---------------------------------------------------------------
     // error signal — every ensureOpen failure exit names its cause
     // (AuthSupport.qml logs it; a silent exit leaves only the generic
     // "wallet not available" line in the journal).

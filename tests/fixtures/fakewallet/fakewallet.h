@@ -23,6 +23,7 @@ public:
     bool isEnabled() const override { return m_enabled; }
     bool open() override
     {
+        ++m_openCalls;
         if (!m_enabled || m_openWillFail) {
             return false;
         }
@@ -91,6 +92,8 @@ public:
     void setWriteWillFail(bool b) { m_writeWillFail = b; }
     void setCreateFolderWillFail(bool b) { m_createFolderWillFail = b; }
     void closeForTest() { m_open = false; }
+    // Number of open() calls so far; each one is an unlock prompt in production.
+    int openCalls() const { return m_openCalls; }
     // Seed entries directly (bypasses ensureOpen).
     void seedPassword(const QString &folder, const QString &key, const QString &v)
     {
@@ -121,6 +124,7 @@ private:
     bool m_readWillFail = false;
     bool m_writeWillFail = false;
     bool m_createFolderWillFail = false;
+    int m_openCalls = 0;
     QString m_folder;
     QSet<QString> m_folders;
     QHash<QString, QString> m_passwords;          // folder/key -> password
