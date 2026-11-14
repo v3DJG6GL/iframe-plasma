@@ -76,6 +76,10 @@ PlasmoidItem {
 
     // Named auth profiles. Re-parsed on config change.
     property var authProfiles: parseAuthProfiles(Plasmoid.configuration.authProfilesJson)
+    // id -> JSON body of the profiles last diffed; owned by
+    // onAuthProfilesJsonChanged. authProfiles above cannot be the "before"
+    // side: its binding re-evaluates ahead of that handler.
+    property var _authProfileBodies: ({})
 
     function parseAuthProfiles(jsonStr) {
         return UrlUtils.parseAuthProfiles(jsonStr, Log.auth);
@@ -280,15 +284,13 @@ PlasmoidItem {
             root.primeAuthProfiles();
         }
         function onAuthProfilesJsonChanged() {
-            // Snapshot the pre-change profile bodies BEFORE we replace
-            // root.authProfiles. Each entry's full JSON body — minus the
+            // The pre-change profile bodies, from our own snapshot:
+            // root.authProfiles already holds the NEW profiles here (its
+            // binding ran first). Each entry's full JSON body — minus the
             // KWallet-resident secret which doesn't live in this JSON
             // anyway — is the diff target. Profiles with identical bodies
             // don't need any tab to reload.
-            const oldById = {};
-            for (const p of root.authProfiles) {
-                if (p && p.id) oldById[p.id] = JSON.stringify(p);
-            }
+            const oldById = root._authProfileBodies;
             root.authProfiles = root.parseAuthProfiles(Plasmoid.configuration.authProfilesJson);
             // Per-profile preempt flags may have flipped — resync interceptor
             // attach/detach BEFORE priming so applyProfile writes hit only
@@ -300,18 +302,9 @@ PlasmoidItem {
             // the soft reload — the blanket reloadAll() this used to call
             // re-navigated every other tab in the pinned popup for no
             // reason.
-            const changed = {};
-            const newById = {};
-            for (const p of root.authProfiles) {
-                if (p && p.id) {
-                    newById[p.id] = JSON.stringify(p);
-                    if (newById[p.id] !== oldById[p.id]) changed[p.id] = true;
-                }
-            }
-            for (const id in oldById) {
-                if (!(id in newById)) changed[id] = true;
-            }
-            const changedIds = Object.keys(changed);
+            const newById = UrlUtils.authProfileBodies(root.authProfiles);
+            root._authProfileBodies = newById;
+            const changedIds = UrlUtils.changedAuthProfileIds(oldById, newById);
             if (changedIds.length === 0) {
                 console.debug(Log.auth, "iframe-plasma[auth] profiles unchanged; no tab reloads");
                 return;
@@ -320,7 +313,7 @@ PlasmoidItem {
                 + " — reloading referencing tabs");
             for (let i = 0; i < root.tabs.length; i++) {
                 const t = root.tabs[i];
-                if (t && t.authProfileId && (t.authProfileId in changed)) {
+                if (t && t.authProfileId && changedIds.indexOf(t.authProfileId) !== -1) {
                     root._tabReloadRequested(i, "soft");
                 }
             }
@@ -388,6 +381,7 @@ PlasmoidItem {
         // tabs: []` declaration above intentionally has NO binding —
         // see the comment there.
         root.tabs = root.parseTabs(Plasmoid.configuration.urlsJson);
+        root._authProfileBodies = UrlUtils.authProfileBodies(root.authProfiles);
 
         // Prime the auth interceptor once the initial config is parsed.
         Qt.callLater(function() {

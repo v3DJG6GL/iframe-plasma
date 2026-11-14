@@ -125,6 +125,31 @@ function authCoversRequest(tabUrl, requestUrl) {
         || new URL(tabUrl).protocol !== "https:";
 }
 
+// id -> JSON body of every auth profile: the snapshot main.qml keeps so a
+// later authProfilesJson change can be diffed against what was live before.
+function authProfileBodies(profiles) {
+    const out = {};
+    if (!Array.isArray(profiles)) return out;
+    for (const p of profiles) {
+        if (p && p.id) out[p.id] = JSON.stringify(p);
+    }
+    return out;
+}
+
+// Ids added, removed or body-different between two authProfileBodies maps.
+function changedAuthProfileIds(oldBodies, newBodies) {
+    const o = oldBodies || {};
+    const n = newBodies || {};
+    const changed = [];
+    for (const id in n) {
+        if (n[id] !== o[id]) changed.push(id);
+    }
+    for (const id in o) {
+        if (!(id in n)) changed.push(id);
+    }
+    return changed;
+}
+
 // Pure form of resolveTheme(): given the configured themeMode and the
 // resolved KDE backgroundColor (as {r, g, b} in 0..1), return "light" or
 // "dark". The "auto" branch uses Rec. 601 relative luminance with a 0.5
