@@ -657,6 +657,30 @@ test("CROP: a fresh apply (re-inject) logs its first crop", () => {
     assert.equal(t.crops().length, 2, t.crops().join(" | "));
 });
 
+test("CROP: the overlay goes away when the canvas disappears", () => {
+    // The overlay holds the last frame over the whole viewport; left in
+    // place after a miss it shows a frozen chart instead of the page.
+    const t = runCanvasApply();
+    const doc = t.dom.window.document;
+    assert.ok(doc.getElementById("ifp-thumb-display"));
+    doc.querySelector(".u-wrap").remove();
+    t.tick();
+    assert.equal(doc.getElementById("ifp-thumb-display"), null);
+    assert.equal(doc.documentElement.getAttribute("data-ifp-thumb"), null);
+});
+
+test("CROP: the overlay goes away while the canvas has no frame", () => {
+    const t = runCanvasApply();
+    const doc = t.dom.window.document;
+    t.rect.width = 0;                 // canvas-pending
+    t.tick();
+    assert.equal(doc.getElementById("ifp-thumb-display"), null);
+    t.rect.width = 600;
+    t.tick();
+    assert.ok(doc.getElementById("ifp-thumb-display"), "a new frame brings it back");
+    assert.equal(t.crops().length, 2, t.crops().join(" | "));
+});
+
 test("CROP: clear resets the remembered geometry", () => {
     const t = runCanvasApply();
     assert.ok(t.dom.window.__ifpLastCropKey);

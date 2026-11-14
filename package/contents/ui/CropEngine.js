@@ -286,6 +286,14 @@ const _APPLY_BODY = `(function(sel, opts){
       + ' disp=' + disp.width + 'x' + disp.height;
   }
 
+  // Removes the crop overlay. It covers the whole viewport with the last
+  // blitted frame regardless of data-ifp-thumb, so every path that un-blanks
+  // the page has to take it away or a frozen chart keeps hiding that page.
+  function dropOverlay() {
+    const disp = document.getElementById('ifp-thumb-display');
+    if (disp && disp.parentNode) disp.parentNode.removeChild(disp);
+  }
+
   // Generic isolation. Walks ancestors of \`el\` up to <body>, tagging
   // each with data-ifp-keep="1", tags \`el\` itself with data-ifp-target="1",
   // and sets data-ifp-isolate="1" on <html>. The stylesheet does the rest.
@@ -496,6 +504,10 @@ const _APPLY_BODY = `(function(sel, opts){
       // mutation if/when the target eventually appears.
       document.documentElement.removeAttribute('data-ifp-isolate');
       document.documentElement.removeAttribute('data-ifp-thumb');
+      // Same for a crop overlay left by a canvas that has since gone; the
+      // next successful crop must be logged again.
+      dropOverlay();
+      window.__ifpLastCropKey = null;
       // A former fit target may still be in the page (its class moved
       // away): take the inline scale off it too.
       if (window.__ifpFitTarget) { releaseFitTarget(); forgetOwnMutations(); }
@@ -515,6 +527,7 @@ const _APPLY_BODY = `(function(sel, opts){
         document.documentElement.setAttribute('data-ifp-thumb','1');
       } else {
         document.documentElement.removeAttribute('data-ifp-thumb');
+        dropOverlay();
         matchedEl = null;
         return 'canvas-pending';
       }
