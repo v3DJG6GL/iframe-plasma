@@ -62,6 +62,15 @@ Item {
     // reflect it. Values: "idle" | "loading" | "ok" | "err" | "auth".
     property string loadStatus: "idle"
 
+    // What the tab showed before the navigation in flight began. A navigation
+    // that ends as LoadStoppedStatus (the response became a download, HTTP
+    // 204, stop()) leaves the previous document on screen, so the handler
+    // returns to this instead of staying on "loading".
+    property string _preLoadStatus: "idle"
+    property bool   _preLoadCertError: false
+    property int    _preLoadOverlayMode: StatusOverlay.Hidden
+    property string _preLoadOverlayMessage: ""
+
     // Final URL of the most recent successful load. Used by the
     // LoadSucceededStatus handler to detect "we just navigated back to the
     // tab's configured URL from somewhere else" — typically the back-half of
@@ -595,6 +604,14 @@ Item {
                 onLoadingChanged: function(info) {
                     if (info.status === WebEngineView.LoadStartedStatus) {
                         console.debug(Log.load, "iframe-plasma[load] STARTED url=" + info.url);
+                        // A start that supersedes an unfinished load keeps the
+                        // state captured before the first of them.
+                        if (tab.loadStatus !== "loading") {
+                            tab._preLoadStatus = tab.loadStatus;
+                            tab._preLoadCertError = tab.lastCertError;
+                            tab._preLoadOverlayMode = statusOverlay.mode;
+                            tab._preLoadOverlayMessage = statusOverlay.message;
+                        }
                         tab.loadStatus = "loading";
                         tab.lastCertError = false;
                         if (!tab.loginInProgress) statusOverlay.showLoading();
@@ -669,6 +686,16 @@ Item {
                         tab._lastSuccessUrl = finalUrl;
                         tab._captureNavTiming();
                         tab._applyPopupSelector();
+                    } else if (info.status === WebEngineView.LoadStoppedStatus) {
+                        console.debug(Log.load, "iframe-plasma[load] STOPPED url=" + info.url);
+                        // Still loading: a replacement navigation is in flight
+                        // (e.g. the hard-reload hand-off above) and reports
+                        // its own outcome.
+                        if (webview.loading || tab.loadStatus !== "loading") return;
+                        tab.loadStatus = tab._preLoadStatus;
+                        tab.lastCertError = tab._preLoadCertError;
+                        statusOverlay.message = tab._preLoadOverlayMessage;
+                        statusOverlay.mode = tab._preLoadOverlayMode;
                     } else if (info.status === WebEngineView.LoadFailedStatus) {
                         console.warn(Log.load, "iframe-plasma[load] FAILED url=" + Log.redactUrl(info.url)
                             + " code=" + info.errorCode + " msg=" + info.errorString);
