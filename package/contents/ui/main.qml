@@ -1980,7 +1980,7 @@ PlasmoidItem {
                 }
                 onAuthenticationDialogRequested: function(request) {
                     console.warn(Log.policy, "iframe-plasma[mini-auth] rejected dialog type=" + request.type
-                        + " url=" + request.url);
+                        + " url=" + Log.redactUrl(request.url));
                     request.dialogReject();
                     request.accepted = true;
                 }
