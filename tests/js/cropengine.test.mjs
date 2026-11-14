@@ -619,6 +619,68 @@ test("picker: clear returns prior value and resets to null", () => {
     assert.equal(dom.window.__ifpPicked, null);
 });
 
+// Starts the picker on a page. jsdom has no layout, so elementFromPoint is
+// stubbed: pointAt(el) sets the element under the cursor. Timers are
+// captured so a test can run them (and none outlives the test).
+function runPicker(html) {
+    const dom = new JSDOM(html, { runScripts: "outside-only" });
+    const w = dom.window;
+    w.MutationObserver = class { observe() {} disconnect() {} };
+    w.ResizeObserver = class { observe() {} disconnect() {} };
+    w.requestAnimationFrame = (cb) => 0;
+    w.cancelAnimationFrame = () => {};
+    w.setInterval = () => 0;
+    w.clearInterval = () => {};
+    const timers = [];
+    w.setTimeout = (cb) => { timers.push(cb); return timers.length; };
+    w.clearTimeout = () => {};
+    w.console = { info: () => {}, warn: () => {}, error: () => {} };
+    let under = null;
+    w.document.elementFromPoint = () => under;
+    w.eval(ce.buildPickerStartJs());
+    return {
+        w,
+        doc: w.document,
+        pointAt: (el) => { under = el; },
+        fire: (el, type) => el.dispatchEvent(
+            new w.MouseEvent(type, { bubbles: true, cancelable: true })),
+        runTimers: () => { while (timers.length) timers.shift()(); },
+    };
+}
+
+test("picker: the rest of the picking gesture does not reach the page", () => {
+    // The pick is taken on pointerdown; the click of the same gesture must
+    // not then activate the picked button or link.
+    const p = runPicker("<!doctype html><html><body><button id='go'>go</button></body></html>");
+    const button = p.doc.getElementById("go");
+    const seen = [];
+    for (const type of ["pointerup", "mouseup", "click"]) {
+        button.addEventListener(type, () => seen.push(type));
+    }
+    const gesture = ["pointerdown", "mousedown", "pointerup", "mouseup", "click"];
+    p.pointAt(button);
+    for (const type of gesture) p.fire(button, type);
+    assert.equal(p.w.__ifpPicked, "#go");
+    assert.deepEqual(seen, []);
+
+    // The next gesture belongs to the page again.
+    for (const type of gesture) p.fire(button, type);
+    assert.deepEqual(seen, ["pointerup", "mouseup", "click"]);
+});
+
+test("picker: a pick whose click never comes does not eat a later click", () => {
+    const p = runPicker("<!doctype html><html><body><button id='go'>go</button></body></html>");
+    const button = p.doc.getElementById("go");
+    let clicks = 0;
+    button.addEventListener("click", () => { clicks++; });
+    p.pointAt(button);
+    p.fire(button, "pointerdown");      // pressed, then released outside the view
+    assert.equal(p.w.__ifpPicked, "#go");
+    p.runTimers();
+    p.fire(button, "click");            // e.g. keyboard activation, no press first
+    assert.equal(clicks, 1);
+});
+
 // ============================================================
 // CROP logging only on geometry change
 // ============================================================

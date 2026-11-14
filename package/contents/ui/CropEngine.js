@@ -853,12 +853,36 @@ ${_TEARDOWN_BODY}
     e.preventDefault();
     e.stopImmediatePropagation();
     e.stopPropagation();
+    if (e.type !== 'click') swallowGestureTail();
     // Guard against self-click (banner): without hiding above, clicking
     // the instruction banner would compute the banner's #__ifpPickerBanner
     // id as the selector, save it, and the user gets a silently-broken
     // pick that matches nothing after teardown.
     if (!t || t === outline || t === banner) { finish(''); return; }
     finish(compute(t));
+  }
+  // The pick is taken on the first event of the gesture (pointerdown) and
+  // finish() detaches every picker listener, so the gesture's mouseup and
+  // click would reach the page and activate what was just picked: a link
+  // navigates, a button fires. Swallow them until the click has passed. A
+  // new press ends the swallow, as does the timer when no click ever comes
+  // (button released outside the view), so no later gesture is eaten.
+  function swallowGestureTail() {
+    const tail = ['mousedown', 'pointerup', 'mouseup', 'click'];
+    let timer = 0;
+    function swallow(ev) {
+      ev.preventDefault();
+      ev.stopImmediatePropagation();
+      if (ev.type === 'click') off();
+    }
+    function off() {
+      clearTimeout(timer);
+      tail.forEach(function(t){ window.removeEventListener(t, swallow, true); });
+      window.removeEventListener('pointerdown', off, true);
+    }
+    tail.forEach(function(t){ window.addEventListener(t, swallow, true); });
+    window.addEventListener('pointerdown', off, true);
+    timer = setTimeout(off, 2000);
   }
   function key(e) {
     if (e.key === 'Escape') {
@@ -910,9 +934,9 @@ ${_TEARDOWN_BODY}
   // preventDefault pointerdown) — these fire EARLIER in the gesture
   // lifecycle than click, and on pages that swallow click entirely
   // they still reach us. Same pattern as Chrome DevTools Inspect mode
-  // and uBlock Origin's element picker. Keep a click listener too —
-  // it swallows the synthetic follow-up so the page doesn't get a
-  // phantom activation after the user picks.
+  // and uBlock Origin's element picker. Keep a click listener too, for
+  // pages where neither press event reaches us. The rest of a picking
+  // gesture is kept from the page by swallowGestureTail().
   window.addEventListener('mousemove',   move,  true);
   window.addEventListener('pointerdown', click, true);
   window.addEventListener('mousedown',   click, true);
