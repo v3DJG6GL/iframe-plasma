@@ -207,6 +207,15 @@ TestCase {
     function test_iconName_fileUrlWithControlByteRejected() {
         compare(Schema.normaliseTabRow({ thumbIconName: "file:///tmp/a\nb.svg" }).thumbIconName, "");
     }
+    function test_iconName_fileUrlWithMarkupRejected() {
+        // The name is also shown as text on the URLs config page; a tag in
+        // it would be rendered as rich text and its image fetched.
+        compare(Schema.sanitizeIconName('file:///<img src="http://attacker.example/b.png">'), "");
+        compare(Schema.normaliseTabRow({ thumbIconName: "file:///tmp/a<b.svg" }).thumbIconName, "");
+        compare(Schema.serialiseTabRow({ thumbIconName: "file:///tmp/a>b.svg" }).thumbIconName, "");
+        // What a real pick of such a file looks like: percent-encoded.
+        compare(Schema.sanitizeIconName("file:///tmp/a%3Cb%3E.svg"), "file:///tmp/a%3Cb%3E.svg");
+    }
     function test_iconName_leadingDotRejected() {
         // FreeDesktop spec disallows; also blocks a stray "://" slipping past.
         compare(Schema.normaliseTabRow({ thumbIconName: ".hidden" }).thumbIconName, "");

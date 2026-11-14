@@ -1182,6 +1182,10 @@ KCM.SimpleKCM {
                             QQC.Label {
                                 Layout.fillWidth: true
                                 text: thumbIconName.length > 0 ? thumbIconName : i18n("(no icon picked)")
+                                // thumbIconName comes from imported JSON; as
+                                // AutoText an `<img src=…>` in it would be
+                                // fetched by the engine.
+                                textFormat: Text.PlainText
                                 color: thumbIconName.length > 0
                                     ? Kirigami.Theme.textColor
                                     : Kirigami.Theme.disabledTextColor

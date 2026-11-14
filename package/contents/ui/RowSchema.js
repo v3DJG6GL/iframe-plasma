@@ -36,8 +36,10 @@ function sanitizeIconName(name) {
     // package/contents/icons/bundled/.
     if (/^bundled:[A-Za-z0-9_-]+$/.test(s)) return s;
     // "file:///<abs path>" from the operator's FileDialog pick. Refuse
-    // C0/DEL so a smuggled CR/LF can't smear into a downstream renderer.
-    if (/^file:\/\/\//.test(s) && !/[\x00-\x1f\x7f]/.test(s)) return s;
+    // C0/DEL so a smuggled CR/LF can't smear into a downstream renderer,
+    // and `<`/`>` so the name can't carry markup into a text sink (a real
+    // pick arrives with both percent-encoded).
+    if (/^file:\/\/\//.test(s) && !/[\x00-\x1f\x7f<>]/.test(s)) return s;
     // FreeDesktop icon-naming spec: letters/digits/dot/dash/underscore.
     // Leading char must be alnum so a stray "://" can't slip through.
     if (/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(s)) return s;
