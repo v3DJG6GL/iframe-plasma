@@ -87,6 +87,27 @@ TestCase {
         verify(a.setState === undefined);
         verify(!a.reload);
     }
+    // A view the controller froze is promoted to Active by QtWebEngine as
+    // soon as it becomes visible, so the controller can find it "active"
+    // with its freeze timestamp still set. That is a resume from Frozen.
+    function test_activeWithFreezeRecord_staleReloads() {
+        // Frozen at t=1 s, shown again at t=12 s, staleness 10 s.
+        const a = P.decideOnChange("active", true, 1000, 5, 600, 10, 12000);
+        compare(a.reload, true);
+        compare(a.resetFrozenAtMs, true);
+        verify(a.setState === undefined);
+    }
+    function test_activeWithFreezeRecord_priorFailedReloads() {
+        const a = P.decideOnChange("active", true, 1000, 5, 600, 0, 2000, true);
+        compare(a.reload, true);
+        compare(a.resetFrozenAtMs, true);
+    }
+    function test_activeWithFreezeRecord_belowStaleness_onlyClearsRecord() {
+        const a = P.decideOnChange("active", true, 1000, 5, 600, 10, 6000);
+        verify(!a.reload);
+        compare(a.resetFrozenAtMs, true);
+        verify(a.setState === undefined);
+    }
     function test_discarded_priorFailed_noPolicyReload() {
         // Discarded->Active auto-reloads in QtWebEngine; the policy must not
         // add its own reload even when priorFailed.

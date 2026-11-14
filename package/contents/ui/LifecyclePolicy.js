@@ -37,21 +37,25 @@ function decideOnChange(currentState, desiredActive, frozenAtMs,
                         priorFailed, recycleDue) {
     if (desiredActive) {
         const out = { stopTimer: true };
-        if (currentState !== "active") {
-            out.setState = "active";
-            out.resetFrozenAtMs = true;
-            // Reload on resume when the prior attempt failed/blanked (any
-            // frozen duration), OR when the view sat Frozen at least as long
-            // as stalenessSec. The boundary is inclusive (>=): with the
-            // common config where the auto-cycle interval equals the freeze
-            // delay, a tab is frozen for exactly stalenessSec between
-            // appearances, and a strict > would never refresh it.
-            if (currentState === "frozen" && (
-                    priorFailed === true
-                 || (stalenessSec > 0 && frozenAtMs > 0
-                     && (now - frozenAtMs) >= stalenessSec * 1000))) {
-                out.reload = true;
-            }
+        // QtWebEngine promotes a Frozen view to Active by itself the moment
+        // it becomes visible, which can happen before the controller is
+        // asked. An Active view that still carries a freeze timestamp was
+        // therefore resumed from Frozen just the same.
+        const resumed = currentState === "frozen"
+                     || (currentState === "active" && frozenAtMs > 0);
+        if (currentState !== "active") out.setState = "active";
+        if (currentState !== "active" || resumed) out.resetFrozenAtMs = true;
+        // Reload on resume when the prior attempt failed/blanked (any
+        // frozen duration), OR when the view sat Frozen at least as long
+        // as stalenessSec. The boundary is inclusive (>=): with the
+        // common config where the auto-cycle interval equals the freeze
+        // delay, a tab is frozen for exactly stalenessSec between
+        // appearances, and a strict > would never refresh it.
+        if (resumed && (
+                priorFailed === true
+             || (stalenessSec > 0 && frozenAtMs > 0
+                 && (now - frozenAtMs) >= stalenessSec * 1000))) {
+            out.reload = true;
         }
         return out;
     }
