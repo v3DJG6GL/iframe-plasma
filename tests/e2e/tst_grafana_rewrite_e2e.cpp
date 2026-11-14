@@ -13,13 +13,11 @@
  * Grafana resolves them via a 302, so the helper preserves them and
  * the navigation handles the resolution.
  */
+#include "fixtureserver.h"
+
 #include <QCoreApplication>
-#include <QEventLoop>
-#include <QJsonDocument>
 #include <QJsonObject>
-#include <QProcess>
 #include <QSignalSpy>
-#include <QTcpSocket>
 #include <QTest>
 #include <QtWebEngineCore/QWebEnginePage>
 #include <QtWebEngineCore/QWebEngineProfile>
@@ -29,58 +27,6 @@
 using namespace Qt::Literals::StringLiterals;
 
 namespace {
-
-class FixtureServer
-{
-public:
-    bool start()
-    {
-        const QByteArray script = qgetenv("IFRAME_FIXTURE_HTTPD");
-        if (script.isEmpty()) return false;
-        m_proc.setProgram(QStringLiteral("python3"));
-        m_proc.setArguments({QString::fromLocal8Bit(script),
-                             QStringLiteral("--port"), QStringLiteral("0")});
-        m_proc.start();
-        if (!m_proc.waitForStarted(5000)) return false;
-        if (!m_proc.waitForReadyRead(5000)) return false;
-        const QByteArray line = m_proc.readLine();
-        const QList<QByteArray> parts = line.trimmed().split(' ');
-        if (parts.size() != 2 || parts[0] != "LISTEN") return false;
-        bool ok = false;
-        m_port = parts[1].toInt(&ok);
-        return ok && m_port > 0;
-    }
-    void stop()
-    {
-        if (m_proc.state() == QProcess::Running) {
-            m_proc.terminate();
-            if (!m_proc.waitForFinished(2000)) m_proc.kill();
-        }
-    }
-    int port() const { return m_port; }
-    QString baseUrl() const
-    {
-        return QStringLiteral("http://127.0.0.1:%1").arg(m_port);
-    }
-
-private:
-    QProcess m_proc;
-    int m_port = 0;
-};
-
-QJsonObject fetchReport(int port)
-{
-    QTcpSocket sock;
-    sock.connectToHost(QHostAddress::LocalHost, port);
-    if (!sock.waitForConnected(2000)) return {};
-    sock.write("GET /_report HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n");
-    if (!sock.waitForBytesWritten(2000)) return {};
-    QByteArray buf;
-    while (sock.waitForReadyRead(2000)) buf.append(sock.readAll());
-    const int blank = buf.indexOf("\r\n\r\n");
-    if (blank < 0) return {};
-    return QJsonDocument::fromJson(buf.mid(blank + 4)).object();
-}
 
 // Wait for the inline /d/ page's `fetch('/_record?u=…')` to actually
 // hit the server. WebEngine's loadFinished signal fires when the page
@@ -178,14 +124,7 @@ private Q_SLOTS:
         page.load(QUrl(fixture.baseUrl() + u"/theme.html?theme=dark"_s));
         QVERIFY(loadSpy.wait(10000));
 
-        QString body;
-        QEventLoop loop;
-        page.toPlainText([&body, &loop](const QString &s) {
-            body = s; loop.quit();
-        });
-        QTimer::singleShot(5000, &loop, &QEventLoop::quit);
-        loop.exec();
-
+        const QString body = pageBody(page);
         QVERIFY2(body.contains(u"theme=dark"_s),
                  qPrintable(u"expected theme=dark marker, got: "_s + body));
 

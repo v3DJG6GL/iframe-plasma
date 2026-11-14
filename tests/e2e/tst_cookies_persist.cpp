@@ -12,9 +12,9 @@
  * downgrade so a thumbnail rotating through tabs doesn't keep
  * re-authenticating.
  */
+#include "fixtureserver.h"
+
 #include <QCoreApplication>
-#include <QEventLoop>
-#include <QProcess>
 #include <QSignalSpy>
 #include <QTcpSocket>
 #include <QTest>
@@ -26,56 +26,6 @@
 using namespace Qt::Literals::StringLiterals;
 
 namespace {
-
-class FixtureServer
-{
-public:
-    bool start()
-    {
-        const QByteArray script = qgetenv("IFRAME_FIXTURE_HTTPD");
-        if (script.isEmpty()) return false;
-        m_proc.setProgram(QStringLiteral("python3"));
-        m_proc.setArguments({QString::fromLocal8Bit(script),
-                             QStringLiteral("--port"), QStringLiteral("0")});
-        m_proc.start();
-        if (!m_proc.waitForStarted(5000)) return false;
-        if (!m_proc.waitForReadyRead(5000)) return false;
-        const QByteArray line = m_proc.readLine();
-        const QList<QByteArray> parts = line.trimmed().split(' ');
-        if (parts.size() != 2 || parts[0] != "LISTEN") return false;
-        bool ok = false;
-        m_port = parts[1].toInt(&ok);
-        return ok && m_port > 0;
-    }
-    void stop()
-    {
-        if (m_proc.state() == QProcess::Running) {
-            m_proc.terminate();
-            if (!m_proc.waitForFinished(2000)) m_proc.kill();
-        }
-    }
-    int port() const { return m_port; }
-    QString baseUrl() const
-    {
-        return QStringLiteral("http://127.0.0.1:%1").arg(m_port);
-    }
-
-private:
-    QProcess m_proc;
-    int m_port = 0;
-};
-
-QString pageBody(QWebEnginePage &page)
-{
-    QString out;
-    QEventLoop loop;
-    page.toPlainText([&out, &loop](const QString &s) {
-        out = s; loop.quit();
-    });
-    QTimer::singleShot(5000, &loop, &QEventLoop::quit);
-    loop.exec();
-    return out;
-}
 
 bool loadAndWait(QWebEnginePage &page, const QUrl &url)
 {

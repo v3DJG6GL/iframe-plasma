@@ -8,9 +8,10 @@
  * DocumentCreation and the injected script must arm itself; the script is
  * built from the production PageScripts.js, not a copy.
  */
+#include "fixtureserver.h"
+
 #include <QFile>
 #include <QJSEngine>
-#include <QProcess>
 #include <QSignalSpy>
 #include <QTest>
 #include <QtWebEngineCore/QWebEnginePage>
@@ -23,39 +24,6 @@
 using namespace Qt::Literals::StringLiterals;
 
 namespace {
-
-class FixtureServer
-{
-public:
-    bool start()
-    {
-        const QByteArray script = qgetenv("IFRAME_FIXTURE_HTTPD");
-        if (script.isEmpty()) return false;
-        m_proc.setProgram(QStringLiteral("python3"));
-        m_proc.setArguments({QString::fromLocal8Bit(script),
-                             QStringLiteral("--port"), QStringLiteral("0")});
-        m_proc.start();
-        if (!m_proc.waitForStarted(5000)) return false;
-        if (!m_proc.waitForReadyRead(5000)) return false;
-        const QList<QByteArray> parts = m_proc.readLine().trimmed().split(' ');
-        if (parts.size() != 2 || parts[0] != "LISTEN") return false;
-        bool ok = false;
-        m_port = parts[1].toInt(&ok);
-        return ok && m_port > 0;
-    }
-    void stop()
-    {
-        if (m_proc.state() == QProcess::Running) {
-            m_proc.terminate();
-            if (!m_proc.waitForFinished(2000)) m_proc.kill();
-        }
-    }
-    QString baseUrl() const { return QStringLiteral("http://127.0.0.1:%1").arg(m_port); }
-
-private:
-    QProcess m_proc;
-    int m_port = 0;
-};
 
 // Evaluate PageScripts.js (minus Qt's `.pragma library`) and call
 // gcWorkaroundSource(intervalSec).
