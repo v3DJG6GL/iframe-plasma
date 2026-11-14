@@ -513,6 +513,14 @@ const _APPLY_BODY = `(function(sel, opts){
       if (window.__ifpFitTarget) { releaseFitTarget(); forgetOwnMutations(); }
       return 'wait';
     }
+    if (el === document.body || el === document.documentElement) {
+      // The whole page was asked for, so there is nothing to isolate — and
+      // isolating would hide every child of <body> (none is an ancestor of
+      // the target) while still reporting a match: a silently blank view.
+      // matchedEl stays null, which makes the keyword scan read <body>.
+      matchedEl = null;
+      return 'matched';
+    }
     ensureStyle();
     if (el.tagName === 'CANVAS') {
       // Crop FIRST, blank the page chrome only once a frame actually

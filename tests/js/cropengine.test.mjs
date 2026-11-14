@@ -157,6 +157,20 @@ test("apply: tags every ancestor of target with data-ifp-keep", () => {
     assert.equal(doc.querySelector("article").getAttribute("data-ifp-keep"), "1");
 });
 
+test("apply: a body or html selector shows the whole page instead of blanking it", () => {
+    // No child of <body> is an ancestor of <body>, so isolating it would
+    // hide all of them and still report a match.
+    for (const selector of ["body", "html"]) {
+        const { dom, result } = runApply(
+            "<!doctype html><html><body><header>a</header><main>b</main></body></html>",
+            selector);
+        const doc = dom.window.document;
+        assert.equal(result, "matched-and-observing", selector);
+        assert.equal(doc.documentElement.getAttribute("data-ifp-isolate"), null, selector);
+        assert.equal(doc.querySelectorAll("[data-ifp-target]").length, 0, selector);
+    }
+});
+
 test("apply: invalid selector does not throw; status is 'invalid'", () => {
     const { result } = runApply(
         "<!doctype html><html><body><div/></body></html>",
