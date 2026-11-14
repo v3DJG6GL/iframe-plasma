@@ -1147,6 +1147,13 @@ PlasmoidItem {
     // set accepted=true + dialogAccept(user,pw) to supply stored creds silently.
     function handleBasicAuth(request, tabConfig) {
         try {
+            // Stored credentials belong to the site (401). A proxy challenge
+            // (407) still carries the proxied request's URL, so the host
+            // check below would pass and hand them to the proxy.
+            if (request.type !== AuthenticationDialogRequest.AuthenticationTypeHTTP) {
+                console.debug(Log.auth, "iframe-plasma[auth] proxy challenge -> letting Qt prompt");
+                return;
+            }
             const profile = root.profileById(tabConfig.authProfileId);
             if (!profile) {
                 console.debug(Log.auth, "iframe-plasma[auth] no profile -> letting Qt prompt");
