@@ -243,9 +243,17 @@ Item {
         tab.webView?.runJavaScript(
             "if (typeof window.__ifpPickerFinish === 'function') window.__ifpPickerFinish('');");
     }
+    // The session ends here, on the QML side, without waiting for the page
+    // to report back: a document that replaced the one the picker was
+    // armed in has no finish() and never answers, which used to leave
+    // pickerActive (and the Esc shortcut) stuck until the 2-minute cap.
     function cancelPicker() {
         if (!tab.pickerActive) return;
         _finishPickerInPage();
+        pickerTimer.stop();
+        pickerTimer.ticks = 0;
+        tab.pickerActive = false;
+        tab._applyPopupSelector();
     }
 
     // Esc cancels the picker. The page-side keydown handler does the
@@ -261,7 +269,7 @@ Item {
         context: Qt.WindowShortcut
         onActivated: {
             console.debug(Log.picker, "iframe-plasma[picker] Esc shortcut → cancel");
-            tab._finishPickerInPage();
+            tab.cancelPicker();
         }
     }
 
@@ -293,6 +301,9 @@ Item {
             }
             if (!tab.webView) return;
             tab.webView.runJavaScript(CropEngine.buildPickerClearJs(), function(result) {
+                // A poll that was in flight when cancelPicker() ended the
+                // session must not end it a second time or deliver a pick.
+                if (!tab.pickerActive) return;
                 if (result === undefined || result === null) return;
                 stop();
                 pickerTimer.ticks = 0;
@@ -619,6 +630,9 @@ Item {
                 onLoadingChanged: function(info) {
                     if (info.status === WebEngineView.LoadStartedStatus) {
                         console.debug(Log.load, "iframe-plasma[load] STARTED url=" + info.url);
+                        // The document the picker was armed in is being
+                        // replaced; its successor could never report a result.
+                        if (tab.pickerActive) tab.cancelPicker();
                         // A start that supersedes an unfinished load keeps the
                         // state captured before the first of them.
                         if (tab.loadStatus !== "loading") {
