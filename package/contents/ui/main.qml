@@ -1536,6 +1536,17 @@ PlasmoidItem {
                     readonly property bool wantLive: Plasmoid.configuration.compactPreviewEnabled
                                                   && slotMode !== "text"
                                                   && slotMode !== "icon"
+                    // Only the live view writes (and clears) this slot's
+                    // entries in the index-keyed error / exclusion maps. When
+                    // it goes away without a rebuild (in-place flip to
+                    // text/icon, preview switched off) nothing else would
+                    // clear them: the placeholder would cover the text/icon
+                    // and the auto-cycle would skip the tab for good.
+                    onWantLiveChanged: {
+                        if (wantLive) return;
+                        root.setThumbError(thumbSlot.index, "");
+                        root.setRuntimeExcluded(thumbSlot.index, false);
+                    }
 
                     // --- Live web preview (per tab) -----------------------
                     // Loader-gated so text / icon tabs pay zero
@@ -1645,8 +1656,10 @@ PlasmoidItem {
                             const _tick = root._thumbErrorSerial;
                             return root._thumbErrorState[thumbSlot.index] || "";
                         }
+                        // wantLive (which includes compactPreviewEnabled): the
+                        // placeholder stands in for the live view only.
                         visible: errMsg.length > 0
-                                 && Plasmoid.configuration.compactPreviewEnabled
+                                 && thumbSlot.wantLive
                         color: Kirigami.Theme.backgroundColor
                         ColumnLayout {
                             anchors.centerIn: parent
