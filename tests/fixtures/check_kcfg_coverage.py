@@ -87,7 +87,8 @@ def check_backup_lists() -> int:
     Asserts: (C) the `property alias cfg_<key>` set, (D) the _collectConfig()
     object-literal key set, and (A) main.xml's entries minus BACKUP_EXCLUDE
     are all identical. A key added to main.xml + kSchema but forgotten in
-    either QML list would otherwise silently never export."""
+    either QML list would otherwise silently never export. Also asserts that
+    no cfg_ alias targets a control's `.text`."""
     text = CONFIG_BACKUP.read_text()
 
     aliases = set(re.findall(r"property\s+alias\s+cfg_(\w+)\s*:", text))
@@ -108,6 +109,13 @@ def check_backup_lists() -> int:
         problems.append(("_collectConfig keys vs main.xml schema", collected ^ expected))
     if aliases != collected:
         problems.append(("cfg_ aliases vs _collectConfig keys", aliases ^ collected))
+
+    # A String key must not be backed by a text control: TextField/TextInput
+    # silently cut assigned text at maximumLength (32767 by default), which
+    # truncates a large urlsJson on load, export and import.
+    capped = set(re.findall(r"property\s+alias\s+cfg_(\w+)\s*:\s*\w+\.text\b", text))
+    if capped:
+        problems.append(("cfg_ aliases backed by a length-capped .text", capped))
 
     if problems:
         print("ConfigBackup.qml backup lists are out of sync:", file=sys.stderr)

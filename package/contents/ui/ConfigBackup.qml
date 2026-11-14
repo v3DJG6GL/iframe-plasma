@@ -21,18 +21,18 @@ KCM.SimpleKCM {
     // kSchema array. The aliases give us a flat, live view of every
     // non-deprecated kcfg entry so Export can pack them into a JS
     // object and Import can write the imported values straight back.
-    property alias cfg_urlsJson: _urls.text
+    property alias cfg_urlsJson: _strings.urlsJson
     property alias cfg_currentTabIndex: _currentTab.value
     property alias cfg_autoCycleEnabled: _autoCycle.checked
     property alias cfg_autoCycleIntervalSec: _autoCycleSec.value
     property alias cfg_zoomFactor: _zoom.value
-    property alias cfg_themeMode: _themeMode.text
+    property alias cfg_themeMode: _strings.themeMode
     property alias cfg_showTabBar: _showTabBar.checked
     property alias cfg_compactPreviewEnabled: _compactEnabled.checked
     property alias cfg_compactPreviewLongAxisPx: _compactAxis.value
     property alias cfg_popupPinned: _popupPinned.checked
-    property alias cfg_authProfilesJson: _authProfiles.text
-    property alias cfg_userAgentOverride: _ua.text
+    property alias cfg_authProfilesJson: _strings.authProfilesJson
+    property alias cfg_userAgentOverride: _strings.userAgentOverride
     property alias cfg_remoteDebuggingPort: _debugPort.value
     property alias cfg_webViewFreezeDelaySec: _freeze.value
     property alias cfg_webViewDiscardDelaySec: _discard.value
@@ -42,24 +42,31 @@ KCM.SimpleKCM {
     property alias cfg_popupDiscardDelaySec: _popupDiscardDelaySec.value
     property alias cfg_gcIntervalSec: _gcIntervalSec.value
 
-    // Off-screen scratch items that own the alias backing values. Using
+    // String keys live in plain properties, not hidden TextFields: a
+    // TextField silently cuts assigned text at maximumLength (32767), and
+    // a urlsJson with many tabs is longer than that.
+    QtObject {
+        id: _strings
+        property string urlsJson
+        property string themeMode
+        property string authProfilesJson
+        property string userAgentOverride
+    }
+
+    // Off-screen scratch items that own the other alias backing values. Using
     // hidden controls (rather than `property var`) lets the KCM treat
     // every key as a real two-way alias with the same change semantics
     // as the other ConfigPages.
     Item {
         visible: false
-        QQC.TextField    { id: _urls }
         QQC.SpinBox      { id: _currentTab;     from: 0;     to: 9999 }
         QQC.CheckBox     { id: _autoCycle }
         QQC.SpinBox      { id: _autoCycleSec;   from: 5;     to: 3600 }
         QQC.SpinBox      { id: _zoom;           from: 25;    to: 500 }
-        QQC.TextField    { id: _themeMode }
         QQC.CheckBox     { id: _showTabBar }
         QQC.CheckBox     { id: _compactEnabled }
         QQC.SpinBox      { id: _compactAxis;    from: 16;    to: 4000 }
         QQC.CheckBox     { id: _popupPinned }
-        QQC.TextField    { id: _authProfiles }
-        QQC.TextField    { id: _ua }
         QQC.SpinBox      { id: _debugPort;      from: 0;     to: 65535 }
         QQC.SpinBox      { id: _freeze;         from: 1;     to: 3600 }
         QQC.SpinBox      { id: _discard;        from: 1;     to: 86400 }
