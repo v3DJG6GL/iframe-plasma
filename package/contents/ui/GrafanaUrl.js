@@ -91,14 +91,13 @@ function transform(input, opts) {
     const frag = _topParts[1];
 
     // 1) /d/ → /d-solo/ (only when we have a viewPanel to convert).
-    const viewPanelMatch = base.match(/[?&]viewPanel=panel-(\d+)(?:-clone\d+)?/);
+    //    The match is anchored on the end of the value, so a viewPanel
+    //    shape we don't understand leaves the URL alone instead of getting
+    //    a panelId for the wrong panel next to a leftover viewPanel.
+    const viewPanelMatch = base.match(/[?&]viewPanel=panel-(\d+)(?:-clone\d+)?(?=&|$)/);
     if (opts.convertDSolo && viewPanelMatch && base.indexOf("/d/") !== -1) {
         base = base.replace("/d/", "/d-solo/");
-        base = base.replace(/([?&])viewPanel=panel-\d+(-clone\d+)?(&|$)/, function(_, before, _clone, after) {
-            return before === "?" && after === "" ? ""
-                 : before === "?" ? "?"
-                 : after === "" ? "" : "&";
-        });
+        base = stripParam(base, "viewPanel");
         // /d/ dashboard URLs sometimes already carry a panelId from a
         // prior drill-down; without this strip we'd emit two panelId
         // params and Grafana picks first-or-last in a version-dependent

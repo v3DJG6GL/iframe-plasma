@@ -95,6 +95,20 @@ TestCase {
         const out = G.transform("https://g/d/abc/slug?orgId=1&viewPanel=panel-7#anchor", opts);
         compare(out, "https://g/d-solo/abc/slug?orgId=1&panelId=7#anchor");
     }
+    function test_dSolo_unknownViewPanelShape_leftUntouched() {
+        // A viewPanel value that is not exactly panel-N[-cloneM] must not
+        // be half converted (/d-solo/ + panelId=N next to the old viewPanel).
+        const opts = _off(); opts.convertDSolo = true;
+        compare(G.transform("https://g/d/abc/slug?viewPanel=panel-7-clone-1", opts),
+                "https://g/d/abc/slug?viewPanel=panel-7-clone-1");
+        compare(G.transform("https://g/d/abc/slug?viewPanel=panel-7-clone-0/grid-item-3/panel-9&orgId=1", opts),
+                "https://g/d/abc/slug?viewPanel=panel-7-clone-0/grid-item-3/panel-9&orgId=1");
+    }
+    function test_dSolo_duplicateViewPanel_allRemoved() {
+        const opts = _off(); opts.convertDSolo = true;
+        compare(G.transform("https://g/d/abc/slug?viewPanel=panel-7&viewPanel=panel-8", opts),
+                "https://g/d-solo/abc/slug?panelId=7");
+    }
 
     // ===== Time-range presets =========================================
     function test_timeRange_addsFromTo() {
