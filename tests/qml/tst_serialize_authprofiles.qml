@@ -162,6 +162,26 @@ TestCase {
         verify(!out.synthesized);
     }
 
+    // ===== autheliaHost sanitiser: strip first, then trim ============
+    //
+    // ConfigAuth.sanitizeAutheliaHost is Sanitize.stripTrim. Whitespace
+    // shielded by an invisible character must not survive into the
+    // persisted value (the runtime host comparison is literal).
+    function test_stripTrim_data() {
+        return [
+            { tag: "plain",            s: "auth.example.com",                want: "auth.example.com" },
+            { tag: "outerSpaces",      s: "  auth.example.com  ",            want: "auth.example.com" },
+            { tag: "spaceThenZwsp",    s: "auth.example.com \u200B",         want: "auth.example.com" },
+            { tag: "lrmThenSpace",     s: "\u200E auth.example.com",         want: "auth.example.com" },
+            { tag: "bomSpaceBothEnds", s: "\uFEFF auth.example.com \uFEFF", want: "auth.example.com" },
+            { tag: "innerSpaceKept",   s: " a b ",                           want: "a b" },
+            { tag: "null",             s: null,                              want: "" },
+        ];
+    }
+    function test_stripTrim(d) {
+        compare(Sanitize.stripTrim(d.s), d.want);
+    }
+
     // ===== full JSON roundtrip with mix of synthesised + complete rows
     function test_fullJsonRoundtrip_mixedRows() {
         const json = '[{"id":"a","name":"A","authType":"basic","preempt":true},'

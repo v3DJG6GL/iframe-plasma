@@ -116,7 +116,7 @@ function isAutheliaHost(currentUrl, autheliaHost) {
         // overlay disengaged so the operator types credentials into the
         // bare upstream login page.
         const host = new URL(currentUrl).host;
-        const want = Sanitize.strip(String(autheliaHost).toLowerCase());
+        const want = Sanitize.stripTrim(String(autheliaHost).toLowerCase());
         if (!want) return false;
         return host === want
             || host.endsWith("." + want);

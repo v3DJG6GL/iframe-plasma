@@ -136,7 +136,7 @@ KCM.SimpleKCM {
     // upstream login page instead of the controlled Authelia flow. Shared
     // strip in sanitize.js covers bidi/format/C0+C1 control code points.
     function sanitizeAutheliaHost(h) {
-        return Sanitize.strip(String(h || "").trim());
+        return Sanitize.stripTrim(h);
     }
 
     // Simple UUID v4 generator (RFC 4122 compliant for our purposes).

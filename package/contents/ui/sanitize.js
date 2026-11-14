@@ -35,3 +35,9 @@ var stripRe = new RegExp(
 function strip(s) {
     return String(s || "").replace(stripRe, "");
 }
+
+// Strip, then trim. The order matters: ZWSP/LRM are not JS whitespace, so
+// a space shielded by one ("host \u200B") survives a trim-then-strip.
+function stripTrim(s) {
+    return strip(s).trim();
+}

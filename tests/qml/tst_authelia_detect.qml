@@ -118,4 +118,14 @@ TestCase {
         // Strip-to-empty must not match every host.
         verify(!Q.isAutheliaHost("https://auth.example.com/", "​‮"));
     }
+    function test_shieldedWhitespace_stillMatches() {
+        // A stored value that kept a space behind a ZWSP/LRM (persisted
+        // before the KCM stripped first) must still match.
+        verify(Q.isAutheliaHost("https://auth.example.com/", "auth.example.com "));
+        verify(Q.isAutheliaHost("https://auth.example.com/", "auth.example.com \u200B"));
+        verify(Q.isAutheliaHost("https://sso.auth.example.com/", "\u200E auth.example.com"));
+    }
+    function test_onlyWhitespace_returnsFalse() {
+        verify(!Q.isAutheliaHost("https://auth.example.com/", " \u200B "));
+    }
 }
