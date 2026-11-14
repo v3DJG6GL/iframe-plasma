@@ -25,8 +25,14 @@ set(CPACK_DEBIAN_PACKAGE_MAINTAINER
     "v3DJG6GL <72495210+v3DJG6GL@users.noreply.github.com>")
 set(CPACK_DEBIAN_PACKAGE_SECTION "kde")
 # Shared-library deps come from dpkg-shlibdeps; QML-only runtime modules
-# are not linked, so they are listed by hand.
+# are not linked, so they are listed by hand. QtQuick.Effects and
+# org.kde.iconthemes are named because plasma-workspace does not pull them
+# in (plasma-desktop does, which hides the gap on a full desktop install).
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
-set(CPACK_DEBIAN_PACKAGE_DEPENDS "plasma-workspace, qml6-module-qtwebengine")
+string(JOIN ", " CPACK_DEBIAN_PACKAGE_DEPENDS
+    "plasma-workspace"
+    "qml6-module-qtwebengine"
+    "qml6-module-qtquick-effects"
+    "qml6-module-org-kde-iconthemes")
 
 include(CPack)
