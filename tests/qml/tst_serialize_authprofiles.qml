@@ -111,6 +111,29 @@ TestCase {
         compare(out.row.authType, "oauth2");
     }
 
+    // ===== non-string values in string fields ========================
+    //
+    // Same ListModel role-type hazard as for tab rows. A non-string id is
+    // additionally useless as a key: tabs reference profiles by string id.
+    function test_nonStringId_synthesisedAndFlagged() {
+        const out = Schema.normaliseAuthProfileRow({ id: 7, authType: "basic" }, _gen);
+        compare(out.row.id, "uuid-1");
+        verify(out.synthesized);
+    }
+    function test_nonStringFields_normaliseToDefaults() {
+        const out = Schema.normaliseAuthProfileRow(
+            { id: "i", name: 1, authType: 3, username: {}, autheliaHost: ["auth.example"] }, _gen);
+        compare(out.row, { id: "i", name: "", authType: "basic", username: "",
+                           autheliaHost: "", preempt: false });
+        verify(!out.synthesized);
+    }
+    function test_nonStringFields_serialiseToDefaults() {
+        compare(Schema.serialiseAuthProfileRow(
+                    { id: 7, name: 1, authType: 3, username: {}, autheliaHost: ["auth.example"] }),
+                { id: "", name: "", authType: "basic", username: "",
+                  autheliaHost: "", preempt: false });
+    }
+
     // ===== UUID generator is called only when needed =================
     function test_uuidGenNotCalledForExistingId() {
         let called = false;

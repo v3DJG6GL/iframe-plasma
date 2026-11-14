@@ -103,29 +103,37 @@ function _coerceThumbMode(mode) {
     return mode === "excluded" ? "fullPanel" : mode;
 }
 
+// A string field's value, or "" for anything else. A ListModel fixes each
+// role's type on first insertion (and keeps it across clear()), so one
+// number / array / object from hand-edited or imported JSON would make the
+// role non-string and every later string value of that field be refused.
+function _str(v) {
+    return typeof v === "string" ? v : "";
+}
+
 function normaliseTabRow(entry) {
     entry = entry || {};
-    const sel = entry.thumbSelector || "";
-    const mode = _coerceThumbMode(entry.thumbMode || "chartOnly");
+    const sel = _str(entry.thumbSelector);
+    const mode = _coerceThumbMode(_str(entry.thumbMode) || "chartOnly");
 
-    const psel = entry.popupSelector || "";
-    const pmode = entry.popupMode || "fullPanel";
+    const psel = _str(entry.popupSelector);
+    const pmode = _str(entry.popupMode) || "fullPanel";
 
     return {
-        label:                entry.label || "",
-        url:                  entry.url || "",
+        label:                _str(entry.label),
+        url:                  _str(entry.url),
         // Per-URL on/off. Default ON: a missing/non-false value (legacy
         // rows, imported backups predating this field) round-trips as
         // enabled so existing configs are unchanged. main.qml's parseTabs
         // drops `enabled === false` rows from the live tab set, so a
         // disabled URL keeps its config here but never becomes a tab.
         enabled:              entry.enabled !== false,
-        authProfileId:        entry.authProfileId || "",
+        authProfileId:        _str(entry.authProfileId),
         thumbMode:            mode,
         thumbSelector:        sel,
-        thumbText:            entry.thumbText || "",
+        thumbText:            _str(entry.thumbText),
         thumbIconName:        sanitizeIconName(entry.thumbIconName),
-        thumbTimeRange:       entry.thumbTimeRange || "",
+        thumbTimeRange:       _str(entry.thumbTimeRange),
         thumbScaleMode:       _normaliseScaleMode(entry.thumbScaleMode),
         thumbExcludeKeywords: _normaliseKeywords(entry.thumbExcludeKeywords),
         // Per-URL opt-IN for the panel-slot label overlay. The overlay
@@ -154,24 +162,24 @@ function normaliseTabRow(entry) {
 function serialiseTabRow(row) {
     row = row || {};
     return {
-        label:                row.label || "",
-        url:                  row.url || "",
+        label:                _str(row.label),
+        url:                  _str(row.url),
         // Mirror normaliseTabRow's default-ON idiom (`!== false`), NOT the
         // default-OFF `=== true` form thumbShowLabel uses — the two
         // directions must agree so tst_serialize_urls' parity guard holds.
         enabled:              row.enabled !== false,
-        authProfileId:        row.authProfileId || "",
-        thumbMode:            _coerceThumbMode(row.thumbMode || "chartOnly"),
-        thumbSelector:        row.thumbSelector || "",
-        thumbText:            row.thumbText || "",
+        authProfileId:        _str(row.authProfileId),
+        thumbMode:            _coerceThumbMode(_str(row.thumbMode) || "chartOnly"),
+        thumbSelector:        _str(row.thumbSelector),
+        thumbText:            _str(row.thumbText),
         thumbIconName:        sanitizeIconName(row.thumbIconName),
-        thumbTimeRange:       row.thumbTimeRange || "",
+        thumbTimeRange:       _str(row.thumbTimeRange),
         thumbScaleMode:       _normaliseScaleMode(row.thumbScaleMode),
         thumbExcludeKeywords: _normaliseKeywords(row.thumbExcludeKeywords),
         thumbShowLabel:       row.thumbShowLabel === true,
         excludeFromRotation:  row.excludeFromRotation === true,
-        popupMode:            row.popupMode || "fullPanel",
-        popupSelector:        row.popupSelector || "",
+        popupMode:            _str(row.popupMode) || "fullPanel",
+        popupSelector:        _str(row.popupSelector),
     };
 }
 
@@ -185,12 +193,12 @@ const AUTH_FIELDS = [
 function normaliseAuthProfileRow(entry, uuidGen) {
     entry = entry || {};
     let synthesized = false;
-    let id = entry.id;
+    let id = _str(entry.id);
     if (!id) {
         id = uuidGen();
         synthesized = true;
     }
-    const authType = entry.authType || "basic";
+    const authType = _str(entry.authType) || "basic";
 
     // Defensive default for preempt when the field is missing or non-bool.
     // Bearer/raw MUST pre-empt because Qt's 401 dialog can only collect
@@ -205,10 +213,10 @@ function normaliseAuthProfileRow(entry, uuidGen) {
     return {
         row: {
             id:           id,
-            name:         entry.name || "",
+            name:         _str(entry.name),
             authType:     authType,
-            username:     entry.username || "",
-            autheliaHost: entry.autheliaHost || "",
+            username:     _str(entry.username),
+            autheliaHost: _str(entry.autheliaHost),
             preempt:      preempt,
         },
         synthesized: synthesized,
@@ -225,11 +233,11 @@ function normaliseAuthProfileRow(entry, uuidGen) {
 function serialiseAuthProfileRow(row) {
     row = row || {};
     return {
-        id:           row.id || "",
-        name:         row.name || "",
-        authType:     row.authType || "basic",
-        username:     row.username || "",
-        autheliaHost: row.autheliaHost || "",
+        id:           _str(row.id),
+        name:         _str(row.name),
+        authType:     _str(row.authType) || "basic",
+        username:     _str(row.username),
+        autheliaHost: _str(row.autheliaHost),
         preempt:      row.preempt === true,
     };
 }

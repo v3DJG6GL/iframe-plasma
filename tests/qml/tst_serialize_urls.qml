@@ -311,6 +311,49 @@ TestCase {
         compare(Schema.normaliseTabRow({ excludeFromRotation: null }).excludeFromRotation, false);
     }
 
+    // ===== non-string values in string fields ========================
+    //
+    // A QML ListModel fixes each role's type on first insertion, so a
+    // number / array / object in a string field (hand-edited or imported
+    // JSON) must never reach it: later string values of that field would
+    // be refused and the next save would write the loss back.
+    function _junkRow() {
+        return {
+            label: 5, url: {}, authProfileId: 7, thumbMode: 7,
+            thumbSelector: [".a"], thumbText: true, thumbTimeRange: 6,
+            popupMode: 1, popupSelector: { a: 1 },
+        };
+    }
+    function test_nonStringStringFields_normaliseToDefaults() {
+        compare(Schema.normaliseTabRow(_junkRow()), _defaults());
+    }
+    function test_nonStringStringFields_serialiseToDefaults() {
+        compare(Schema.serialiseTabRow(_junkRow()), _defaults());
+    }
+    function test_fieldTypesAreStable_data() {
+        return [
+            { tag: "number",  junk: 5 },
+            { tag: "boolean", junk: true },
+            { tag: "array",   junk: [".a"] },
+            { tag: "object",  junk: { a: 1 } },
+        ];
+    }
+    function test_fieldTypesAreStable(d) {
+        // Whatever one field holds, both directions return the type the
+        // default row has for it.
+        const defaults = _defaults();
+        for (const key of Schema.TAB_FIELDS) {
+            const entry = {};
+            entry[key] = d.junk;
+            const n = Schema.normaliseTabRow(entry)[key];
+            const s = Schema.serialiseTabRow(entry)[key];
+            compare(typeof n, typeof defaults[key], "normalise " + key);
+            compare(typeof s, typeof defaults[key], "serialise " + key);
+            compare(Array.isArray(n), Array.isArray(defaults[key]), "normalise " + key);
+            compare(Array.isArray(s), Array.isArray(defaults[key]), "serialise " + key);
+        }
+    }
+
     // ===== full round-trip JSON →→ array →→ ListModel-shape =========
     function test_fullJsonRoundtrip() {
         const json = '[{"label":"k","url":"https://k","thumbMode":"icon","thumbIconName":"cpu"},'
