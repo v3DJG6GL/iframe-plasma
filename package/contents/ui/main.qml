@@ -713,10 +713,7 @@ PlasmoidItem {
             const o = cur[i];
             const n = newArr[i];
             if (!o || !n) continue;
-            const oldThumbMode = o.thumbMode || "";
-            const oldPopupMode = o.popupMode || "";
-            const newThumbMode = n.thumbMode || "";
-            const newPopupMode = n.popupMode || "";
+            const modeChanged = UrlUtils.isRenderModeChange(o, n);
             const oldKeywords = Array.isArray(o.thumbExcludeKeywords)
                                 ? JSON.stringify(o.thumbExcludeKeywords) : "";
             const newKeywords = Array.isArray(n.thumbExcludeKeywords)
@@ -740,7 +737,7 @@ PlasmoidItem {
             o.excludeFromRotation  = n.excludeFromRotation === true;
             o.popupMode            = n.popupMode || "fullPanel";
             o.popupSelector        = n.popupSelector || "";
-            if (oldThumbMode !== newThumbMode || oldPopupMode !== newPopupMode) {
+            if (modeChanged) {
                 reloadTabs.push(i);
             }
             if (oldKeywords !== newKeywords && root._runtimeExcluded[i]) {

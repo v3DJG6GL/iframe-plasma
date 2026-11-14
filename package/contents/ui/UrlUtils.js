@@ -280,6 +280,18 @@ function pickerSaveNeedsPopupRestore(scope, prevPopupSelector, newPopupSelector)
     return scope === "thumb" || prevPopupSelector === newPopupSelector;
 }
 
+// Whether a metadata-only change flips a row's render mode (thumbnail or
+// popup), which needs a reload of that tab. Compares EFFECTIVE modes: a row
+// without the field (default config, legacy or hand-written JSON) renders
+// as "chartOnly" / "fullPanel", and the config page writes those defaults
+// out on its first save — that is not a mode change.
+function isRenderModeChange(oldRow, newRow) {
+    const o = oldRow || {};
+    const n = newRow || {};
+    return (o.thumbMode || "chartOnly") !== (n.thumbMode || "chartOnly")
+        || (o.popupMode || "fullPanel") !== (n.popupMode || "fullPanel");
+}
+
 // Auto-cycle stepper. Given the current tab index and the live `tabs`
 // array, return the next index whose tab is not marked
 // excludeFromRotation AND not present in the optional

@@ -160,6 +160,59 @@ TestCase {
             true);
     }
 
+    // ===== isRenderModeChange: which metadata-only rows need a reload =
+    //
+    // The in-place applicator reloads a tab whose thumbnail or popup mode
+    // flipped. A row without the fields (the shipped default config, any
+    // legacy row) renders as chartOnly / fullPanel; the config page writes
+    // those defaults out on its first save, which must not reload the tab.
+    function test_renderMode_data() {
+        return [
+            { tag: "defaultsWrittenOut",
+              o: _tab("https://a/"),
+              n: _tab("https://a/", { label: "New", thumbMode: "chartOnly", popupMode: "fullPanel" }),
+              want: false },
+            { tag: "defaultsDropped",
+              o: _tab("https://a/", { thumbMode: "chartOnly", popupMode: "fullPanel" }),
+              n: _tab("https://a/"),
+              want: false },
+            { tag: "emptyStringIsDefault",
+              o: _tab("https://a/", { thumbMode: "", popupMode: "" }),
+              n: _tab("https://a/", { thumbMode: "chartOnly", popupMode: "fullPanel" }),
+              want: false },
+            { tag: "bothMissing",
+              o: _tab("https://a/"), n: _tab("https://a/"), want: false },
+            { tag: "labelOnly",
+              o: _tab("https://a/", { label: "Old", thumbMode: "custom" }),
+              n: _tab("https://a/", { label: "New", thumbMode: "custom" }),
+              want: false },
+            { tag: "thumbModeFlipped",
+              o: _tab("https://a/", { thumbMode: "chartOnly" }),
+              n: _tab("https://a/", { thumbMode: "custom" }),
+              want: true },
+            { tag: "thumbModeFlippedFromMissing",
+              o: _tab("https://a/"),
+              n: _tab("https://a/", { thumbMode: "fullPanel" }),
+              want: true },
+            { tag: "popupModeFlipped",
+              o: _tab("https://a/", { popupMode: "fullPanel" }),
+              n: _tab("https://a/", { popupMode: "custom" }),
+              want: true },
+            { tag: "popupModeFlippedFromMissing",
+              o: _tab("https://a/"),
+              n: _tab("https://a/", { popupMode: "custom" }),
+              want: true },
+            { tag: "popupModeBackToMissing",
+              o: _tab("https://a/", { popupMode: "custom" }),
+              n: _tab("https://a/"),
+              want: true },
+            { tag: "nullRows", o: null, n: undefined, want: false },
+        ];
+    }
+    function test_renderMode(d) {
+        compare(U.isRenderModeChange(d.o, d.n), d.want);
+    }
+
     // ===== Mixed: one row structural, another metadata-only → struct
     function test_oneRowStructuralAmongMetadata_isStructural() {
         // Row 0 URL changed (structural); row 1 only label changed
