@@ -390,6 +390,7 @@ Rectangle {
         // --- Hostname + TLS chip -------------------------------------------
         Rectangle {
             id: hostChip
+            objectName: "hostChip"
             visible: tb.host.length > 0
             Layout.preferredHeight: Theme.chipHeight
             Layout.alignment: Qt.AlignVCenter
@@ -397,6 +398,12 @@ Rectangle {
             // on the narrowest popup; the label below elides to whatever width
             // RowLayout grants instead of overflowing the chip / the toolbar.
             Layout.minimumWidth: Kirigami.Units.gridUnit * 3
+            // RowLayout only resizes fillWidth items — without it the chip is
+            // pinned at its natural width and runs past the toolbar's edge.
+            // The cap (whole pixels, never below the floor) leaves any spare
+            // room to the spacer on the left.
+            Layout.fillWidth: true
+            Layout.maximumWidth: Math.max(Layout.minimumWidth, Math.ceil(implicitWidth))
             // Derived from the label's *natural* width (implicitWidth), never
             // its laid-out width — hostLabel.width depends on hostChip.width,
             // so feeding it back here would form a binding loop.
@@ -418,6 +425,7 @@ Rectangle {
                 }
                 QQC.Label {
                     id: hostLabel
+                    objectName: "hostLabel"
                     // hostSafe strips bidi/format/control chars - see top of file.
                     // Width tracks the chip's granted size so a long hostname
                     // elides rather than overflowing the chip or the toolbar.
