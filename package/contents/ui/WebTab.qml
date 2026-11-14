@@ -80,6 +80,12 @@ Item {
     // never touch the Authelia host. Empty until the first success.
     property string _lastSuccessUrl: ""
 
+    // True from a successful load on the Authelia host until the next
+    // successful load elsewhere. loadStatus can't carry this: every
+    // LoadStartedStatus overwrites "auth" with "loading" before the
+    // LoadSucceededStatus handler gets to look at it.
+    property bool _authPending: false
+
     // "" → no override (chip follows URL); "off"; or an interval like "30s".
     property string userRefreshChoice: ""
 
@@ -637,8 +643,9 @@ Item {
                         // below so the "did we just complete an auth round-trip?"
                         // checks survive the assignments. The popup may have just
                         // completed auth in one of two shapes:
-                        //   (a) Authelia round-trip — loadStatus was "auth", now back
-                        //       on a non-Authelia host. wasAuthing covers this.
+                        //   (a) Authelia round-trip — an earlier load landed on the
+                        //       Authelia host, now back on a non-Authelia host.
+                        //       wasAuthing covers this.
                         //   (b) SPA-internal login (no Authelia involvement) — popup
                         //       went configured URL → /login → ... → configured URL.
                         //       loadStatus stayed "ok" throughout; the only signal
@@ -648,7 +655,8 @@ Item {
                         // Either gate firing means: the matching slot miniView is
                         // parked on the redirected /login URL with stale cookies,
                         // so emit authSucceeded so main.qml broadcasts a soft reload.
-                        const wasAuthing = (tab.loadStatus === "auth");
+                        const wasAuthing = tab._authPending;
+                        tab._authPending = onAuthelia;
                         function _stripHash(u) {
                             const i = u.indexOf('#');
                             return i >= 0 ? u.slice(0, i) : u;
