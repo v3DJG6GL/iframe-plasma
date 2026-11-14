@@ -135,6 +135,24 @@ QHash<QString, QByteArray> BasicAuthInterceptor::headersSnapshot() const
     return m_headers;
 }
 
+QByteArray BasicAuthInterceptor::headerFor(const QString &scheme,
+                                           const QString &canonicalHost) const
+{
+    QReadLocker locker(&m_headersLock);
+    // An `https://host` key is offered to https requests only, so a
+    // credential registered from an https tab never leaves in cleartext.
+    // A bare-host key (registered from an http tab) serves both schemes:
+    // that tab's own http→https redirect has to stay authenticated.
+    if (scheme == QLatin1String("https")) {
+        const auto it = m_headers.constFind(QLatin1String("https://") + canonicalHost);
+        if (it != m_headers.cend()) {
+            return it.value();
+        }
+    }
+    const auto it = m_headers.constFind(canonicalHost);
+    return it != m_headers.cend() ? it.value() : QByteArray();
+}
+
 void BasicAuthInterceptor::applyProfile(const QString &profileId,
                                        const QString &authType,
                                        const QString &username,
@@ -232,14 +250,7 @@ void BasicAuthInterceptor::interceptRequest(QWebEngineUrlRequestInfo &info)
     }
     const QString host = iframeplasma::auth::canonicalizeHost(
         url.host(), scheme, url.port());
-    QByteArray header;
-    {
-        QReadLocker locker(&m_headersLock);
-        const auto it = m_headers.constFind(host);
-        if (it != m_headers.cend()) {
-            header = it.value();
-        }
-    }
+    const QByteArray header = headerFor(scheme, host);
     if (!header.isEmpty()) {
         info.setHttpHeader(QByteArrayLiteral("Authorization"), header);
         // qCDebug, not qCInfo: request URLs can carry tokens in the query

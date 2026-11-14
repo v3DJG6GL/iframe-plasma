@@ -52,6 +52,9 @@ public:
     //   - "basic":  synthesizes "Basic " + base64(user:secret)
     //   - "bearer": synthesizes "Bearer " + secret
     //   - "raw":    uses `secret` as-is for the Authorization header
+    // Each `hosts` entry is either `https://<canonical host>` (injected on
+    // https requests only) or a bare `<canonical host>` (injected on http
+    // and https); see UrlUtils.authKey() for which one a tab URL gets.
     Q_INVOKABLE void applyProfile(const QString &profileId,
                                   const QString &authType,
                                   const QString &username,
@@ -72,8 +75,14 @@ public:
     // (one QHash COW) and locked under the read side of m_headersLock.
     QHash<QString, QByteArray> headersSnapshot() const;
 
+    // The header interceptRequest() injects for a request with this scheme
+    // ("http" | "https") and canonicalizeHost() result; empty when none.
+    // Public for the same reason as headersSnapshot(): it is the only way
+    // a unit test can exercise the lookup rule.
+    QByteArray headerFor(const QString &scheme, const QString &canonicalHost) const;
+
 private:
-    // host (lowercased) -> precomputed "Basic <base64>" / "Bearer …" / raw header value.
+    // key (lowercased `host` or `https://host`) -> precomputed "Basic <base64>" / "Bearer …" / raw header value.
     // interceptRequest() runs on Chromium's IO thread; applyProfile()/clearAll()
     // run on the UI thread — guard the hash with a read/write lock.
     QHash<QString, QByteArray> m_headers;

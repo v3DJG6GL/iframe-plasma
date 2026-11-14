@@ -218,6 +218,33 @@ private Q_SLOTS:
     }
 
     // ---------------------------------------------------------------
+    // Lookup rule: an `https://host` key never serves a plain-http request
+    // ---------------------------------------------------------------
+    void headerFor_httpsKey_servesHttpsOnly()
+    {
+        BasicAuthInterceptor i;
+        i.applyProfile(u"P"_s, u"bearer"_s, u""_s, u"tok"_s, {u"https://x.com"_s});
+        QCOMPARE(i.headerFor(u"https"_s, u"x.com"_s), QByteArray("Bearer tok"));
+        QCOMPARE(i.headerFor(u"http"_s, u"x.com"_s), QByteArray());
+    }
+
+    void headerFor_bareKey_servesBothSchemes()
+    {
+        BasicAuthInterceptor i;
+        i.applyProfile(u"P"_s, u"bearer"_s, u""_s, u"tok"_s, {u"x.com:8080"_s});
+        QCOMPARE(i.headerFor(u"http"_s, u"x.com:8080"_s), QByteArray("Bearer tok"));
+        QCOMPARE(i.headerFor(u"https"_s, u"x.com:8080"_s), QByteArray("Bearer tok"));
+    }
+
+    void headerFor_unregisteredHost_isEmpty()
+    {
+        BasicAuthInterceptor i;
+        i.applyProfile(u"P"_s, u"bearer"_s, u""_s, u"tok"_s, {u"https://x.com"_s});
+        QCOMPARE(i.headerFor(u"https"_s, u"y.com"_s), QByteArray());
+        QCOMPARE(i.headerFor(u"https"_s, u"x.com:8443"_s), QByteArray());
+    }
+
+    // ---------------------------------------------------------------
     // attachTo / detachFrom
     // ---------------------------------------------------------------
     void attachTo_nullProfile_returnsFalse()

@@ -104,6 +104,27 @@ function hostKey(urlString) {
     return isDefaultPort ? h : h + ":" + p;
 }
 
+// Interceptor registration key for a tab URL. An https tab gets the
+// scheme-bound `https://<hostKey>`, which the interceptor offers to https
+// requests only, so its credential never goes out over plain http. An http
+// tab gets the bare hostKey, which serves both schemes (its own http→https
+// redirect has to stay authenticated). "" when the URL has no host.
+function authKey(urlString) {
+    const h = hostKey(urlString);
+    if (h === "") return "";
+    return new URL(urlString).protocol === "https:" ? "https://" + h : h;
+}
+
+// Whether the credentials of the tab at `tabUrl` may answer an auth
+// challenge raised by `requestUrl`. Same rule as the interceptor lookup:
+// equal host keys, and an https tab never answers a plain-http challenge.
+function authCoversRequest(tabUrl, requestUrl) {
+    const h = hostKey(tabUrl);
+    if (h === "" || h !== hostKey(requestUrl)) return false;
+    return new URL(requestUrl).protocol === "https:"
+        || new URL(tabUrl).protocol !== "https:";
+}
+
 // Pure form of resolveTheme(): given the configured themeMode and the
 // resolved KDE backgroundColor (as {r, g, b} in 0..1), return "light" or
 // "dark". The "auto" branch uses Rec. 601 relative luminance with a 0.5

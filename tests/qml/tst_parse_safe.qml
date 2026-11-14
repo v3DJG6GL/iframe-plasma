@@ -115,6 +115,41 @@ TestCase {
         verify(threw);
     }
 
+    // ----- authKey (https tabs register a scheme-bound key) -----
+    function test_authKey_data() {
+        return [
+            { tag: "https tab",              url: "https://example.com/x",     expected: "https://example.com" },
+            { tag: "https explicit default", url: "https://example.com:443/",  expected: "https://example.com" },
+            { tag: "https non-default port", url: "https://example.com:9100/", expected: "https://example.com:9100" },
+            { tag: "https ipv6",             url: "https://[::1]:9100/",       expected: "https://[::1]:9100" },
+            { tag: "https uppercase",        url: "HTTPS://EXAMPLE.com/",      expected: "https://example.com" },
+            { tag: "http tab",               url: "http://example.com/",       expected: "example.com" },
+            { tag: "http non-default port",  url: "http://example.com:8080/",  expected: "example.com:8080" },
+            { tag: "no host",                url: "https:///path",             expected: "" }
+        ];
+    }
+    function test_authKey(data) {
+        compare(U.authKey(data.url), data.expected);
+    }
+
+    // ----- authCoversRequest (401 fallback follows the interceptor rule) -----
+    function test_authCoversRequest_data() {
+        return [
+            { tag: "https tab, https request",   tab: "https://h.example/d/1",   req: "https://h.example/api",     expected: true },
+            { tag: "https tab, http request",    tab: "https://h.example/d/1",   req: "http://h.example/api",      expected: false },
+            { tag: "http tab, http request",     tab: "http://h.example/",       req: "http://h.example/api",      expected: true },
+            { tag: "http tab, https redirect",   tab: "http://h.example/",       req: "https://h.example/api",     expected: true },
+            { tag: "explicit default port",      tab: "https://h.example:443/",  req: "https://h.example/api",     expected: true },
+            { tag: "case-insensitive host",      tab: "https://H.Example/",      req: "https://h.example/api",     expected: true },
+            { tag: "other host",                 tab: "https://h.example/",      req: "https://evil.example/",     expected: false },
+            { tag: "other port",                 tab: "https://h.example/",      req: "https://h.example:8443/",   expected: false },
+            { tag: "ipv6",                       tab: "https://[::1]:9100/",     req: "https://[::1]:9100/x",      expected: true }
+        ];
+    }
+    function test_authCoversRequest(data) {
+        compare(U.authCoversRequest(data.tab, data.req), data.expected);
+    }
+
     // ----- isGrafanaEmbed -----
     function test_isGrafanaEmbed_matchesDsolo() {
         verify(U.isGrafanaEmbed("https://grafana.example.com/d-solo/abc-123/dashboard?panelId=2"));
