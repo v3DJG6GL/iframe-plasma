@@ -111,7 +111,10 @@ jobs:
           printf 'Dir::Cache::Archives "%s/";\nAPT::Keep-Downloaded-Packages "true";\n' \
             "$APT_ARCHIVES" > /etc/apt/apt.conf.d/90persistent-cache
           apt-get update
-          apt-get install -y --no-install-recommends \
+          # apt locks the archive directory without waiting, so a second job on
+          # the shared cache would die with "Unable to lock the download
+          # directory": queue behind a lock of our own instead.
+          flock "$APT_ARCHIVES.lock" apt-get install -y --no-install-recommends \
             build-essential git ca-certificates curl xz-utils \
             cmake extra-cmake-modules gettext ccache \
             libkf6wallet-dev libkf6kcmutils-dev libkf6coreaddons-dev \
@@ -143,7 +146,7 @@ jobs:
           ln -sf "$node_dir"/bin/* /usr/local/bin/
           node --version
           # Drop .debs no longer in the indexes (superseded versions).
-          apt-get autoclean -qq
+          flock "$APT_ARCHIVES.lock" apt-get autoclean -qq
           ccache --zero-stats
 
       - uses: actions/checkout@v6

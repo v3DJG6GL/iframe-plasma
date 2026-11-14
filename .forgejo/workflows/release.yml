@@ -122,13 +122,15 @@ jobs:
           printf 'Dir::Cache::Archives "%s/";\nAPT::Keep-Downloaded-Packages "true";\n' \
             "$APT_ARCHIVES" > /etc/apt/apt.conf.d/90persistent-cache
           apt-get update
-          apt-get install -y --no-install-recommends \
+          # Queue behind other jobs on the shared archive cache — see the
+          # same step in ci.yml.
+          flock "$APT_ARCHIVES.lock" apt-get install -y --no-install-recommends \
             build-essential git ca-certificates curl nodejs dpkg-dev file \
             cmake extra-cmake-modules gettext \
             libkf6wallet-dev libkf6kcmutils-dev libkf6coreaddons-dev \
             libkf6i18n-dev libkf6package-dev libplasma-dev \
             qt6-webengine-dev qt6-webengine-dev-tools
-          apt-get autoclean -qq
+          flock "$APT_ARCHIVES.lock" apt-get autoclean -qq
 
       - uses: actions/checkout@v6
         with:
