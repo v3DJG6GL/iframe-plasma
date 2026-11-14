@@ -50,9 +50,10 @@ private Q_SLOTS:
     void cookieSet_thenCheck_returns200OnSameProfile()
     {
         FixtureServer fixture;
-        if (!fixture.start()) {
-            QSKIP("fixture server failed to start");
+        if (qEnvironmentVariableIsEmpty("IFRAME_FIXTURE_HTTPD")) {
+            QSKIP("IFRAME_FIXTURE_HTTPD is not set");
         }
+        QVERIFY2(fixture.start(), qPrintable(fixture.error()));
         QWebEngineProfile profile;
         QWebEnginePage page(&profile);
         page.settings()->setAttribute(QWebEngineSettings::ErrorPageEnabled, false);
@@ -70,9 +71,10 @@ private Q_SLOTS:
         // off-the-record profile starts with no cookies, so /cookie-check
         // should return cookie-missing (401 body).
         FixtureServer fixture;
-        if (!fixture.start()) {
-            QSKIP("fixture server failed to start");
+        if (qEnvironmentVariableIsEmpty("IFRAME_FIXTURE_HTTPD")) {
+            QSKIP("IFRAME_FIXTURE_HTTPD is not set");
         }
+        QVERIFY2(fixture.start(), qPrintable(fixture.error()));
         QWebEngineProfile profile1;
         QWebEnginePage page1(&profile1);
         page1.settings()->setAttribute(QWebEngineSettings::ErrorPageEnabled, false);
@@ -90,9 +92,10 @@ private Q_SLOTS:
     void cookieSurvivesFrozenAndResume()
     {
         FixtureServer fixture;
-        if (!fixture.start()) {
-            QSKIP("fixture server failed to start");
+        if (qEnvironmentVariableIsEmpty("IFRAME_FIXTURE_HTTPD")) {
+            QSKIP("IFRAME_FIXTURE_HTTPD is not set");
         }
+        QVERIFY2(fixture.start(), qPrintable(fixture.error()));
         QWebEngineProfile profile;
         QWebEnginePage page(&profile);
         page.settings()->setAttribute(QWebEngineSettings::ErrorPageEnabled, false);
@@ -115,9 +118,10 @@ private Q_SLOTS:
     void cookieSurvivesDiscardedAndReload()
     {
         FixtureServer fixture;
-        if (!fixture.start()) {
-            QSKIP("fixture server failed to start");
+        if (qEnvironmentVariableIsEmpty("IFRAME_FIXTURE_HTTPD")) {
+            QSKIP("IFRAME_FIXTURE_HTTPD is not set");
         }
+        QVERIFY2(fixture.start(), qPrintable(fixture.error()));
         QWebEngineProfile profile;
         QWebEnginePage page(&profile);
         page.settings()->setAttribute(QWebEngineSettings::ErrorPageEnabled, false);

@@ -24,23 +24,33 @@
 class FixtureServer
 {
 public:
+    // False with error() set. Callers skip only when the variable is unset:
+    // under ctest it always is set, so a failure there means the fixture is
+    // broken and must not pass as a skip.
     bool start()
     {
         const QByteArray script = qgetenv("IFRAME_FIXTURE_HTTPD");
-        if (script.isEmpty()) return false;
+        if (script.isEmpty()) {
+            m_error = QStringLiteral("IFRAME_FIXTURE_HTTPD is not set");
+            return false;
+        }
         m_proc.setProgram(QStringLiteral("python3"));
         m_proc.setArguments({QString::fromLocal8Bit(script),
                              QStringLiteral("--port"), QStringLiteral("0")});
         m_proc.start();
-        if (!m_proc.waitForStarted(5000)) return false;
-        if (!m_proc.waitForReadyRead(5000)) return false;
+        if (!m_proc.waitForStarted(5000)) return fail(QStringLiteral("python3 did not start"));
+        if (!m_proc.waitForReadyRead(5000)) return fail(QStringLiteral("no LISTEN line"));
         const QByteArray line = m_proc.readLine();
         const QList<QByteArray> parts = line.trimmed().split(' ');
-        if (parts.size() != 2 || parts[0] != "LISTEN") return false;
         bool ok = false;
-        m_port = parts[1].toInt(&ok);
-        return ok && m_port > 0;
+        if (parts.size() == 2 && parts[0] == "LISTEN") m_port = parts[1].toInt(&ok);
+        if (!ok || m_port <= 0) {
+            return fail(QStringLiteral("unexpected first line \"%1\"")
+                            .arg(QString::fromLocal8Bit(line.trimmed())));
+        }
+        return true;
     }
+    QString error() const { return m_error; }
     void stop()
     {
         if (m_proc.state() == QProcess::Running) {
@@ -55,7 +65,21 @@ public:
     }
 
 private:
+    // QProcess's own error and the script's stderr go into the message: a
+    // missing interpreter and a Python traceback need different fixes.
+    bool fail(const QString &what)
+    {
+        m_error = QStringLiteral("fixture server did not start: ") + what;
+        if (m_proc.error() != QProcess::UnknownError) {
+            m_error += QStringLiteral(" (%1)").arg(m_proc.errorString());
+        }
+        const QByteArray err = m_proc.readAllStandardError().trimmed();
+        if (!err.isEmpty()) m_error += QStringLiteral(": ") + QString::fromLocal8Bit(err);
+        return false;
+    }
+
     QProcess m_proc;
+    QString m_error;
     int m_port = 0;
 };
 

@@ -81,9 +81,10 @@ private Q_SLOTS:
     void exposeGc_scriptArmsInMainWorld()
     {
         FixtureServer fixture;
-        if (!fixture.start()) {
-            QSKIP("fixture server failed to start");
+        if (qEnvironmentVariableIsEmpty("IFRAME_FIXTURE_HTTPD")) {
+            QSKIP("IFRAME_FIXTURE_HTTPD is not set");
         }
+        QVERIFY2(fixture.start(), qPrintable(fixture.error()));
 
         QWebEngineProfile profile;
         QWebEnginePage page(&profile);

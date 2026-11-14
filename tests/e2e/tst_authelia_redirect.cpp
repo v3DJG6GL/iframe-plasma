@@ -38,9 +38,10 @@ private Q_SLOTS:
     void redirect_landsOnAutheliaPath()
     {
         FixtureServer fixture;
-        if (!fixture.start()) {
-            QSKIP("fixture server failed to start");
+        if (qEnvironmentVariableIsEmpty("IFRAME_FIXTURE_HTTPD")) {
+            QSKIP("IFRAME_FIXTURE_HTTPD is not set");
         }
+        QVERIFY2(fixture.start(), qPrintable(fixture.error()));
 
         QWebEngineProfile profile;
         QWebEnginePage page(&profile);
@@ -71,9 +72,10 @@ private Q_SLOTS:
         // — i.e. an operator who put that string in autheliaHost would
         // get a match.
         FixtureServer fixture;
-        if (!fixture.start()) {
-            QSKIP("fixture server failed to start");
+        if (qEnvironmentVariableIsEmpty("IFRAME_FIXTURE_HTTPD")) {
+            QSKIP("IFRAME_FIXTURE_HTTPD is not set");
         }
+        QVERIFY2(fixture.start(), qPrintable(fixture.error()));
         QWebEngineProfile profile;
         QWebEnginePage page(&profile);
         page.settings()->setAttribute(QWebEngineSettings::ErrorPageEnabled, false);
@@ -96,9 +98,10 @@ private Q_SLOTS:
         // the URL on /basic, not /authelia/2fa. Confirms the assertion
         // above isn't trivially true.
         FixtureServer fixture;
-        if (!fixture.start()) {
-            QSKIP("fixture server failed to start");
+        if (qEnvironmentVariableIsEmpty("IFRAME_FIXTURE_HTTPD")) {
+            QSKIP("IFRAME_FIXTURE_HTTPD is not set");
         }
+        QVERIFY2(fixture.start(), qPrintable(fixture.error()));
         QWebEngineProfile profile;
         QWebEnginePage page(&profile);
         page.settings()->setAttribute(QWebEngineSettings::ErrorPageEnabled, false);

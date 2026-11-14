@@ -59,9 +59,10 @@ private Q_SLOTS:
     void gotoLink_resolvesToDashboardWithViewPanel()
     {
         FixtureServer fixture;
-        if (!fixture.start()) {
-            QSKIP("fixture server failed to start");
+        if (qEnvironmentVariableIsEmpty("IFRAME_FIXTURE_HTTPD")) {
+            QSKIP("IFRAME_FIXTURE_HTTPD is not set");
         }
+        QVERIFY2(fixture.start(), qPrintable(fixture.error()));
 
         QWebEngineProfile profile;
         QWebEnginePage page(&profile);
@@ -88,9 +89,10 @@ private Q_SLOTS:
     void dSoloDirect_renderedAndRecorded()
     {
         FixtureServer fixture;
-        if (!fixture.start()) {
-            QSKIP("fixture server failed to start");
+        if (qEnvironmentVariableIsEmpty("IFRAME_FIXTURE_HTTPD")) {
+            QSKIP("IFRAME_FIXTURE_HTTPD is not set");
         }
+        QVERIFY2(fixture.start(), qPrintable(fixture.error()));
         QWebEngineProfile profile;
         QWebEnginePage page(&profile);
         page.settings()->setAttribute(QWebEngineSettings::ErrorPageEnabled, false);
@@ -113,9 +115,10 @@ private Q_SLOTS:
         // production widget passing theme=dark into a Grafana embed
         // can be trusted to actually serve theme=dark on the wire.
         FixtureServer fixture;
-        if (!fixture.start()) {
-            QSKIP("fixture server failed to start");
+        if (qEnvironmentVariableIsEmpty("IFRAME_FIXTURE_HTTPD")) {
+            QSKIP("IFRAME_FIXTURE_HTTPD is not set");
         }
+        QVERIFY2(fixture.start(), qPrintable(fixture.error()));
         QWebEngineProfile profile;
         QWebEnginePage page(&profile);
         page.settings()->setAttribute(QWebEngineSettings::ErrorPageEnabled, false);

@@ -64,9 +64,10 @@ private Q_SLOTS:
     void activeView_continuesBeating()
     {
         FixtureServer fixture;
-        if (!fixture.start()) {
-            QSKIP("fixture server failed to start");
+        if (qEnvironmentVariableIsEmpty("IFRAME_FIXTURE_HTTPD")) {
+            QSKIP("IFRAME_FIXTURE_HTTPD is not set");
         }
+        QVERIFY2(fixture.start(), qPrintable(fixture.error()));
         resetCounters(fixture.port());
 
         QWebEngineProfile profile;
@@ -89,9 +90,10 @@ private Q_SLOTS:
     void frozenView_significantlyReducesBeating()
     {
         FixtureServer fixture;
-        if (!fixture.start()) {
-            QSKIP("fixture server failed to start");
+        if (qEnvironmentVariableIsEmpty("IFRAME_FIXTURE_HTTPD")) {
+            QSKIP("IFRAME_FIXTURE_HTTPD is not set");
         }
+        QVERIFY2(fixture.start(), qPrintable(fixture.error()));
         resetCounters(fixture.port());
 
         QWebEngineProfile profile;
@@ -132,9 +134,10 @@ private Q_SLOTS:
     void resumeFromFrozen_restartsBeating()
     {
         FixtureServer fixture;
-        if (!fixture.start()) {
-            QSKIP("fixture server failed to start");
+        if (qEnvironmentVariableIsEmpty("IFRAME_FIXTURE_HTTPD")) {
+            QSKIP("IFRAME_FIXTURE_HTTPD is not set");
         }
+        QVERIFY2(fixture.start(), qPrintable(fixture.error()));
         resetCounters(fixture.port());
 
         QWebEngineProfile profile;
@@ -172,9 +175,10 @@ private Q_SLOTS:
     void discard_replacesRenderProcess()
     {
         FixtureServer fixture;
-        if (!fixture.start()) {
-            QSKIP("fixture server failed to start");
+        if (qEnvironmentVariableIsEmpty("IFRAME_FIXTURE_HTTPD")) {
+            QSKIP("IFRAME_FIXTURE_HTTPD is not set");
         }
+        QVERIFY2(fixture.start(), qPrintable(fixture.error()));
 
         QWebEngineProfile profile;
         QWebEnginePage page(&profile);

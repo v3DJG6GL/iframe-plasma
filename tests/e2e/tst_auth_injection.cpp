@@ -48,9 +48,10 @@ private Q_SLOTS:
     void noInterceptor_serverReturns401()
     {
         FixtureServer fixture;
-        if (!fixture.start()) {
-            QSKIP("fixture server failed to start (IFRAME_FIXTURE_HTTPD unset?)");
+        if (qEnvironmentVariableIsEmpty("IFRAME_FIXTURE_HTTPD")) {
+            QSKIP("IFRAME_FIXTURE_HTTPD is not set");
         }
+        QVERIFY2(fixture.start(), qPrintable(fixture.error()));
 
         QWebEngineProfile profile;
         QWebEnginePage page(&profile);
@@ -74,9 +75,10 @@ private Q_SLOTS:
     void interceptor_injectsAuthorizationOnRegisteredHost()
     {
         FixtureServer fixture;
-        if (!fixture.start()) {
-            QSKIP("fixture server failed to start");
+        if (qEnvironmentVariableIsEmpty("IFRAME_FIXTURE_HTTPD")) {
+            QSKIP("IFRAME_FIXTURE_HTTPD is not set");
         }
+        QVERIFY2(fixture.start(), qPrintable(fixture.error()));
         const QString hostKey = QStringLiteral("127.0.0.1:%1").arg(fixture.port());
 
         BasicAuthInterceptor interceptor;
@@ -104,9 +106,10 @@ private Q_SLOTS:
     void interceptor_doesNotLeakAuthToOtherHost()
     {
         FixtureServer fixture;
-        if (!fixture.start()) {
-            QSKIP("fixture server failed to start");
+        if (qEnvironmentVariableIsEmpty("IFRAME_FIXTURE_HTTPD")) {
+            QSKIP("IFRAME_FIXTURE_HTTPD is not set");
         }
+        QVERIFY2(fixture.start(), qPrintable(fixture.error()));
         // Register against a different host:port — the interceptor must
         // not inject when the request hits our fixture.
         BasicAuthInterceptor interceptor;

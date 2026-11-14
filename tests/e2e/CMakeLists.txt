@@ -36,6 +36,14 @@ endif()
 
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tst_authelia_redirect.cpp")
     iframe_add_e2e_test(tst_authelia_redirect)
+    # A fixture that is configured but cannot start must fail the binary:
+    # as a skip, every fixture-backed check would stay green without running.
+    add_test(NAME iframe-e2e-broken-fixture-fails COMMAND tst_authelia_redirect)
+    set_tests_properties(iframe-e2e-broken-fixture-fails PROPERTIES
+        ENVIRONMENT "IFRAME_FIXTURE_HTTPD=${CMAKE_CURRENT_SOURCE_DIR}/no-such-server.py"
+        PASS_REGULAR_EXPRESSION "FAIL![^\n]*fixture server did not start"
+        LABELS "e2e"
+        TIMEOUT 60)
 endif()
 
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tst_grafana_rewrite_e2e.cpp")
