@@ -1540,17 +1540,16 @@ KCM.SimpleKCM {
                     if (p.val === cand) { tr = cand; break; }
                 }
             }
-            // Refresh — extract the seconds value if present + ending in 's'
-            // (the form transformUrl emits). Anything else (1m, 30, no
-            // refresh) → toggle off, keep SpinBox at last value.
+            // Refresh — the interval in seconds when the URL carries
+            // refresh=<N>s (the form transformUrl emits) or Grafana's own
+            // <N>m / <N>h. Anything else (30, 1d, no refresh) → toggle
+            // off, keep SpinBox at last value.
             let refreshOn = false;
             let refreshSec = refreshInterval.value;
-            const refMatch = u.match(/[?&]refresh=([0-9]+)s(?:&|$)/);
-            if (refMatch) {
+            const urlRefresh = GrafanaUrl.parseRefreshSeconds(u, refreshInterval.from, refreshInterval.to);
+            if (urlRefresh > 0) {
                 refreshOn = true;
-                refreshSec = parseInt(refMatch[1], 10);
-                if (refreshSec < refreshInterval.from) refreshSec = refreshInterval.from;
-                if (refreshSec > refreshInterval.to)   refreshSec = refreshInterval.to;
+                refreshSec = urlRefresh;
             }
             return {
                 timeRange: tr,

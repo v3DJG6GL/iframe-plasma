@@ -366,4 +366,30 @@ TestCase {
         compare(G.transform("https://g/d/abc/dash?orgId=1&viewPanel=panel-5", opts),
                 "https://g/d/abc/dash?orgId=1&viewPanel=panel-5&refresh=30s");
     }
+
+    // ===== parseRefreshSeconds (Edit dialog pre-fill) =================
+    function test_parseRefreshSeconds_seconds() {
+        compare(G.parseRefreshSeconds("https://g/d-solo/x/y?refresh=30s", 5, 3600), 30);
+        compare(G.parseRefreshSeconds("https://g/d-solo/x/y?orgId=1&refresh=90s&kiosk", 5, 3600), 90);
+    }
+    function test_parseRefreshSeconds_minutesAndHours() {
+        // Grafana's refresh picker writes 1m / 5m / 1h. Read as "no
+        // refresh", the Edit dialog showed the switch off and OK stripped
+        // the param the user never touched.
+        compare(G.parseRefreshSeconds("https://g/d-solo/x/y?refresh=1m", 5, 3600), 60);
+        compare(G.parseRefreshSeconds("https://g/d-solo/x/y?refresh=5m&panelId=2", 5, 3600), 300);
+        compare(G.parseRefreshSeconds("https://g/d-solo/x/y?refresh=1h", 5, 3600), 3600);
+    }
+    function test_parseRefreshSeconds_clampedToRange() {
+        compare(G.parseRefreshSeconds("https://g/x?refresh=1s", 5, 3600), 5);
+        compare(G.parseRefreshSeconds("https://g/x?refresh=2h", 5, 3600), 3600);
+    }
+    function test_parseRefreshSeconds_absentOrUnreadable() {
+        compare(G.parseRefreshSeconds("https://g/x", 5, 3600), -1);
+        compare(G.parseRefreshSeconds("https://g/x?refresh=30", 5, 3600), -1);
+        compare(G.parseRefreshSeconds("https://g/x?refresh=1d", 5, 3600), -1);
+        compare(G.parseRefreshSeconds("https://g/x?autorefresh=5m", 5, 3600), -1);
+        compare(G.parseRefreshSeconds("https://g/x#a?refresh=1m", 5, 3600), -1);
+        compare(G.parseRefreshSeconds(null, 5, 3600), -1);
+    }
 }

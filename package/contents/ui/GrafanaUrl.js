@@ -15,6 +15,9 @@
  *   optsFor(isEdit, controls) — the opts transform() gets for the
  *                            dialog's Add or Edit mode.
  *
+ *   parseRefreshSeconds(u, min, max) — a URL's refresh=<N>s|m|h as
+ *                            clamped seconds, -1 when absent/unreadable.
+ *
  *   splitFragment(u) → [base, "#frag"] — preserves an anchor through
  *                            subsequent stripParam/appendParam ops.
  *
@@ -155,4 +158,17 @@ function optsFor(isEdit, controls) {
     const opts = Object.assign({}, controls);
     opts.convertDSolo = !isEdit && !!opts.convertDSolo;
     return opts;
+}
+
+// Auto-refresh interval a URL carries, in seconds clamped to
+// [minSec, maxSec]; -1 when it has none the dialog can show. Grafana's own
+// picker writes minutes and hours (refresh=1m, refresh=1h), not only the
+// seconds form transform() emits, and a value this does not read is one
+// the Edit dialog shows as "off" and then strips.
+function parseRefreshSeconds(url, minSec, maxSec) {
+    const base = splitFragment(String(url || ""))[0];
+    const m = base.match(/[?&]refresh=([0-9]+)([smh])(?:&|$)/);
+    if (!m) return -1;
+    const sec = parseInt(m[1], 10) * { s: 1, m: 60, h: 3600 }[m[2]];
+    return Math.max(minSec, Math.min(maxSec, sec));
 }
