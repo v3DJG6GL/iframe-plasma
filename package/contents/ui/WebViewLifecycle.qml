@@ -25,8 +25,9 @@
  *
  * State changes the controller did not make itself (a reload promoting a
  * Discarded view to Active, Chromium lifting a Frozen pin) re-enter the
- * policy while the timer is idle, so such a view is frozen again instead of
- * staying Active and invisible until its tab is next shown.
+ * policy while the timer is idle — and at once when a reload woke a hidden
+ * Frozen view — so such a view is frozen again instead of staying Active
+ * and invisible until its tab is next shown.
  *
  * The pure decision core lives in LifecyclePolicy.js so
  * tests/qml/tst_lifecycle.qml can drive every transition without spinning
@@ -159,9 +160,16 @@ QtObject {
 
     function _onExternalChange() {
         if (!target) return;
+        const state = _stateName(target.lifecycleState);
+        // Active with a freeze record while still invisible: a reload woke
+        // the Frozen view. (Becoming visible also wakes it, but that is a
+        // resume, and _reevaluate() needs the record to judge staleness.)
+        const wokenFrozen = state === "active" && ctl._frozenAtMs > 0
+                            && !target.visible;
         if (Policy.shouldReevaluateOnExternalChange(
                 ctl.desiredActive, _phaseTimer.running, ctl._applying,
-                _stateName(target.lifecycleState))) {
+                state, wokenFrozen)) {
+            if (wokenFrozen) ctl._frozenAtMs = 0;
             _reevaluate();
         }
     }

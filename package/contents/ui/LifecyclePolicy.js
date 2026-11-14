@@ -129,8 +129,16 @@ function decideOnTimer(currentState, recommendedState,
 // Discarded view straight to Active) and a Frozen view whose pin lifted.
 // Never restarts a running timer: restarting on every signal would reset
 // the countdown before it can fire — the same bug the auto-cycle had.
+// The one exception is wokenFrozen (optional, appended): the controller
+// froze the view, yet it is Active again without having been shown
+// (reload() on a hidden Frozen view). The timer running then is the long
+// discard countdown, which would leave the view Active and invisible until
+// it ends. The caller drops its freeze record when this returns true, so
+// the countdown restarts once per wake, not on every signal.
 function shouldReevaluateOnExternalChange(desiredActive, timerRunning,
-                                          applying, stateName) {
-    if (desiredActive || timerRunning || applying) return false;
+                                          applying, stateName, wokenFrozen) {
+    if (desiredActive || applying) return false;
+    if (stateName === "active" && wokenFrozen === true) return true;
+    if (timerRunning) return false;
     return stateName === "active" || stateName === "frozen";
 }

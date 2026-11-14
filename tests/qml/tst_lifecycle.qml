@@ -288,6 +288,26 @@ TestCase {
     function test_external_frozenWhileIdle_reevaluates() {
         verify(P.shouldReevaluateOnExternalChange(false, false, false, "frozen"));
     }
+    function test_external_frozenViewWokenWhileTimerRuns_reevaluates() {
+        // reload() on a hidden Frozen view makes it Active while the long
+        // discard countdown is still running.
+        verify(P.shouldReevaluateOnExternalChange(false, true, false, "active", true));
+    }
+    function test_external_wokenFrozen_wantedOrOwnApply_ignored() {
+        verify(!P.shouldReevaluateOnExternalChange(true, true, false, "active", true));
+        verify(!P.shouldReevaluateOnExternalChange(false, true, true, "active", true));
+    }
+    function test_external_timerRunning_notWokenFrozen_ignored() {
+        verify(!P.shouldReevaluateOnExternalChange(false, true, false, "active", false));
+        verify(!P.shouldReevaluateOnExternalChange(false, true, false, "frozen", true));
+    }
+    function test_sequence_wokenFrozenViewRestartsAtFreezeStep() {
+        verify(P.shouldReevaluateOnExternalChange(false, true, false, "active", true));
+        // The caller cleared its freeze record → freeze delay, not the
+        // remainder of the discard countdown.
+        const change = P.decideOnChange("active", false, 0, 30, 600, 0, 1000);
+        compare(change.scheduleMs, 30000);
+    }
     function test_sequence_forcedWakeIsFrozenAgain() {
         // Discarded background view, timer idle → reload() sets Active →
         // external change → decideOnChange schedules the freeze again.
