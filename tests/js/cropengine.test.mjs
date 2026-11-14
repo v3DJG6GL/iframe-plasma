@@ -698,9 +698,10 @@ test("hidden page: an armed picker suppresses the scan", () => {
 
 // A wrapper MutationObserver stub that records takeRecords() calls, and a
 // target whose intrinsic size / viewport are stubbed (jsdom has no layout).
-function runFitApply() {
+function runFitApply(targetStyle = "") {
     const dom = new JSDOM(
-        "<!doctype html><html><body><div id='wrap'><div id='t'>x</div></div></body></html>",
+        "<!doctype html><html><body><div id='wrap'>" +
+        `<div id='t' style='${targetStyle}'>x</div></div></body></html>`,
         { runScripts: "outside-only" });
     const w = dom.window;
     const size = { cw: 100, ch: 60, vw: 400, vh: 300 };
@@ -761,4 +762,17 @@ test("fit: re-inject after teardown announces its scale again", () => {
     assert.equal(t.resizes(), 1);
     t.w.eval(`(${ce.buildApplyJs("#t", { scaleMode: "fit" })})`);
     assert.equal(t.resizes(), 2);
+});
+
+test("fit: clear puts the page's own inline styles back", () => {
+    // A grid item positioned by its own inline transform/width/height must
+    // not lose them when the crop is removed.
+    const t = runFitApply("width:300px;height:200px;transform:translate(10px, 20px)");
+    assert.equal(t.el.style.transform, "scale(4)");
+    t.tick();
+    t.w.eval(ce.buildClearJs());
+    assert.equal(t.el.style.width, "300px");
+    assert.equal(t.el.style.height, "200px");
+    assert.equal(t.el.style.transform, "translate(10px, 20px)");
+    assert.equal(t.el.style.transformOrigin, "");
 });

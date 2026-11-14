@@ -48,6 +48,19 @@
 // path to a "clear-then-install" idiom that's safe to re-call without
 // fighting a previous install's observers / data-ifp-* / inline styles.
 const _TEARDOWN_BODY = `
+    // Puts back the inline styles the page itself had on a fit-mode target
+    // (saved in __ifpFitOrig before the first scale): a grid item positioned
+    // by its own inline transform/width/height must get those back, not ''.
+    var _ifpFitRestore = function(t) {
+        if (!t || !t.style) return;
+        var o = t.__ifpFitOrig || {};
+        try {
+            t.style.transform = o.transform || '';
+            t.style.transformOrigin = o.transformOrigin || '';
+            t.style.width = o.width || '';
+            t.style.height = o.height || '';
+        } catch (e) {}
+    };
     if (window.__ifpThumbObserver)     try { window.__ifpThumbObserver.disconnect(); }     catch(e) {}
     if (window.__ifpThumbWrapObserver) try { window.__ifpThumbWrapObserver.disconnect(); } catch(e) {}
     if (window.__ifpThumbResize)       try { window.__ifpThumbResize.disconnect(); }       catch(e) {}
@@ -72,12 +85,10 @@ const _TEARDOWN_BODY = `
     // user wipes the selector).
     var _ifpFit = window.__ifpFitTarget;
     if (_ifpFit && _ifpFit.style) {
+        _ifpFitRestore(_ifpFit);
         try {
-            _ifpFit.style.transform = '';
-            _ifpFit.style.transformOrigin = '';
-            _ifpFit.style.width = '';
-            _ifpFit.style.height = '';
             _ifpFit.__ifpFitKey = null;
+            _ifpFit.__ifpFitOrig = null;
         } catch (e) {}
     }
     window.__ifpFitTarget = null;
@@ -331,12 +342,19 @@ const _APPLY_BODY = `(function(sel, opts){
   }
   function applyFitTransform(el) {
     if (!el) return;
+    // Remember the page's own inline values once, before the first write.
+    if (!el.__ifpFitOrig) {
+      el.__ifpFitOrig = {
+        transform: el.style.transform,
+        transformOrigin: el.style.transformOrigin,
+        width: el.style.width,
+        height: el.style.height
+      };
+    }
     // Reset prior inline styles so measurement reflects intrinsic content,
-    // not a previous frame's scaled box.
-    el.style.transform = '';
-    el.style.transformOrigin = '';
-    el.style.width = '';
-    el.style.height = '';
+    // not a previous frame's scaled box. (_ifpFitRestore comes from the
+    // teardown inlined at the top of the IIFE.)
+    _ifpFitRestore(el);
     // Force layout so scrollWidth/scrollHeight reflect post-reset state.
     void el.offsetWidth;
     var cw = el.scrollWidth;
