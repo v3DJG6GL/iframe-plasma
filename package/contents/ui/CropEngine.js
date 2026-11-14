@@ -561,6 +561,10 @@ const _APPLY_BODY = `(function(sel, opts){
         lastEl = el;
         const wrap = el.parentElement;
         if (wrap && window.__ifpThumbWrapObserver) window.__ifpThumbWrapObserver.disconnect();
+        // Same for the ResizeObserver: teardown only reaches the one stored
+        // on window, so an older one left running would re-isolate the page
+        // through this closure after a clear or a re-apply.
+        if (wrap && window.__ifpThumbResize) { try { window.__ifpThumbResize.disconnect(); } catch(e) {} }
         if (wrap) {
           const wo = new MutationObserver(schedule);
           wo.observe(wrap, { childList: true, subtree: true, attributes: true, attributeFilter: ['style','width','height'] });

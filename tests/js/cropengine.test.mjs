@@ -215,6 +215,42 @@ test("clear: removes data-ifp-isolate marker", () => {
     assert.equal(dom.window.document.documentElement.getAttribute("data-ifp-isolate"), null);
 });
 
+test("observers: a replaced match disconnects the previous ResizeObserver", () => {
+    // A re-mounted target gets a new parent observer; the old one must not
+    // stay alive, or it re-applies the old selector after a clear.
+    const dom = new JSDOM(
+        "<!doctype html><html><body><div id='a'><div id='t'>x</div></div><div id='b'></div></body></html>",
+        { runScripts: "outside-only" });
+    const w = dom.window;
+    w.MutationObserver = class { observe() {} disconnect() {} };
+    const resizeObservers = [];
+    w.ResizeObserver = class {
+        constructor() { this.disconnected = false; resizeObservers.push(this); }
+        observe() {}
+        disconnect() { this.disconnected = true; }
+    };
+    w.requestAnimationFrame = (cb) => { cb(); return 0; };
+    w.cancelAnimationFrame = () => {};
+    w.setInterval = () => 0;
+    w.clearInterval = () => {};
+    w.console = { info: () => {}, warn: () => {}, error: () => {} };
+
+    w.eval(`(${ce.buildApplyJs("#t")})`);
+    w.__ifpThumbSchedule();
+    assert.equal(resizeObservers.length, 1);
+
+    // The page re-mounts the target under another parent.
+    w.document.getElementById("t").remove();
+    w.document.getElementById("b").innerHTML = "<div id='t'>y</div>";
+    w.__ifpThumbSchedule();
+    assert.equal(resizeObservers.length, 2);
+    assert.equal(resizeObservers[0].disconnected, true,
+        "the first ResizeObserver must be disconnected when the match moves");
+
+    w.eval(ce.buildClearJs());
+    assert.deepEqual(resizeObservers.map(o => o.disconnected), [true, true]);
+});
+
 test("clear: removes data-ifp-target from previously isolated element", () => {
     const dom = new JSDOM(
         "<!doctype html><html><body><div id='t'/></body></html>",
