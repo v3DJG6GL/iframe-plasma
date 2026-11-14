@@ -2,6 +2,7 @@
  * SPDX-FileCopyrightText: 2026 v3DJG6GL <72495210+v3DJG6GL@users.noreply.github.com>
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
+import QtCore
 import QtQuick
 import QtQuick.Controls as QQC
 import QtQuick.Dialogs
@@ -124,7 +125,10 @@ KCM.SimpleKCM {
         nameFilters: [i18n("iframe-plasma config (*.iframeplasma.json *.json)"),
                       i18n("All files (*)")]
         defaultSuffix: "json"
-        currentFile: "file://" + IframePlasma.BackupBridge.suggestedExportName()
+        currentFolder: StandardPaths.writableLocation(StandardPaths.DocumentsLocation)
+        selectedFile: BackupPage.exportFileUrl(
+            StandardPaths.writableLocation(StandardPaths.DocumentsLocation),
+            IframePlasma.BackupBridge.suggestedExportName())
         onAccepted: {
             const path = page._urlToPath(selectedFile);
             const err = IframePlasma.BackupBridge.exportToFile(path, page._collectConfig());

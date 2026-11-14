@@ -25,3 +25,13 @@ function importOutcome(before, wanted, after) {
     }
     return { changed: changed, adjusted: adjusted };
 }
+
+// File URL of `fileName` inside the folder `folderUrl` ("file:///…", as
+// StandardPaths returns it). The dialog needs the folder: "file://" plus a
+// bare name parses the name as the URL host and leaves the path empty.
+// Returns "" without a folder, so the dialog falls back to its own default.
+function exportFileUrl(folderUrl, fileName) {
+    const folder = String(folderUrl || "");
+    if (folder.length === 0) return "";
+    return folder.replace(/\/$/, "") + "/" + encodeURIComponent(fileName);
+}

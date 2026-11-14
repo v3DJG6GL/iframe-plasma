@@ -59,4 +59,31 @@ TestCase {
         compare(out.changed, false);
         compare(out.adjusted, []);
     }
+
+    // ===== exportFileUrl =============================================
+    function test_exportFileUrl_nameIsThePathNotTheHost() {
+        const name = "iframe-plasma-config-2026-05-27.json";
+        const u = B.exportFileUrl("file:///home/u/Documents", name);
+        compare(u, "file:///home/u/Documents/" + name);
+        const parsed = new URL(u);
+        compare(parsed.hostname, "");
+        compare(parsed.pathname, "/home/u/Documents/" + name);
+    }
+    function test_exportFileUrl_data() {
+        return [
+            { tag: "trailingSlash", folder: "file:///home/u/Documents/", name: "a.json",
+              want: "file:///home/u/Documents/a.json" },
+            { tag: "rootFolder",    folder: "file:///",                  name: "a.json",
+              want: "file:///a.json" },
+            { tag: "nameEncoded",   folder: "file:///home/u",            name: "a b#1.json",
+              want: "file:///home/u/a%20b%231.json" },
+            { tag: "noFolder",      folder: "",                          name: "a.json",
+              want: "" },
+            { tag: "nullFolder",    folder: null,                        name: "a.json",
+              want: "" },
+        ];
+    }
+    function test_exportFileUrl(d) {
+        compare(B.exportFileUrl(d.folder, d.name), d.want);
+    }
 }
