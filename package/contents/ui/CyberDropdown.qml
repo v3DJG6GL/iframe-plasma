@@ -28,7 +28,11 @@ QQC.Popup {
     padding: 1
     modal: false
     focus: true
-    closePolicy: QQC.Popup.CloseOnEscape | QQC.Popup.CloseOnPressOutside
+    // "Outside the parent", not "outside the popup": the parent is the chip
+    // that toggles this menu, and a press on it must reach the chip's own
+    // toggle with the menu still open — otherwise the press closes it and
+    // the click reopens it.
+    closePolicy: QQC.Popup.CloseOnEscape | QQC.Popup.CloseOnPressOutsideParent
 
     background: Rectangle {
         color: Theme.bgAlt
