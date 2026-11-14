@@ -87,6 +87,34 @@ TestCase {
         compare(out[0].authType, "oauth2");
     }
 
+    // ----- hostKey (must equal the C++ canonicalizeHost lookup key) -----
+    function test_hostKey_data() {
+        return [
+            { tag: "plain https",            url: "https://example.com/x",        expected: "example.com" },
+            { tag: "plain http",             url: "http://example.com/",          expected: "example.com" },
+            { tag: "explicit default https", url: "https://example.com:443/x",    expected: "example.com" },
+            { tag: "explicit default http",  url: "http://example.com:80/",       expected: "example.com" },
+            { tag: "non-default port",       url: "https://example.com:9100/",    expected: "example.com:9100" },
+            { tag: "https on 80",            url: "https://example.com:80/",      expected: "example.com:80" },
+            { tag: "http on 443",            url: "http://example.com:443/",      expected: "example.com:443" },
+            { tag: "uppercase",              url: "HTTPS://EXAMPLE.Com:8443/a",   expected: "example.com:8443" },
+            { tag: "ipv6 default port",      url: "https://[::1]/",               expected: "[::1]" },
+            { tag: "ipv6 explicit default",  url: "http://[fe80::1]:80/",         expected: "[fe80::1]" },
+            { tag: "ipv6 with port",         url: "https://[::1]:9100/",          expected: "[::1]:9100" },
+            { tag: "ipv6 uppercase",         url: "https://[2001:DB8::1]:443/",   expected: "[2001:db8::1]" },
+            { tag: "userinfo ignored",       url: "https://user:pw@example.com/", expected: "example.com" }
+        ];
+    }
+    function test_hostKey(data) {
+        compare(U.hostKey(data.url), data.expected);
+    }
+    function test_hostKey_throwsOnUnparsableUrl() {
+        // Callers rely on the throw to skip a tab whose URL has no host.
+        let threw = false;
+        try { U.hostKey("not a url"); } catch (e) { threw = true; }
+        verify(threw);
+    }
+
     // ----- isGrafanaEmbed -----
     function test_isGrafanaEmbed_matchesDsolo() {
         verify(U.isGrafanaEmbed("https://grafana.example.com/d-solo/abc-123/dashboard?panelId=2"));

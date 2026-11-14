@@ -88,6 +88,22 @@ function parseAuthProfiles(jsonStr, logCategory) {
     }
 }
 
+// Host key of a URL in the exact form the C++ interceptor looks up
+// (canonicalizeHost): lowercased, IPv6 literal bracketed, the scheme's
+// default port dropped. QML's `URL` is QUrl-backed, not WHATWG: its `.host`
+// keeps an explicit `:443`/`:80` and drops the IPv6 brackets, so it must
+// never be used as the key directly. Throws like `new URL()` on bad input.
+function hostKey(urlString) {
+    const u = new URL(urlString);
+    let h = String(u.hostname).toLowerCase();
+    if (h.indexOf(":") !== -1 && h.charAt(0) !== "[") h = "[" + h + "]";
+    const p = String(u.port || "");
+    const isDefaultPort = p === ""
+        || (u.protocol === "https:" && p === "443")
+        || (u.protocol === "http:" && p === "80");
+    return isDefaultPort ? h : h + ":" + p;
+}
+
 // Pure form of resolveTheme(): given the configured themeMode and the
 // resolved KDE backgroundColor (as {r, g, b} in 0..1), return "light" or
 // "dark". The "auto" branch uses Rec. 601 relative luminance with a 0.5

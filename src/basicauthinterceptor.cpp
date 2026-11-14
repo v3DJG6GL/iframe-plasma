@@ -23,10 +23,10 @@ namespace iframeplasma::auth {
 
 QString canonicalizeHost(const QString &rawHost, const QString &scheme, int port)
 {
-    // QML side registers hosts using WHATWG `new URL().host` semantics:
-    // bare host for default scheme ports (http→80, https→443), `host:port`
-    // otherwise. QUrl::host() strips brackets from IPv6 literals (returns
-    // `::1` for `https://[::1]/`), and the colon-in-host then becomes the
+    // QML side registers hosts via UrlUtils.hostKey(), i.e. WHATWG `URL.host`
+    // semantics: bare host for default scheme ports (http→80, https→443),
+    // `host:port` otherwise. QUrl::host() strips brackets from IPv6 literals
+    // (returns `::1` for `https://[::1]/`), and the colon-in-host then becomes the
     // IPv6 sigil (port is already separated). Re-add brackets so the lookup
     // key matches the QML-side registration. Lowercase for case-fold match.
     const QString lower = rawHost.toLower();

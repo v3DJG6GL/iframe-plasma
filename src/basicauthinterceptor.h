@@ -15,11 +15,13 @@
 
 namespace iframeplasma::auth {
 
-// Canonicalise a request host to the WHATWG `URL.host` form that the QML
-// registration side emits (`new URL(t.url).host`): bare host for default
-// scheme ports (http→80, https→443), `host:port` otherwise. IPv6 literals
-// get their brackets re-added since `QUrl::host()` strips them. Used by
-// both BasicAuthInterceptor::interceptRequest() and the unit tests.
+// Canonicalise a request host to the WHATWG `URL.host` form: bare host for
+// default scheme ports (http→80, https→443), `host:port` otherwise. IPv6
+// literals get their brackets re-added since `QUrl::host()` strips them.
+// The QML registration side must build its keys with UrlUtils.hostKey(),
+// which reproduces this form; QML's own `new URL(u).host` is QUrl-backed
+// and does NOT (it keeps `:443`/`:80` and drops the IPv6 brackets). Used
+// by both BasicAuthInterceptor::interceptRequest() and the unit tests.
 QString canonicalizeHost(const QString &rawHost, const QString &scheme, int port);
 
 // Build the Authorization header value for one profile. Returns nullopt on

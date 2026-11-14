@@ -929,7 +929,7 @@ PlasmoidItem {
             // added to profilesInUse, so applyProfile would not register
             // a header for it and the tab would land unauthenticated.
             let host;
-            try { host = new URL(root.resolveUrl(t)).host; } catch (e) { continue; }
+            try { host = UrlUtils.hostKey(root.resolveUrl(t)); } catch (e) { continue; }
             const p = root.profileById(t.authProfileId);
             if (!p) continue;
             if (!profilesInUse[p.id]) profilesInUse[p.id] = { profile: p, hosts: [] };
@@ -1168,14 +1168,14 @@ PlasmoidItem {
                 return;
             }
 
-            const reqHost = new URL(String(request.url)).host;
+            const reqHost = UrlUtils.hostKey(String(request.url));
             // Resolve ${theme} (and any future placeholder) before parsing —
             // `new URL("https://${theme}.example.com/")` throws because $/{ /}
             // are invalid host chars. primeAuthProfiles applies the same
             // substitution; without it here, handleBasicAuth's outer catch
             // swallows the parse error and Qt falls back to its default
             // basic-auth prompt despite stored creds being present.
-            const tabHost = new URL(root.resolveUrl(tabConfig)).host;
+            const tabHost = UrlUtils.hostKey(root.resolveUrl(tabConfig));
             if (reqHost.toLowerCase() !== tabHost.toLowerCase()) {
                 console.debug(Log.auth, "iframe-plasma[auth] host mismatch -> letting Qt prompt");
                 return;
