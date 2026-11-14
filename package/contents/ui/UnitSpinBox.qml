@@ -95,6 +95,23 @@ QQC.SpinBox {
                     edit.text = root.textFromValue(root.value, root.locale);
                 }
             }
+            // Emitted for a step (arrow key, arrow button), never while
+            // typing. Show the stepped value even with focus in the editor:
+            // a stale buffer would be committed back over it on focus loss.
+            function onValueModified() {
+                edit.text = root.textFromValue(root.value, root.locale);
+            }
+        }
+        // A step starts from `value`, so what was typed has to be committed
+        // before it: on an arrow button's press (the step follows on
+        // release) and, below, ahead of the SpinBox's own Up/Down handling.
+        Connections {
+            target: root.up
+            function onPressedChanged() { if (root.up.pressed) edit.commitBuffer(); }
+        }
+        Connections {
+            target: root.down
+            function onPressedChanged() { if (root.down.pressed) edit.commitBuffer(); }
         }
 
         font: root.font
@@ -136,6 +153,16 @@ QQC.SpinBox {
             root.valueModified();
             edit.text = root.textFromValue(root.value, root.locale);
             event.accepted = true;
+        }
+
+        // Not accepted: the SpinBox still does the stepping.
+        Keys.onUpPressed:   (event) => { commitBuffer(); event.accepted = false; }
+        Keys.onDownPressed: (event) => { commitBuffer(); event.accepted = false; }
+
+        function commitBuffer() {
+            if (edit.activeFocus) {
+                root.value = root.valueFromText(edit.text, root.locale);
+            }
         }
     }
 
