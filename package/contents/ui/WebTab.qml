@@ -629,6 +629,10 @@ Item {
                         }
                         tab.loadStatus = "loading";
                         tab.lastCertError = false;
+                        // The metrics describe the previous load; left in place
+                        // they would show "200 OK" over a failed one.
+                        tab.httpStatus = 0;
+                        tab.latencyMs = 0;
                         if (!tab.loginInProgress) statusOverlay.showLoading();
                         // Consume a Discarded-armed hardReload: abort the engine's
                         // cache-honoring auto-reload from the lifecycle promotion
@@ -713,6 +717,9 @@ Item {
                         tab.lastCertError = tab._preLoadCertError;
                         statusOverlay.message = tab._preLoadOverlayMessage;
                         statusOverlay.mode = tab._preLoadOverlayMode;
+                        // The previous document is still there, and so are the
+                        // load metrics that LoadStartedStatus cleared.
+                        if (tab.loadStatus !== "err") tab._captureNavTiming();
                     } else if (info.status === WebEngineView.LoadFailedStatus) {
                         console.warn(Log.load, "iframe-plasma[load] FAILED url=" + Log.redactUrl(info.url)
                             + " code=" + info.errorCode + " msg=" + info.errorString);
@@ -753,6 +760,8 @@ Item {
                     if (now - _lastRenderRetryMs < 60000) {
                         console.warn(Log.load, "iframe-plasma[render] crash within 60s window, not retrying");
                         tab.loadStatus = "err";
+                        tab.httpStatus = 0;
+                        tab.latencyMs = 0;
                         statusOverlay.showError("Renderer crashed");
                         return;
                     }
