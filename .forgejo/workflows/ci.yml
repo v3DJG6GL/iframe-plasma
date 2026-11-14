@@ -122,13 +122,24 @@ jobs:
             xvfb
           # setup-node's tool-cache layout, so other jobs can reuse it.
           node_dir="/opt/hostedtoolcache/node/${NODE_VERSION}/x64"
-          if ! [ -f "$node_dir.complete" ]; then
-            # Unpack beside it and rename: a concurrent job never sees half a tree.
-            tmp="$node_dir.tmp.$$"; mkdir -p "$tmp"
-            curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" \
-              | tar -xJ -C "$tmp" --strip-components=1
-            rm -rf "$node_dir" && mv -T "$tmp" "$node_dir" && touch "$node_dir.complete"
-          fi
+          mkdir -p "${node_dir%/*}"
+          # One installer at a time: the tool cache is shared by every job
+          # container on the runner, and unlocked, two jobs unpack into the
+          # same staging directory or delete the tree the other just published.
+          (
+            flock 9
+            if ! [ -f "$node_dir.complete" ] || ! [ -x "$node_dir/bin/node" ]; then
+              # Unpack beside it and rename, marker last: a reader that takes
+              # no lock (setup-node) never sees half a tree.
+              tmp="$node_dir.tmp"
+              rm -rf "$tmp" "$node_dir" "$node_dir.complete"
+              mkdir "$tmp"
+              curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" \
+                | tar -xJ -C "$tmp" --strip-components=1
+              mv -T "$tmp" "$node_dir"
+              touch "$node_dir.complete"
+            fi
+          ) 9> "$node_dir.lock"
           ln -sf "$node_dir"/bin/* /usr/local/bin/
           node --version
           # Drop .debs no longer in the indexes (superseded versions).
