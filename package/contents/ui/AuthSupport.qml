@@ -49,10 +49,14 @@ QtObject {
         return comp.createObject(support);
     }
 
-    // Existence check for a profile's wallet entry (`profile:<uuid>`).
-    // ConfigAuth uses it to show whether a secret is already stored for a
-    // profile. Newer profiles use the map entries below.
+    // Existence check for a profile's wallet entry (`profile:<uuid>`),
+    // whatever it holds.
     function has(key) { return IframePlasma.SecretsBridge.has(key) }
+
+    // Whether the entry holds a non-empty `field` (see the map layout
+    // below). ConfigAuth uses it to show whether the secret for the
+    // profile's current auth type is stored; the value stays in C++.
+    function hasField(key, field) { return IframePlasma.SecretsBridge.hasField(key, field) }
 
     // Multi-field map entries for named auth profiles. Wallet key is
     // `profile:<uuid>` (single source of truth in `profileKey()`); value

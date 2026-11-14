@@ -88,6 +88,68 @@ private Q_SLOTS:
     }
 
     // ---------------------------------------------------------------
+    // hasField() — the "stored" hint must follow the field the current
+    // auth type reads, not mere entry existence
+    // ---------------------------------------------------------------
+    void hasField_presentField_true()
+    {
+        auto w = makeWallet();
+        w->seedMap(QString(kFolder), u"profile:1"_s, {{u"password"_s, u"p"_s}});
+        SecretsBridge b{std::move(w)};
+        QVERIFY(b.hasField(u"profile:1"_s, u"password"_s));
+    }
+
+    void hasField_entryHoldsOtherTypesField_false()
+    {
+        // basic → bearer switch: the entry still exists (has() is true)
+        // but holds no bearerToken, so nothing would be injected.
+        auto w = makeWallet();
+        w->seedMap(QString(kFolder), u"profile:1"_s, {{u"password"_s, u"p"_s}});
+        SecretsBridge b{std::move(w)};
+        QVERIFY(b.has(u"profile:1"_s));
+        QVERIFY(!b.hasField(u"profile:1"_s, u"bearerToken"_s));
+        QVERIFY(!b.hasField(u"profile:1"_s, u"rawHeader"_s));
+    }
+
+    void hasField_emptyValue_false()
+    {
+        auto w = makeWallet();
+        w->seedMap(QString(kFolder), u"profile:1"_s, {{u"password"_s, u""_s}});
+        SecretsBridge b{std::move(w)};
+        QVERIFY(!b.hasField(u"profile:1"_s, u"password"_s));
+    }
+
+    void hasField_missingEntryOrEmptyArgs_false()
+    {
+        auto w = makeWallet();
+        w->seedMap(QString(kFolder), u"profile:1"_s, {{u"password"_s, u"p"_s}});
+        SecretsBridge b{std::move(w)};
+        QVERIFY(!b.hasField(u"profile:2"_s, u"password"_s));
+        QVERIFY(!b.hasField(u""_s, u"password"_s));
+        QVERIFY(!b.hasField(u"profile:1"_s, u""_s));
+    }
+
+    void hasField_walletUnavailable_false()
+    {
+        auto w = makeWallet();
+        w->seedMap(QString(kFolder), u"profile:1"_s, {{u"password"_s, u"p"_s}});
+        w->setEnabled(false);
+        SecretsBridge b{std::move(w)};
+        QVERIFY(!b.hasField(u"profile:1"_s, u"password"_s));
+    }
+
+    void hasField_followsSetMapAndRemoveKey()
+    {
+        SecretsBridge b{makeWallet()};
+        QVERIFY(!b.hasField(u"profile:1"_s, u"bearerToken"_s));
+        QVERIFY(b.setMap(u"profile:1"_s, {{u"bearerToken"_s, u"t"_s}}));
+        QVERIFY(b.hasField(u"profile:1"_s, u"bearerToken"_s));
+        QVERIFY(!b.hasField(u"profile:1"_s, u"password"_s));
+        QVERIFY(b.removeKey(u"profile:1"_s));
+        QVERIFY(!b.hasField(u"profile:1"_s, u"bearerToken"_s));
+    }
+
+    // ---------------------------------------------------------------
     // getMap() / setMap() round-trip
     // ---------------------------------------------------------------
     void getMap_emptyKey_returnsEmpty()

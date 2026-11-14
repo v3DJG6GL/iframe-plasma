@@ -157,6 +157,18 @@ bool SecretsBridge::has(const QString &key)
     return m_wallet->hasEntry(key);
 }
 
+bool SecretsBridge::hasField(const QString &key, const QString &field)
+{
+    if (key.isEmpty() || field.isEmpty() || !ensureOpen()) {
+        return false;
+    }
+    QMap<QString, QString> raw;
+    if (m_wallet->readMap(key, raw) != 0) {
+        return false;
+    }
+    return !raw.value(field).isEmpty();
+}
+
 QVariantMap SecretsBridge::getMap(const QString &key)
 {
     if (key.isEmpty() || !ensureOpen()) {

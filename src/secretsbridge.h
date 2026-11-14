@@ -27,10 +27,14 @@ public:
     explicit SecretsBridge(std::unique_ptr<IWallet> wallet, QObject *parent = nullptr);
     ~SecretsBridge() override;
 
-    // Existence check for a single wallet key. Named auth profiles use it
-    // (via AuthSupport.has) to show whether a secret is already stored
-    // under `profile:<uuid>`.
+    // Existence check for a single wallet key, whatever it holds.
     Q_INVOKABLE bool has(const QString &key);
+
+    // True when the map entry `key` holds a non-empty `field`. The config
+    // page uses it (via AuthSupport.hasField) for its "stored" hint: the
+    // runtime reads exactly one field per auth type, so an entry left over
+    // from another type must not count. Never hands the value to QML.
+    Q_INVOKABLE bool hasField(const QString &key, const QString &field);
 
     // Multi-field map entries — used by named auth profiles, where a single
     // wallet entry stores password/bearerToken/rawHeader fields together.

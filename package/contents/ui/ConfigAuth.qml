@@ -267,9 +267,17 @@ KCM.SimpleKCM {
 
                 // Secret value loaded lazily from KWallet (or set inline before save).
                 // We never display the secret — only "(stored)" / "(not set)" hint.
-                property bool hasStoredSecret: page.authSupport
-                    ? page.authSupport.has(page.authSupport.profileKey(card.id))
-                    : false
+                // Asks for the field the CURRENT auth type reads at runtime: an
+                // entry left over from another type (basic → bearer switch)
+                // injects nothing, so it must not show as stored.
+                // `_secretRev` re-runs the check after a successful write.
+                property int _secretRev: 0
+                readonly property bool hasStoredSecret: {
+                    const _tick = card._secretRev;
+                    const field = page.authSpec(card.authType).fieldName;
+                    if (!page.authSupport || field.length === 0) return false;
+                    return page.authSupport.hasField(page.authSupport.profileKey(card.id), field);
+                }
 
                 contentItem: ColumnLayout {
                     spacing: Kirigami.Units.smallSpacing
@@ -361,7 +369,7 @@ KCM.SimpleKCM {
                                 const map = {};
                                 map[page.authSpec(card.authType).fieldName] = text;
                                 if (page.authSupport.setMap(page.authSupport.profileKey(card.id), map)) {
-                                    card.hasStoredSecret = true;
+                                    card._secretRev = card._secretRev + 1;
                                     savedHint.show();
                                     // Tell main.qml (different QML engine — direct
                                     // QML signals won't cross) that secrets changed,
