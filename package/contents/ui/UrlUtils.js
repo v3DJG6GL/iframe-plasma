@@ -150,6 +150,20 @@ function changedAuthProfileIds(oldBodies, newBodies) {
     return changed;
 }
 
+// Whether a Basic-auth challenge may be auto-answered with the stored
+// credentials. `lastAnsweredMs` is when the same challenge was last
+// auto-answered (falsy: never). A challenge that comes straight back means
+// the server rejected them: answering again would loop failed logins at
+// network speed (lockout, fail2ban) and Qt's prompt, the one place to type
+// a working password, would never show.
+const BASIC_AUTH_REANSWER_MS = 10000;
+function mayAutoAnswerBasicAuth(lastAnsweredMs, nowMs) {
+    if (!lastAnsweredMs) return true;
+    const elapsed = nowMs - lastAnsweredMs;
+    // elapsed < 0: the wall clock stepped back; do not stay locked out.
+    return elapsed < 0 || elapsed >= BASIC_AUTH_REANSWER_MS;
+}
+
 // Pure form of resolveTheme(): given the configured themeMode and the
 // resolved KDE backgroundColor (as {r, g, b} in 0..1), return "light" or
 // "dark". The "auto" branch uses Rec. 601 relative luminance with a 0.5

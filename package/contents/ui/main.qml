@@ -907,6 +907,7 @@ PlasmoidItem {
     // No-op if the C++ plugin isn't loaded.
     function primeAuthProfiles() {
         if (!root.authSupport) return;
+        root._basicAuthAnswered = ({});
         // Group hosts per profile-in-use.
         const profilesInUse = {};   // id -> { profile, hosts: [] }
         for (const t of root.tabs) {
@@ -1136,6 +1137,11 @@ PlasmoidItem {
         }
     }
 
+    // Challenge -> Date.now() of the last auto-answer in handleBasicAuth, so a
+    // challenge the server sends straight back is not answered again. Emptied
+    // by primeAuthProfiles: a re-read secret gets a fresh attempt.
+    property var _basicAuthAnswered: ({})
+
     // Handler invoked from WebTab on every authenticationDialogRequested.
     // Contract: leave request.accepted=false to let Qt show its default prompt;
     // set accepted=true + dialogAccept(user,pw) to supply stored creds silently.
@@ -1175,6 +1181,16 @@ PlasmoidItem {
             const secrets = root.authSupport ? root.authSupport.getMap(root.authSupport.profileKey(profile.id)) : {};
             const pw = (secrets && secrets.password) || "";
             if (pw.length > 0) {
+                // Keyed by request URL, not host: tabs that share a profile
+                // and host are each challenged once and must each be answered.
+                const challenge = profile.id + "|" + String(request.url) + "|" + (request.realm || "");
+                const now = Date.now();
+                if (!UrlUtils.mayAutoAnswerBasicAuth(root._basicAuthAnswered[challenge], now)) {
+                    console.warn(Log.auth, "iframe-plasma[auth] stored credentials were just rejected"
+                        + " (profile=" + profile.id + ") -> letting Qt prompt");
+                    return;
+                }
+                root._basicAuthAnswered[challenge] = now;
                 request.accepted = true;
                 request.dialogAccept(user, pw);
                 console.debug(Log.auth, "iframe-plasma[auth] dialogAccept (profile=" + profile.id + ", user=" + user + ")");
