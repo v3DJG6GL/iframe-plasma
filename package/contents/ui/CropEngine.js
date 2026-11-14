@@ -779,21 +779,30 @@ ${_TEARDOWN_BODY}
     if (/^sc-[a-zA-Z0-9]{6,}$/.test(c)) return true;    // styled-components: sc-aBcDeF
     return false;
   }
+  // Last-resort selector: a path of tag:nth-of-type steps. The crop side
+  // uses the FIRST match, so the path has to identify the picked element
+  // alone. It stops at four steps when that is already unique, otherwise it
+  // keeps growing upward; it anchors on an ancestor id only if that id is
+  // itself unique, and on <body> at the latest (a complete child path from
+  // <body> matches exactly one element).
   function structural(el) {
+    if (el === document.body) return 'body';
     const parts = [];
-    let cur = el, depth = 0;
-    while (cur && cur.tagName && cur !== document.body && depth < 4) {
-      if (cur.id) { parts.unshift('#' + cssEscape(cur.id)); break; }
+    let cur = el;
+    while (cur && cur.tagName && cur !== document.body) {
+      const byId = cur.id ? uniq('#' + cssEscape(cur.id)) : null;
+      if (byId) { parts.unshift(byId); return parts.join(' > '); }
       let part = cur.tagName.toLowerCase();
       const sibs = cur.parentElement
         ? Array.from(cur.parentElement.children).filter(c => c.tagName === cur.tagName)
         : [];
       if (sibs.length > 1) part += ':nth-of-type(' + (sibs.indexOf(cur) + 1) + ')';
       parts.unshift(part);
+      const path = parts.length >= 4 ? uniq(parts.join(' > ')) : null;
+      if (path) return path;
       cur = cur.parentElement;
-      depth++;
     }
-    return parts.join(' > ');
+    return (cur === document.body ? 'body > ' : '') + parts.join(' > ');
   }
   function uniq(sel) {
     try { return document.querySelectorAll(sel).length === 1 ? sel : null; }

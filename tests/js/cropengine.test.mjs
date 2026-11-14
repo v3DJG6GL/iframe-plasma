@@ -681,6 +681,51 @@ test("picker: a pick whose click never comes does not eat a later click", () => 
     assert.equal(clicks, 1);
 });
 
+// The crop side uses the first match of the saved selector, so the
+// structural fallback (no usable id / test id / class) must match the
+// picked element alone.
+test("picker: the structural fallback is unique among identical subtrees", () => {
+    const card = "<div><div><div><section><p>x</p></section></div></div></div>";
+    const p = runPicker(`<!doctype html><html><body>${card}${card}</body></html>`);
+    const target = p.doc.querySelectorAll("p")[1];
+    p.pointAt(target);
+    p.fire(target, "pointerdown");
+    const picked = p.w.__ifpPicked;
+    assert.equal(p.doc.querySelectorAll(picked).length, 1, picked);
+    assert.equal(p.doc.querySelector(picked), target, picked);
+});
+
+test("picker: the structural fallback does not anchor on a duplicated id", () => {
+    const p = runPicker(
+        "<!doctype html><html><body>" +
+        "<div id='dup'><span>a</span></div><div id='dup'><span>b</span></div>" +
+        "</body></html>");
+    const target = p.doc.querySelectorAll("span")[1];
+    p.pointAt(target);
+    p.fire(target, "pointerdown");
+    const picked = p.w.__ifpPicked;
+    assert.equal(p.doc.querySelectorAll(picked).length, 1, picked);
+    assert.equal(p.doc.querySelector(picked), target, picked);
+});
+
+test("picker: the structural fallback anchors on a unique ancestor id", () => {
+    const p = runPicker(
+        "<!doctype html><html><body><ul><li>x</li></ul>" +
+        "<div id='panel'><ul><li>a</li><li>b</li></ul></div></body></html>");
+    const target = p.doc.querySelectorAll("#panel li")[1];
+    p.pointAt(target);
+    p.fire(target, "pointerdown");
+    assert.equal(p.w.__ifpPicked, "#panel > ul > li:nth-of-type(2)");
+    assert.equal(p.doc.querySelector(p.w.__ifpPicked), target);
+});
+
+test("picker: picking <body> yields 'body', not a cancel", () => {
+    const p = runPicker("<!doctype html><html><body><p>x</p></body></html>");
+    p.pointAt(p.doc.body);
+    p.fire(p.doc.body, "pointerdown");
+    assert.equal(p.w.__ifpPicked, "body");
+});
+
 // ============================================================
 // CROP logging only on geometry change
 // ============================================================
