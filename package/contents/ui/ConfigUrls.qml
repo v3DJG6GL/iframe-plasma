@@ -666,8 +666,13 @@ KCM.SimpleKCM {
                             // CR/LF strip.
                             onEditingFinished: {
                                 const cleaned = String(text).replace(/[\r\n\0]/g, "");
-                                if (cleaned !== text) text = cleaned;
                                 page._setRowField(index, "url", cleaned);
+                                // Re-bind rather than assign: a plain `text =
+                                // cleaned` would detach the field from the
+                                // model, and a later model write (the Grafana
+                                // edit dialog) would be reverted by the stale
+                                // field on its next focus-out.
+                                if (cleaned !== text) text = Qt.binding(() => urlRow.url);
                             }
                         }
                         // Auth profile selector. Profiles are managed on the
