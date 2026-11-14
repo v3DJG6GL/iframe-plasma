@@ -570,7 +570,10 @@ const _APPLY_BODY = `(function(sel, opts){
     b.id = 'ifp-miss-banner';
     b.style.cssText = 'position:fixed!important;bottom:8px!important;left:8px!important;background:#1f1f1f!important;color:#fff!important;padding:6px 12px!important;border:1px solid #ff8000!important;border-radius:4px!important;font:12px/1.4 sans-serif!important;z-index:2147483647!important;pointer-events:none!important;max-width:60vw!important;box-shadow:0 2px 6px rgba(0,0,0,0.6)!important;';
     b.textContent = "iframe-plasma: selector '" + sel + "' not found — showing full page";
-    (document.body || document.documentElement).appendChild(b);
+    // On <html>, not <body>: with no match the keyword scan reads the body,
+    // and this text ("not found", the selector's own tokens) must not count
+    // as page content there.
+    document.documentElement.appendChild(b);
   }
   function hideMissBanner() {
     const b = document.getElementById('ifp-miss-banner');

@@ -527,6 +527,28 @@ test("keyword scan: malformed regex falls through to literal substring", () => {
         "expected bad-regex warning");
 });
 
+test("keyword scan: the engine's own miss banner is not scanned", () => {
+    // With no match the scan reads <body>; the banner says "selector
+    // '.error-box' not found", which must not count as page text.
+    const dom = new JSDOM(
+        "<!doctype html><html><body><div id='t'>everything fine</div></body></html>",
+        { runScripts: "outside-only" });
+    const w = dom.window;
+    w.MutationObserver = class { observe() {} disconnect() {} };
+    w.ResizeObserver = class { observe() {} disconnect() {} };
+    w.requestAnimationFrame = (cb) => { cb(); return 0; };
+    w.cancelAnimationFrame = () => {};
+    w.setInterval = () => 0;
+    w.clearInterval = () => {};
+    const logs = [];
+    w.console = { info: (m) => logs.push(String(m)), warn: () => {}, error: () => {} };
+    w.eval(`(${ce.buildApplyJs(".error-box", { keywords: ["not found", "error"] })})`);
+    for (let i = 0; i < 12; i++) w.__ifpThumbSchedule();
+    assert.ok(w.document.getElementById("ifp-miss-banner"), "banner is shown after a sustained miss");
+    const kwLogs = logs.filter(l => l.indexOf("[ifp-keyword]") !== -1);
+    assert.deepEqual(kwLogs, ["[ifp-keyword] hit=false"]);
+});
+
 test("clear: emits final [ifp-keyword] hit=false", () => {
     const dom = new JSDOM(
         "<!doctype html><html><body><div id='t'>hi</div></body></html>",
