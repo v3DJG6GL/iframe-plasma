@@ -358,8 +358,21 @@ Item {
         if (String(v.url) === newStr) {
             v.reload();
         } else {
+            tab._urlOverridden = true;
             v.url = newStr;
         }
+    }
+
+    // The imperative `v.url = …` above replaces the view's declarative
+    // `url:` binding for good, so from then on a changed tab.url (e.g. a
+    // `${theme}` URL re-resolved on a light/dark switch) has to be pushed
+    // to the view by hand. While the binding is intact it does the job
+    // itself, and a second assignment here would navigate twice.
+    property bool _urlOverridden: false
+    onUrlChanged: {
+        const v = tab.webView;
+        if (!tab._urlOverridden || !v) return;
+        v.url = /^https?:\/\//i.test(String(tab.url)) ? tab.url : "about:blank";
     }
 
     // Manual query-string edit + read — implementations live in
