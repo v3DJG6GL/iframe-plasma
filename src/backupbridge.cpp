@@ -92,11 +92,10 @@ bool kindMatches(const QJsonValue &v, Kind k)
 
 constexpr int kSchemaVersion = 1;
 
-// Mirrors package/metadata.json's KPlugin.Version. Hardcoded here rather
-// than parsed at runtime because the C++ plugin .so and metadata.json
-// are always shipped together; a mismatch would already be a packaging
-// bug. Bump when metadata.json bumps.
-constexpr auto kAppletVersion = "0.5.0";
+// The top-level project() version, injected by CMake. scripts/version.sh
+// keeps that in step with package/metadata.json's KPlugin.Version, so a
+// release bump reaches the envelope without a third hand-kept copy.
+constexpr auto kAppletVersion = IFRAME_PLASMA_VERSION;
 
 QString iso8601Now()
 {

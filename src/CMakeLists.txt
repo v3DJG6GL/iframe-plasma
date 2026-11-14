@@ -19,6 +19,11 @@ qt_add_qml_module(iframe_plasma_qml
 # `plugin` directives expect the prefix, so force it.
 set_target_properties(iframe_plasma_qml PROPERTIES PREFIX "lib")
 
+# backupbridge.cpp stamps exports with the release version (the top-level
+# project() version; the qt_add_qml_module VERSION above is the QML API one).
+target_compile_definitions(iframe_plasma_qml PRIVATE
+    IFRAME_PLASMA_VERSION="${PROJECT_VERSION}")
+
 target_link_libraries(iframe_plasma_qml PRIVATE
     Qt6::DBus
     Qt6::Quick

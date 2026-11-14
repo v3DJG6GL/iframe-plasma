@@ -104,6 +104,27 @@ private Q_SLOTS:
         QVERIFY(root.value(u"config"_s).isObject());
     }
 
+    // The envelope carries the build's version, and that is the version
+    // package/metadata.json ships: no hand-kept copy can lag a release.
+    void export_appletVersion_isBuildVersionAndMatchesMetadata()
+    {
+        BackupBridge b;
+        const QString path = m_xdg.filePath(u"export-version.json"_s);
+        QCOMPARE(b.exportToFile(path, fullSchemaSeed()), QString{});
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        const QString stamped = QJsonDocument::fromJson(f.readAll())
+            .object().value(u"appletVersion"_s).toString();
+        QCOMPARE(stamped, QStringLiteral(IFRAME_PLASMA_VERSION));
+
+        QFile meta(QStringLiteral(IFRAME_SOURCE_DIR "/package/metadata.json"));
+        QVERIFY2(meta.open(QIODevice::ReadOnly), qPrintable(meta.fileName()));
+        const QString metaVersion = QJsonDocument::fromJson(meta.readAll())
+            .object().value(u"KPlugin"_s).toObject().value(u"Version"_s).toString();
+        QVERIFY(!metaVersion.isEmpty());
+        QCOMPARE(stamped, metaVersion);
+    }
+
     void export_writesAllWhitelistedKeys()
     {
         BackupBridge b;

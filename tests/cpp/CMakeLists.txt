@@ -57,9 +57,11 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tst_backupbridge.cpp")
         SOURCES "${CMAKE_SOURCE_DIR}/src/backupbridge.cpp"
         LIBS    Qt6::Qml)
     # schema_matchesMainXmlMinusExclusions parses the real main.xml at
-    # runtime to assert kSchema hasn't drifted from it.
+    # runtime to assert kSchema hasn't drifted from it. backupbridge.cpp
+    # needs the same version define the plugin target gets in src/.
     target_compile_definitions(tst_backupbridge PRIVATE
-        IFRAME_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+        IFRAME_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+        IFRAME_PLASMA_VERSION="${PROJECT_VERSION}")
 endif()
 
 # 6. ScreenLockMonitor — state-machine half via QMetaObject + DBus
