@@ -72,6 +72,17 @@ TestCase {
         verify(CropEngine.buildClearJs().indexOf("window.__ifpLastCropKey = null;") !== -1);
     }
 
+    function test_needsEngine_selectorOrKeywords() {
+        verify(CropEngine.needsEngine(".u-wrap > canvas", []));
+        // A full-page thumbnail has no selector, but its exclude keywords
+        // can only be evaluated by the injected scan.
+        verify(CropEngine.needsEngine("", ["No data"]));
+        verify(CropEngine.needsEngine(".card", ["No data"]));
+        verify(!CropEngine.needsEngine("", []));
+        verify(!CropEngine.needsEngine("", undefined));
+        verify(!CropEngine.needsEngine(undefined, null));
+    }
+
     function test_iifeReturn_propagatesCanvasPending() {
         const js = CropEngine.buildApplyJs(".u-wrap > canvas", {});
         // The top-level return distinguishes canvas-pending from the

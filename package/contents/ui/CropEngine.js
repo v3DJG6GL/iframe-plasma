@@ -491,6 +491,9 @@ const _APPLY_BODY = `(function(sel, opts){
     // every code path that could re-set data-ifp-isolate while the
     // user is mid-pick.
     if (window.__ifpPickerArmed) { matchedEl = null; return 'picker-active'; }
+    // An empty selector means "no crop": a full-page thumbnail injects the
+    // engine for its keyword scan alone, which then reads <body>.
+    if (!sel) { matchedEl = null; return 'wait'; }
     let el;
     try { el = document.querySelector(sel); }
     catch(e) { matchedEl = null; console.warn('[ifp-thumb] invalid selector "'+sel+'": '+e.message); return 'invalid'; }
@@ -607,7 +610,8 @@ const _APPLY_BODY = `(function(sel, opts){
         // burst MutationObserver fires usually reach the threshold within
         // a few seconds of an SPA mounting nothing matching. 'canvas-pending'
         // (matched canvas, no frame yet) counts toward the same banner.
-        if (++missStreak >= 10) showMissBanner();
+        // Without a selector there is nothing to miss.
+        if (sel && ++missStreak >= 10) showMissBanner();
       } else if (r === 'matched') {
         missStreak = 0;
         hideMissBanner();
@@ -976,6 +980,15 @@ function buildApplyJs(selector, opts) {
     }
     call += ")";
     return _APPLY_BODY + call;
+}
+
+// Whether a thumbnail page needs the engine injected at all: for a crop
+// selector, or — with none, as on a full-page thumbnail — for its exclude
+// keywords, which only the engine's scan can evaluate. Callers pass the
+// (possibly empty) selector to buildApplyJs either way.
+function needsEngine(selector, keywords) {
+    return String(selector || "").length > 0
+        || (Array.isArray(keywords) && keywords.length > 0);
 }
 
 function buildClearJs() {

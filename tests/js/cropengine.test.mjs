@@ -563,6 +563,35 @@ test("keyword scan: the engine's own miss banner is not scanned", () => {
     assert.deepEqual(kwLogs, ["[ifp-keyword] hit=false"]);
 });
 
+test("keyword scan: an empty selector scans the page without cropping it", () => {
+    // Full-page thumbnails have no selector but can carry exclude keywords.
+    const dom = new JSDOM(
+        "<!doctype html><html><body><header>Camera</header><main>Stream offline</main></body></html>",
+        { runScripts: "outside-only" });
+    const w = dom.window;
+    w.MutationObserver = class { observe() {} disconnect() {} };
+    w.ResizeObserver = class { observe() {} disconnect() {} };
+    w.requestAnimationFrame = (cb) => { cb(); return 0; };
+    w.cancelAnimationFrame = () => {};
+    w.setInterval = () => 0;
+    w.clearInterval = () => {};
+    const logs = [];
+    w.console = { info: (m) => logs.push(String(m)), warn: () => {}, error: () => {} };
+    const result = w.eval(`(${ce.buildApplyJs("", { keywords: ["offline"] })})`);
+    assert.equal(result, "observing");
+    for (let i = 0; i < 12; i++) w.__ifpThumbSchedule();
+    const kwLogs = logs.filter(l => l.indexOf("[ifp-keyword]") !== -1);
+    assert.deepEqual(kwLogs, ["[ifp-keyword] hit=true"]);
+    const doc = w.document;
+    assert.equal(doc.documentElement.getAttribute("data-ifp-isolate"), null);
+    assert.equal(doc.getElementById("ifp-miss-banner"), null, "no selector, so nothing was missed");
+
+    // The keyword going away is reported the same way.
+    doc.querySelector("main").textContent = "Stream live";
+    w.__ifpThumbSchedule();
+    assert.equal(logs[logs.length - 1], "[ifp-keyword] hit=false");
+});
+
 test("clear: emits final [ifp-keyword] hit=false", () => {
     const dom = new JSDOM(
         "<!doctype html><html><body><div id='t'>hi</div></body></html>",

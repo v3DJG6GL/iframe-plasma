@@ -2052,7 +2052,7 @@ PlasmoidItem {
                             miniView._retryAttempt, miniView.ownSelector.length > 0);
                         thumbRetryTimer.stop();
                         root.setThumbError(miniView.ownIndex, "");
-                        if (miniView.ownSelector.length > 0) {
+                        if (miniView.needsCropEngine()) {
                             applyThumbCrop(miniView.ownSelector);
                         } else {
                             // Symmetric clear — mirror the WebTab popup's
@@ -2200,6 +2200,15 @@ PlasmoidItem {
                     }
                 }
 
+                // True for a crop selector, and also for a selector-less
+                // (full-page) thumbnail that has exclude keywords: only the
+                // injected engine can scan the page for them.
+                function needsCropEngine() {
+                    const tab = root._liveRow(miniView.ownIndex, miniView.ownTab);
+                    return CropEngine.needsEngine(miniView.ownSelector,
+                                                  tab && tab.thumbExcludeKeywords);
+                }
+
                 function applyThumbCrop(selector) {
                     // Read through root._liveRow — `miniView.ownTab` is a
                     // Repeater snapshot; thumbMode / thumbScaleMode /
@@ -2340,7 +2349,7 @@ PlasmoidItem {
                     function on_TabsMetadataChanged(idx) {
                         if (idx !== -1 && idx !== miniView.ownIndex) return;
                         const sel = miniView.ownSelector;
-                        if (sel.length > 0) {
+                        if (miniView.needsCropEngine()) {
                             console.debug(Log.thumb, "iframe-plasma[compact] metadata apply idx=" + miniView.ownIndex
                                 + " selector=" + JSON.stringify(sel));
                             miniView.applyThumbCrop(sel);
