@@ -64,9 +64,12 @@ QtObject {
     }
 
     // Scheme + host + path only: query strings (Grafana share tokens, auth
-    // params) and fragments never belong in a message that is on by default.
+    // params), fragments and userinfo (`user:password@`) never belong in a
+    // message that is on by default.
     function redactUrl(u) {
-        return String(u === undefined || u === null ? "" : u).replace(/[?#].*$/, "");
+        return String(u === undefined || u === null ? "" : u)
+            .replace(/[?#].*$/, "")
+            .replace(/^([a-z][a-z0-9+.-]*:\/\/)[^\/]*@/i, "$1");
     }
 
     // Forward a page console message (QQuickWebEngineView.javaScriptConsoleMessage)
