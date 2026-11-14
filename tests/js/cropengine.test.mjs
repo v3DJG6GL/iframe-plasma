@@ -127,9 +127,9 @@ test("apply: returns status string for valid selector that matches", () => {
     const { result } = runApply(
         "<!doctype html><html><body><div id='target'>x</div></body></html>",
         "#target");
-    assert.ok(typeof result === "string");
-    // Either "matched", "observing", or "matched-and-observing".
-    assert.ok(/match|observ/.test(result), `unexpected status: ${result}`);
+    // The exact string main.qml's applyThumbCrop callback takes as "frame
+    // confirmed" (ThumbRetryPolicy.isFrameConfirmed).
+    assert.equal(result, "matched-and-observing");
 });
 
 test("apply: tags html with data-ifp-isolate when selector matches", () => {

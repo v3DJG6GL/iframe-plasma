@@ -27,6 +27,13 @@ function attemptAfterLoadSucceeded(attempt, needsCrop) {
     return needsCrop ? attempt : 0;
 }
 
+// Whether an applyThumbCrop result confirms a frame on screen, which
+// refills the retry budget. The string is what CropEngine.buildApplyJs
+// returns for a matched selector; a bare "matched" never leaves the page.
+function isFrameConfirmed(applyResult) {
+    return applyResult === "matched-and-observing";
+}
+
 // Whether an applyThumbCrop result downgrades the slot to "blank": the
 // canvas matched but had no frame yet, on a still-clean load, and no CROP
 // landed while the runJavaScript call was in flight.

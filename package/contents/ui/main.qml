@@ -2222,7 +2222,7 @@ PlasmoidItem {
                     runJavaScript(CropEngine.buildApplyJs(selector, opts), function(r) {
                         console.debug(Log.thumb, "iframe-plasma[thumb] applyThumbCrop("
                             + JSON.stringify(selector) + ") = " + r);
-                        if (r === "matched") {
+                        if (ThumbRetryPolicy.isFrameConfirmed(r)) {
                             miniView._retryAttempt = 0;   // frame confirmed
                             return;
                         }

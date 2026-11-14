@@ -36,6 +36,20 @@ TestCase {
     }
 
     // ============================================================
+    //  isFrameConfirmed
+    // ============================================================
+    function test_frameConfirmed_engineMatchResult() {
+        // The only "matched" string CropEngine.buildApplyJs returns.
+        verify(R.isFrameConfirmed("matched-and-observing"));
+    }
+    function test_frameConfirmed_otherEngineResults_notConfirmed() {
+        verify(!R.isFrameConfirmed("observing"));
+        verify(!R.isFrameConfirmed("canvas-pending"));
+        verify(!R.isFrameConfirmed("invalid"));
+        verify(!R.isFrameConfirmed(undefined));
+    }
+
+    // ============================================================
     //  shouldMarkBlank / shouldArmBlankRetry
     // ============================================================
     function test_markBlank_canvasPendingCleanLoad() {
@@ -46,7 +60,7 @@ TestCase {
         verify(!R.shouldMarkBlank("canvas-pending", "ok", false));
     }
     function test_markBlank_matched_ignored() {
-        verify(!R.shouldMarkBlank("matched", "ok", true));
+        verify(!R.shouldMarkBlank("matched-and-observing", "ok", true));
     }
     function test_markBlank_alreadyFailed_ignored() {
         verify(!R.shouldMarkBlank("canvas-pending", "err", true));
@@ -85,7 +99,9 @@ TestCase {
     function test_sequence_frameConfirmedRefillsBudget() {
         let attempt = 3;                 // exhausted
         compare(R.backoffMs(attempt), -1);
-        attempt = 0;                     // CROP seen / "matched" → reset
+        // A non-canvas selector logs no CROP: the apply result is the
+        // only confirmation it gets.
+        if (R.isFrameConfirmed("matched-and-observing")) attempt = 0;
         compare(R.backoffMs(attempt), 3000);
     }
     function test_sequence_hiddenThumbnailNeverArms() {
