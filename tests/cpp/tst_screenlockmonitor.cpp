@@ -139,7 +139,7 @@ private Q_SLOTS:
             QSKIP("dbusmock fixture failed to start "
                   "(install python3-dbusmock)");
         }
-        const QString busAddr = readBusAddress(fixture);
+        const QString busAddr = m_busAddr;
         QVERIFY(!busAddr.isEmpty());
 
         // Tell the mock to report locked=true BEFORE the monitor connects.
@@ -170,7 +170,7 @@ private Q_SLOTS:
         if (!startFixture(fixture)) {
             QSKIP("dbusmock fixture failed to start");
         }
-        const QString busAddr = readBusAddress(fixture);
+        const QString busAddr = m_busAddr;
         QVERIFY(!busAddr.isEmpty());
 
         const QString busName = QStringLiteral("ifp-test-seed-false");
@@ -195,7 +195,7 @@ private Q_SLOTS:
         if (!startFixture(fixture)) {
             QSKIP("dbusmock fixture failed to start");
         }
-        const QString busAddr = readBusAddress(fixture);
+        const QString busAddr = m_busAddr;
         QVERIFY(!busAddr.isEmpty());
 
         const QString busName = QStringLiteral("ifp-test-signal");
@@ -235,7 +235,7 @@ private Q_SLOTS:
         if (!startFixture(fixture)) {
             QSKIP("dbusmock fixture failed to start");
         }
-        const QString busAddr = readBusAddress(fixture);
+        const QString busAddr = m_busAddr;
 
         const QString busName = QStringLiteral("ifp-test-redundant");
         QDBusConnection bus = QDBusConnection::connectToBus(busAddr, busName);
@@ -271,7 +271,17 @@ private:
         proc.setProgram(QStringLiteral("python3"));
         proc.setArguments({QString::fromLocal8Bit(script)});
         proc.start();
-        return proc.waitForStarted(5000);
+        if (!proc.waitForStarted(5000)) return false;
+        // python3 itself starts even when python3-dbusmock is missing and
+        // only then dies on the import, so "started" means "printed its
+        // BUS line": anything less has to reach the callers' QSKIP.
+        m_busAddr = readBusAddress(proc);
+        if (m_busAddr.isEmpty()) {
+            proc.kill();
+            proc.waitForFinished(2000);
+            return false;
+        }
+        return true;
     }
 
     QString readBusAddress(QProcess &proc)
@@ -280,7 +290,8 @@ private:
         const qint64 deadline = QDateTime::currentMSecsSinceEpoch() + 10000;
         QByteArray buf;
         while (QDateTime::currentMSecsSinceEpoch() < deadline) {
-            if (proc.waitForReadyRead(500)) buf.append(proc.readAllStandardOutput());
+            const bool exited = proc.state() == QProcess::NotRunning;
+            if (proc.waitForReadyRead(500) || exited) buf.append(proc.readAllStandardOutput());
             const int nl = buf.indexOf('\n');
             if (nl >= 0) {
                 const QByteArray line = buf.left(nl).trimmed();
@@ -290,6 +301,10 @@ private:
                     m_stdoutBuf = buf;
                     return QString::fromLocal8Bit(line.mid(4));
                 }
+            } else if (exited) {
+                // waitForReadyRead returns at once on a dead process; without
+                // this the loop would spin a core until the deadline.
+                break;
             }
         }
         return QString();
@@ -308,13 +323,16 @@ private:
         const qint64 deadline = QDateTime::currentMSecsSinceEpoch() + 5000;
         QByteArray &buf = m_stdoutBuf;
         while (QDateTime::currentMSecsSinceEpoch() < deadline) {
-            if (proc.waitForReadyRead(500)) buf.append(proc.readAllStandardOutput());
+            const bool exited = proc.state() == QProcess::NotRunning;
+            if (proc.waitForReadyRead(500) || exited) buf.append(proc.readAllStandardOutput());
             const int nl = buf.indexOf('\n');
             if (nl >= 0) {
                 const QByteArray line = buf.left(nl).trimmed();
                 buf = buf.mid(nl + 1);
                 if (line == "OK") return true;
                 if (line.startsWith("ERR")) return false;
+            } else if (exited) {
+                break;   // dead fixture: no reply will ever arrive
             }
         }
         return false;
@@ -329,6 +347,8 @@ private:
     }
 
     QByteArray m_stdoutBuf;
+    // Bus address of the fixture the last successful startFixture() launched.
+    QString m_busAddr;
 };
 
 QTEST_GUILESS_MAIN(TestScreenLockMonitor)
