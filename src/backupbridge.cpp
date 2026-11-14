@@ -225,6 +225,10 @@ QVariantMap BackupBridge::importFromFile(const QString &path, const QVariantMap 
     QStringList skipped;
     for (auto gIt = groups.constBegin(); gIt != groups.constEnd(); ++gIt) {
         if (!gIt.value().isObject()) {
+            // A flat or hand-edited file puts values where groups belong.
+            // Dropping them silently would let the caller report "matches
+            // the current configuration" for a file it discarded.
+            skipped.append(gIt.key());
             continue;
         }
         const QJsonObject groupObj = gIt.value().toObject();

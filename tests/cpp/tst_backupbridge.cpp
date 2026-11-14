@@ -433,6 +433,28 @@ private Q_SLOTS:
         QCOMPARE(result.value(u"config"_s).toMap().value(u"urlsJson"_s).toString(), u"[]"_s);
     }
 
+    // A flat-format file (values directly under `config`, no groups) has
+    // nothing importable; every dropped entry must show up in `skipped`
+    // so the caller cannot report it as "matches the current config".
+    void import_nonObjectGroup_reportedInSkipped()
+    {
+        const QString path = writeFile(m_xdg, u"flat.json"_s, R"({
+            "version": 1,
+            "config": { "zoomFactor": 150, "urlsJson": "[]", "Display": { "themeMode": "dark" } }
+        })");
+        BackupBridge b;
+        const QVariantMap result = b.importFromFile(path, {});
+        QCOMPARE(result.value(u"ok"_s).toBool(), true);
+        const QStringList skipped = result.value(u"skipped"_s).toStringList();
+        QCOMPARE(skipped.size(), 2);
+        QVERIFY(skipped.contains(u"zoomFactor"_s));
+        QVERIFY(skipped.contains(u"urlsJson"_s));
+        // The flat values are not applied; a well-formed sibling group is.
+        const QVariantMap cfg = result.value(u"config"_s).toMap();
+        QCOMPARE(cfg.size(), 1);
+        QCOMPARE(cfg.value(u"themeMode"_s).toString(), u"dark"_s);
+    }
+
     // ----- import: JSON null/undefined values surfaced as skipped ---
 
     void import_nullValueOnSchemaKey_reportedInSkippedAndExcluded()
