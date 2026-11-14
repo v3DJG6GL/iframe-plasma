@@ -20,7 +20,7 @@ function loadPageScripts() {
     const raw = fs.readFileSync(LIB_PATH, "utf8");
     const stripped = raw.replace(/^\.pragma library/m, "");
     const sandbox = { module: { exports: {} } };
-    vm.runInNewContext(stripped + "\nmodule.exports = { gcWorkaroundSource };",
+    vm.runInNewContext(stripped + "\nmodule.exports = { gcWorkaroundSource, refreshControlSource };",
                        sandbox, { filename: "PageScripts.js" });
     return sandbox.module.exports;
 }
@@ -110,4 +110,47 @@ test("an exception thrown by gc does not stop the interval", () => {
     assert.doesNotThrow(() => p.timeouts[0].fn());
     assert.doesNotThrow(() => p.intervals[0].fn());
     assert.equal(p.page.gcCalls, 2);
+});
+
+// A fresh document for the refresh-control script: `history` records the
+// URL each pushState / replaceState call is handed.
+function makeHistoryPage() {
+    const urls = [];
+    const page = {
+        history: {
+            replaceState(state, title, url) { urls.push(url); },
+            pushState(state, title, url) { urls.push(url); },
+        },
+    };
+    page.window = page;
+    const ctx = vm.createContext(page);
+    return { page, urls, run: (src) => vm.runInContext(src, ctx) };
+}
+
+test("refresh control, Off: a fresh document strips refresh= from history URLs", () => {
+    // The document setRefreshInterval("off") navigates to starts with no
+    // page-side flag; the choice has to arrive with the script itself.
+    const p = makeHistoryPage();
+    p.run(ps.refreshControlSource(true));
+    p.page.history.replaceState(null, "", "/d/abc?orgId=1&refresh=5s");
+    p.page.history.pushState(null, "", "/d/abc?refresh=5s&orgId=1");
+    p.page.history.replaceState(null, "", "/d/abc?refresh=5s");
+    assert.deepEqual(p.urls, ["/d/abc?orgId=1", "/d/abc?orgId=1", "/d/abc"]);
+});
+
+test("refresh control, not Off: history URLs pass through untouched", () => {
+    const p = makeHistoryPage();
+    p.run(ps.refreshControlSource(false));
+    p.page.history.replaceState(null, "", "/d/abc?orgId=1&refresh=5s");
+    assert.deepEqual(p.urls, ["/d/abc?orgId=1&refresh=5s"]);
+});
+
+test("refresh control: a later copy of the script sets the choice without re-patching", () => {
+    const p = makeHistoryPage();
+    p.run(ps.refreshControlSource(false));
+    const patched = p.page.history.replaceState;
+    p.run(ps.refreshControlSource(true));
+    assert.equal(p.page.history.replaceState, patched);
+    p.page.history.replaceState(null, "", "/d/abc?refresh=5s");
+    assert.deepEqual(p.urls, ["/d/abc"]);
 });

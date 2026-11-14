@@ -407,9 +407,32 @@ Item {
                 + (useInterval ? "false" : "true") + ";",
                 WebEngineScript.MainWorld);
 
+            // The navigation below replaces the document (and the flag just
+            // set on it), so the choice also has to be in the user script
+            // that runs in the new one.
+            _installRefreshScript(tab.webView, !useInterval);
+
             _navigate(_editQuery(String(tab.webView.url),
                 { refresh: useInterval ? interval : null }));
         } catch (e) { console.warn(Log.load, "iframe-plasma: setRefreshInterval error:", e.message); }
+    }
+
+    // (Re)installs the refresh-control user script on `view` with the Off
+    // choice baked into its source (PageScripts.refreshControlSource).
+    //
+    // WebEngineScript is a value type in Qt 6 and can't be inlined in
+    // QML — must build it imperatively via the WebEngine.script() factory.
+    function _installRefreshScript(view, off) {
+        const name = "iframe-plasma-refresh-control";
+        const old = view.userScripts.find(name);
+        for (let i = 0; i < old.length; ++i) view.userScripts.remove(old[i]);
+        const s = WebEngine.script();
+        s.name = name;
+        s.injectionPoint = WebEngineScript.DocumentCreation;
+        s.worldId = WebEngineScript.MainWorld;
+        s.runOnSubFrames = false;
+        s.sourceCode = PageScripts.refreshControlSource(off);
+        view.userScripts.insert(s);
     }
 
     function onAutheliaHost(currentUrl) {
@@ -472,37 +495,10 @@ Item {
                 // #41329, #101412 — all declined over 8 years). Workaround: patch
                 // `history.{push,replace}State` at DocumentCreation so any URL
                 // Grafana writes has `refresh=` stripped, gated on the page-side
-                // flag `__iframePlasmaRefreshOff` set by setRefreshInterval().
-                //
-                // WebEngineScript is a value type in Qt 6 and can't be inlined in
-                // QML — must build it imperatively via the WebEngine.script() factory.
+                // flag `__iframePlasmaRefreshOff` the script seeds from the
+                // user's choice (see _installRefreshScript).
                 Component.onCompleted: {
-                    const s = WebEngine.script();
-                    s.name = "iframe-plasma-refresh-control";
-                    s.injectionPoint = WebEngineScript.DocumentCreation;
-                    s.worldId = WebEngineScript.MainWorld;
-                    s.runOnSubFrames = false;
-                    s.sourceCode =
-                        "(function(){\n" +
-                        "  if (window.__iframePlasmaRefreshPatched) return;\n" +
-                        "  window.__iframePlasmaRefreshPatched = true;\n" +
-                        "  if (typeof window.__iframePlasmaRefreshOff === 'undefined')\n" +
-                        "    window.__iframePlasmaRefreshOff = false;\n" +
-                        "  const origRS = history.replaceState.bind(history);\n" +
-                        "  const origPS = history.pushState.bind(history);\n" +
-                        "  const strip = function(u){\n" +
-                        "    if (typeof u !== 'string' || !u.length) return u;\n" +
-                        "    if (!window.__iframePlasmaRefreshOff) return u;\n" +
-                        "    return u\n" +
-                        "      .replace(/([?&])refresh=[^&#]*/g, function(_, sep){ return sep === '?' ? '?' : ''; })\n" +
-                        "      .replace(/&&+/g, '&')\n" +
-                        "      .replace(/\\?&/, '?')\n" +
-                        "      .replace(/[?&]$/, '');\n" +
-                        "  };\n" +
-                        "  history.replaceState = function(s, t, u){ return origRS(s, t, strip(u)); };\n" +
-                        "  history.pushState    = function(s, t, u){ return origPS(s, t, strip(u)); };\n" +
-                        "})();";
-                    webview.userScripts.insert(s);
+                    tab._installRefreshScript(webview, tab.userRefreshChoice === "off");
 
                     // Hide Grafana's per-panel 3-dot menu button (kebab) when the
                     // URL carries our internal sentinel `_ifp_hidePanelMenu=1`.

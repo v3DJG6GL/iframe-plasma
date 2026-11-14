@@ -36,3 +36,32 @@ function gcWorkaroundSource(intervalSec) {
            "  }, Math.floor(Math.random() * ms));\n" +
            "})();";
 }
+
+// Grafana refresh "Off" control. Patches history.{push,replace}State so
+// any URL the page writes has `refresh=` stripped while
+// window.__iframePlasmaRefreshOff is true.
+//
+// `off` is baked into the source and seeded on every run: the script is
+// injected at DocumentCreation, and a flag set on the live page would not
+// survive the navigation that applies the user's choice. Seeding comes
+// before the already-patched guard so the newest copy of the script wins.
+function refreshControlSource(off) {
+    return "(function(){\n" +
+           "  window.__iframePlasmaRefreshOff = " + (off === true ? "true" : "false") + ";\n" +
+           "  if (window.__iframePlasmaRefreshPatched) return;\n" +
+           "  window.__iframePlasmaRefreshPatched = true;\n" +
+           "  const origRS = history.replaceState.bind(history);\n" +
+           "  const origPS = history.pushState.bind(history);\n" +
+           "  const strip = function(u){\n" +
+           "    if (typeof u !== 'string' || !u.length) return u;\n" +
+           "    if (!window.__iframePlasmaRefreshOff) return u;\n" +
+           "    return u\n" +
+           "      .replace(/([?&])refresh=[^&#]*/g, function(_, sep){ return sep === '?' ? '?' : ''; })\n" +
+           "      .replace(/&&+/g, '&')\n" +
+           "      .replace(/\\?&/, '?')\n" +
+           "      .replace(/[?&]$/, '');\n" +
+           "  };\n" +
+           "  history.replaceState = function(s, t, u){ return origRS(s, t, strip(u)); };\n" +
+           "  history.pushState    = function(s, t, u){ return origPS(s, t, strip(u)); };\n" +
+           "})();";
+}
