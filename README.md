@@ -71,6 +71,33 @@ sha256sum -c iframe-plasma_*_ubuntu26.04_amd64.deb.sha256
 sudo apt install ./iframe-plasma_*_ubuntu26.04_amd64.deb
 ```
 
+### Arch Linux
+
+Every release is also published to a pacman repository on the Forgejo package
+registry, so `pacman -Syu` picks up new versions. One-time setup (trust the
+registry's signing key, then add the repository):
+
+```bash
+curl -fsSLo /tmp/forgejo-arch.key \
+    https://forgejo.informethic.ch/api/packages/v3djg6gl/arch/repository.key
+sudo pacman-key --add /tmp/forgejo-arch.key
+sudo pacman-key --lsign-key 'v3djg6gl@noreply.forgejo.informethic.ch'
+
+sudo tee -a /etc/pacman.conf <<'EOF'
+
+[v3djg6gl.apps.forgejo.informethic.ch]
+SigLevel = Required
+Server = https://forgejo.informethic.ch/api/packages/v3djg6gl/arch/apps/$arch
+EOF
+
+sudo pacman -Syu iframe-plasma
+```
+
+The same package (`iframe-plasma-*-x86_64.pkg.tar.zst`, with a `.sha256`) is
+attached to each release for a one-off install with `sudo pacman -U`. It is
+built against Arch's Qt / KF6 at release time; to build it yourself, see
+[`packaging/arch/PKGBUILD`](packaging/arch/PKGBUILD).
+
 Other distributions: build from source as below.
 
 ### Build dependencies
@@ -366,8 +393,9 @@ Releases are cut by running the `release` workflow by hand
 ([`.forgejo/workflows/release.yml`](.forgejo/workflows/release.yml)) and picking
 a version bump (patch / minor / major): it bumps the version
 ([`scripts/version.sh`](scripts/version.sh)), turns the changelog's
-`[Unreleased]` section into the new version, tags, builds the packages and
-publishes the release. "build-only" just builds the packages as run artifacts.
+`[Unreleased]` section into the new version, tags, builds the packages (Ubuntu .deb, Arch
+.pkg.tar.zst), publishes the release and pushes the Arch package to the
+pacman repository. "build-only" just builds the packages as run artifacts.
 
 ## Acknowledgements
 

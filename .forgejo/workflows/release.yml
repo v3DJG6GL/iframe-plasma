@@ -1,31 +1,41 @@
 # SPDX-FileCopyrightText: 2026 v3DJG6GL <72495210+v3DJG6GL@users.noreply.github.com>
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
-# Release builds: a binary .deb + .tar.gz (CPack, cmake/Packaging.cmake)
-# built in an Ubuntu 26.04 container, each with a .sha256 next to it.
+# Release builds, each file with a .sha256 next to it:
+#   * a binary .deb + .tar.gz (CPack, cmake/Packaging.cmake) built in an
+#     Ubuntu 26.04 container;
+#   * a native Arch package (.pkg.tar.zst, packaging/arch/PKGBUILD) built in
+#     an archlinux:base-devel container, also pushed to this owner's Arch
+#     package registry (pacman repo, see README → Install).
 #
 #   * manual run (workflow_dispatch) → pick a version bump (patch/minor/major):
 #       the version job runs scripts/version.sh (CMakeLists.txt +
 #       package/metadata.json, CHANGELOG.md's [Unreleased] becomes [X.Y.Z]),
-#       commits "release: vX.Y.Z", tags and pushes; the package job builds the
-#       tagged commit and publishes a Forgejo release with the packages,
-#       release notes taken from the `## [X.Y.Z]` section of CHANGELOG.md, then
-#       starts mirror-gh-releases.yml (copies the release to GitHub).
-#       Pick "build-only" to just build the packages as run artifacts (no
-#       version change, no release).
+#       commits "release: vX.Y.Z", tags and pushes; the draft job creates a
+#       draft release with the notes from the `## [X.Y.Z]` section of
+#       CHANGELOG.md, both build jobs attach their packages to it, and the
+#       publish job flips it live once both uploaded, pushes the Arch package
+#       to the registry and starts mirror-gh-releases.yml (copies the release
+#       to GitHub). Pick "build-only" to just build the packages as run
+#       artifacts (no version change, no release).
 #   * push a tag vX.Y.Z by hand (must equal the version in CMakeLists.txt)
 #       → same path, no version bump.
 #
-# Setup: secret RELEASE_TOKEN (or CI_TOKEN), an owner token with
-# write:repository — the version job needs it to push to protected master.
+# Setup:
+#   * secret RELEASE_TOKEN (or CI_TOKEN), an owner token with
+#     write:repository — the version job needs it to push to protected master;
+#   * secret PACKAGE_TOKEN, an owner token with write:package, for the Arch
+#     registry upload (the run's own token is tried when it is missing).
 #
-# Forgejo swallows events pushed with the Actions token, so the version job's
-# tag push starts no second run. If one ever appears (the owner-token tag
-# fallback), the `concurrency: release` group queues it behind this one and it
-# skips publishing because the release already exists.
+# The release API calls live in scripts/forgejo-release.sh. Forgejo swallows
+# events pushed with the Actions token, so the version job's tag push starts no
+# second run. If one ever appears (the owner-token tag fallback), the
+# `concurrency: release` group queues it behind this one and it uploads nothing
+# because the release is already published.
 #
-# The binaries link against Ubuntu 26.04's Qt/KF6 (the .deb's Depends pins
-# the minimum versions); other distros build from source (README → Install).
+# The .deb links against Ubuntu 26.04's Qt/KF6 (its Depends pins the minimum
+# versions), the Arch package against Arch's; other distros build from source
+# (README → Install).
 # Conventions (unqualified actions, Forgejo upload-artifact): see ci.yml.
 name: release
 
@@ -43,6 +53,10 @@ on:
 concurrency:
   group: release
   cancel-in-progress: false
+
+env:
+  # Arch registry group = the pacman repo name; see README → Install.
+  ARCH_REPO_GROUP: apps
 
 jobs:
   version:
@@ -103,52 +117,28 @@ jobs:
           echo "tag=v$new" >> "$GITHUB_OUTPUT"
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-  package:
-    name: Build packages (Ubuntu 26.04)
+  # Creates the draft release both build jobs upload into, so they never race
+  # to create it. Also the one place that checks tag == version.
+  draft:
+    name: Draft release
     needs: version
     # Run when version succeeded OR was skipped (tag push / build-only dispatch).
     if: ${{ !cancelled() && needs.version.result != 'failure' }}
     runs-on: ubuntu-latest
-    container:
-      image: ubuntu:26.04
-      # Persistent apt download cache — see ci.yml's header.
-      volumes:
-        - /persistent/apt:/cache/apt
-    env:
-      DEBIAN_FRONTEND: noninteractive
-      DISTRO: ubuntu26.04
-      APT_ARCHIVES: /cache/apt/ubuntu26.04
+    outputs:
+      version: ${{ steps.rel.outputs.version }}
+      tag: ${{ steps.rel.outputs.tag }}
+      release_id: ${{ steps.draft.outputs.id }}
     steps:
-      - name: Install build deps (Node for the JavaScript actions)
-        run: |
-          set -eu
-          rm -f /etc/apt/apt.conf.d/docker-clean
-          # No fsync per unpacked file: the container is thrown away anyway, and
-          # syncing made the 847-package full-upgrade take ~22 of the job's 30 min.
-          echo force-unsafe-io > /etc/dpkg/dpkg.cfg.d/90unsafe-io
-          mkdir -p "$APT_ARCHIVES/partial"
-          printf 'Dir::Cache::Archives "%s/";\nAPT::Keep-Downloaded-Packages "true";\n' \
-            "$APT_ARCHIVES" > /etc/apt/apt.conf.d/90persistent-cache
-          apt-get update
-          # Queue behind other jobs on the shared archive cache — see the
-          # same step in ci.yml.
-          flock "$APT_ARCHIVES.lock" apt-get install -y --no-install-recommends \
-            build-essential git ca-certificates curl nodejs dpkg-dev file \
-            cmake extra-cmake-modules gettext \
-            libkf6wallet-dev libkf6kcmutils-dev libkf6coreaddons-dev \
-            libkf6i18n-dev libkf6package-dev libplasma-dev \
-            qt6-webengine-dev qt6-webengine-dev-tools
-          flock "$APT_ARCHIVES.lock" apt-get autoclean -qq
-
       - uses: actions/checkout@v6
         with:
-          # On a bump run, build the tagged commit (not the pre-bump dispatch ref).
+          # On a bump run, read the tagged commit (not the pre-bump dispatch ref).
           ref: ${{ needs.version.outputs.tag || github.ref }}
-          # The job never pushes; the release steps pass the token explicitly.
           persist-credentials: false
 
-      # RELEASE_TAG is the tag this run publishes — empty means build-only.
+      # tag is the tag this run publishes — empty means build-only.
       - name: Determine version and release tag
+        id: rel
         env:
           BUMP_TAG: ${{ needs.version.outputs.tag }}
         run: |
@@ -166,8 +156,84 @@ jobs:
             echo "::error::tag $tag does not match CMakeLists.txt version $version"
             exit 1
           fi
-          echo "VERSION=$version" >> "$GITHUB_ENV"
-          echo "RELEASE_TAG=$tag" >> "$GITHUB_ENV"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Release notes from CHANGELOG.md
+        if: steps.rel.outputs.tag != ''
+        env:
+          VERSION: ${{ steps.rel.outputs.version }}
+        run: |
+          set -eu
+          awk -v v="$VERSION" '
+            /^## \[/ { if (found) exit; if (index($0, "## [" v "]") == 1) { found = 1; next } }
+            found' CHANGELOG.md > release-notes.md
+          if ! grep -q '[^[:space:]]' release-notes.md; then
+            echo "::warning::CHANGELOG.md has no [$VERSION] section"
+            echo "See [CHANGELOG.md](CHANGELOG.md)." > release-notes.md
+          fi
+          cat release-notes.md
+
+      # Empty id = the release is already published (a re-run, or the tag-push
+      # run from the header note): the build jobs then only build.
+      - name: Find or create the draft release
+        id: draft
+        if: steps.rel.outputs.tag != ''
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          API: ${{ github.api_url }}
+          TAG: ${{ steps.rel.outputs.tag }}
+          SHA: ${{ needs.version.outputs.sha || github.sha }}
+        run: |
+          set -eu
+          id=$(scripts/forgejo-release.sh prepare "$TAG" "$SHA" release-notes.md)
+          echo "release id: ${id:-none}"
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+
+  package:
+    name: Build packages (Ubuntu 26.04)
+    needs: [version, draft]
+    if: ${{ !cancelled() && needs.draft.result == 'success' }}
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:26.04
+      # Persistent apt download cache — see ci.yml's header.
+      volumes:
+        - /persistent/apt:/cache/apt
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      DISTRO: ubuntu26.04
+      VERSION: ${{ needs.draft.outputs.version }}
+      APT_ARCHIVES: /cache/apt/ubuntu26.04
+    steps:
+      - name: Install build deps (Node for the JavaScript actions)
+        run: |
+          set -eu
+          rm -f /etc/apt/apt.conf.d/docker-clean
+          # No fsync per unpacked file: the container is thrown away anyway, and
+          # syncing made the 847-package full-upgrade take ~22 of the job's 30 min.
+          echo force-unsafe-io > /etc/dpkg/dpkg.cfg.d/90unsafe-io
+          mkdir -p "$APT_ARCHIVES/partial"
+          printf 'Dir::Cache::Archives "%s/";\nAPT::Keep-Downloaded-Packages "true";\n' \
+            "$APT_ARCHIVES" > /etc/apt/apt.conf.d/90persistent-cache
+          apt-get update
+          # Queue behind other jobs on the shared archive cache — see the
+          # same step in ci.yml.
+          flock "$APT_ARCHIVES.lock" apt-get install -y --no-install-recommends \
+            build-essential git ca-certificates curl jq nodejs dpkg-dev file \
+            cmake extra-cmake-modules gettext \
+            libkf6wallet-dev libkf6kcmutils-dev libkf6coreaddons-dev \
+            libkf6i18n-dev libkf6package-dev libplasma-dev \
+            qt6-webengine-dev qt6-webengine-dev-tools
+          flock "$APT_ARCHIVES.lock" apt-get autoclean -qq
+
+      - uses: actions/checkout@v6
+        with:
+          # On a bump run, build the tagged commit (not the pre-bump dispatch ref).
+          ref: ${{ needs.version.outputs.tag || github.ref }}
+          # The job never pushes; the release steps pass the token explicitly.
+          persist-credentials: false
 
       - name: Build
         run: |
@@ -187,60 +253,99 @@ jobs:
           ls -l
           dpkg-deb -f *.deb Package Version Architecture Depends
 
-      - name: Release notes from CHANGELOG.md
-        run: |
-          set -eu
-          awk -v v="$VERSION" '
-            /^## \[/ { if (found) exit; if (index($0, "## [" v "]") == 1) { found = 1; next } }
-            found' CHANGELOG.md > release-notes.md
-          if ! grep -q '[^[:space:]]' release-notes.md; then
-            echo "::warning::CHANGELOG.md has no [$VERSION] section"
-            echo "See [CHANGELOG.md](CHANGELOG.md)." > release-notes.md
-          fi
-          cat release-notes.md
-
       - name: Upload packages as run artifact
         uses: forgejo/upload-artifact@v5
         with:
           name: iframe-plasma-${{ env.VERSION }}-${{ env.DISTRO }}
           path: dist/
 
-      # A second run for the same tag (a re-run, or the tag-push run from the
-      # header note) must not fail on "release already exists".
-      - name: Check for an existing release
-        if: env.RELEASE_TAG != ''
+      - name: Upload packages to the draft release
+        if: needs.draft.outputs.release_id != ''
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
-        run: |
-          set -eu
-          code=$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: token $TOKEN" \
-            "$GITHUB_API_URL/repos/$REPO/releases/tags/$RELEASE_TAG")
-          case "$code" in
-            404) echo "PUBLISH=true" >> "$GITHUB_ENV" ;;
-            200) echo "::notice::release $RELEASE_TAG already exists — not publishing again" ;;
-            *) echo "::error::HTTP $code while looking up release $RELEASE_TAG"; exit 1 ;;
-          esac
+          API: ${{ github.api_url }}
+        run: scripts/forgejo-release.sh upload "${{ needs.draft.outputs.release_id }}" dist/*
 
-      # Creates a draft, uploads the packages, then flips it live.
-      - name: Publish Forgejo release
-        if: env.PUBLISH == 'true'
-        uses: https://code.forgejo.org/actions/forgejo-release@v2.13.4
+  # Native Arch package, built with makepkg against Arch's own Qt/KF6 — see
+  # packaging/arch/PKGBUILD + ci-build.sh. Runs in parallel with `package` and
+  # uploads into the same draft. The image has no node until the artifact step
+  # installs it, so checkout is a manual fetch instead of actions/checkout.
+  arch:
+    name: Build package (Arch Linux)
+    needs: [version, draft]
+    if: ${{ !cancelled() && needs.draft.result == 'success' }}
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # The token sits only on the fetch command line, never in .git/config.
+      - name: Checkout
+        env:
+          GIT_REF: ${{ needs.version.outputs.tag || github.ref }}
+          GIT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          pacman -Syu --noconfirm --needed git
+          git config --global --add safe.directory "$PWD"
+          git init -q .
+          git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 \
+            "https://x-access-token:${GIT_TOKEN}@${GITHUB_SERVER_URL#https://}/${{ github.repository }}.git" "$GIT_REF"
+          git checkout -q --force FETCH_HEAD
+
+      # Installs the build deps, then runs makepkg as an unprivileged user
+      # (makepkg refuses root) and checks the plugin's install path.
+      - name: Build the Arch package
+        run: packaging/arch/ci-build.sh
+
+      - name: Upload the package to the draft release
+        if: needs.draft.outputs.release_id != ''
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          API: ${{ github.api_url }}
+        run: scripts/forgejo-release.sh upload "${{ needs.draft.outputs.release_id }}" packaging/arch/*.pkg.tar.zst packaging/arch/*.pkg.tar.zst.sha256
+
+      # upload-artifact is a JavaScript action: the container needs node first.
+      - name: Install node for upload-artifact
+        run: pacman -S --noconfirm --needed nodejs
+
+      - name: Upload the package as run artifact
+        uses: forgejo/upload-artifact@v5
         with:
-          direction: upload
-          # A bump run is on the branch ref, so name the tag and its commit.
-          tag: ${{ env.RELEASE_TAG }}
-          sha: ${{ needs.version.outputs.sha || github.sha }}
-          release-dir: dist
-          release-notes-file: release-notes.md
-          token: ${{ secrets.GITHUB_TOKEN }}
-          override: false
+          name: iframe-plasma-${{ needs.draft.outputs.version }}-archlinux
+          path: |
+            packaging/arch/*.pkg.tar.zst
+            packaging/arch/*.pkg.tar.zst.sha256
+
+  # Flip the draft live once both builds uploaded — the release stays
+  # invisible until it is complete.
+  publish:
+    name: Publish release
+    needs: [draft, package, arch]
+    if: ${{ !cancelled() && needs.draft.outputs.release_id != '' && needs.package.result == 'success' && needs.arch.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      # The helper script comes from the release commit.
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.draft.outputs.tag }}
+          persist-credentials: false
+
+      - name: Publish the Forgejo release
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          API: ${{ github.api_url }}
+        run: scripts/forgejo-release.sh publish "${{ needs.draft.outputs.release_id }}"
 
       # Forgejo emits no `release` event for releases created with the Actions
       # token, so start the GitHub release mirror explicitly. Non-fatal: its
       # scheduled reconcile catches up.
       - name: Trigger the GitHub release mirror
-        if: env.PUBLISH == 'true'
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
@@ -251,3 +356,15 @@ jobs:
             "$GITHUB_API_URL/repos/$REPO/actions/workflows/mirror-gh-releases.yml/dispatches" \
             -d '{"ref":"master"}' \
             || echo "::warning::mirror-gh-releases dispatch failed — the scheduled reconcile will catch up"
+
+      # Last, so a registry problem can't hold back the release itself; it
+      # still fails the run. pacman clients pick the new version up on their
+      # next `pacman -Syu`.
+      - name: Push the Arch package to the package registry
+        env:
+          TOKEN: ${{ secrets.PACKAGE_TOKEN || secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          API: ${{ github.api_url }}
+        run: |
+          scripts/forgejo-release.sh arch-registry "${{ needs.draft.outputs.release_id }}" \
+            "${{ github.repository_owner }}" "$ARCH_REPO_GROUP"

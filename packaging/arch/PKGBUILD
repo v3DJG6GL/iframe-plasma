@@ -1,0 +1,66 @@
+# SPDX-FileCopyrightText: 2026 v3DJG6GL <72495210+v3DJG6GL@users.noreply.github.com>
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Native Arch Linux package, built from this source tree.
+#
+# release.yml's `arch` job runs this in an archlinux:base-devel container: it
+# packs the checked-out commit into "$pkgname-$pkgver.tar.gz" next to this file
+# (`git archive`), sets pkgver from scripts/version.sh and runs makepkg.
+# Nothing is fetched from a release page or a mirror.
+#
+# Local build, the same way CI does it (from the repo root; builds HEAD):
+#   docker run --rm -v "$PWD:/src" -w /src archlinux:base-devel packaging/arch/ci-build.sh
+# pkgver below is only a placeholder; ci-build.sh rewrites it in its copy.
+#
+# makepkg reads the variables and sets $pkgdir:
+# shellcheck shell=bash disable=SC2034,SC2154
+#
+# Built against Arch's own Qt / KF6, unlike the .deb, which links Ubuntu's.
+# The plugin links no Qt private API, so it should keep loading across Arch's
+# Qt minor updates; if one ever breaks it, rebuild with a pkgrel bump.
+
+pkgname=iframe-plasma
+pkgver=0.0.0
+pkgrel=1
+pkgdesc="Plasma 6 widget that embeds web pages with live panel thumbnails"
+arch=('x86_64')
+url="https://forgejo.informethic.ch/v3djg6gl/iframe-plasma"
+license=('AGPL-3.0-or-later')
+depends=(
+  # Linked by the C++ QML plugin (src/CMakeLists.txt).
+  'glibc'
+  'libgcc'
+  'libstdc++'
+  'qt6-base'
+  'qt6-declarative'
+  'qt6-webengine'
+  'kwallet'
+  'ki18n'
+  # Not linked: QML modules the widget imports at runtime
+  # (org.kde.plasma.*, org.kde.kirigami, org.kde.kcmutils, org.kde.iconthemes).
+  'plasma-workspace'
+  'libplasma'
+  'kirigami'
+  'kcmutils'
+  'kiconthemes'
+  # Owns the hicolor directories the widget icon installs into.
+  'hicolor-icon-theme'
+)
+# find_package(KF6 … CoreAddons Package) in CMakeLists.txt.
+makedepends=('cmake' 'extra-cmake-modules' 'kcoreaddons' 'kpackage')
+# The -debug split package isn't worth carrying for an unsigned CI build.
+options=('!debug')
+source=("$pkgname-$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+  cmake -S "$pkgname-$pkgver" -B build \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DCMAKE_BUILD_TYPE=None \
+    -DBUILD_TESTING=OFF
+  cmake --build build
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install build
+}
