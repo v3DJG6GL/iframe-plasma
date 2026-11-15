@@ -17,7 +17,9 @@
 #   forgejo-release.sh arch-registry <id> <owner> <group>
 #       Push every .pkg.tar.zst attached to release <id> to the owner's Arch
 #       package registry under <group>. A version the registry already holds
-#       is left as it is (Forgejo answers 409).
+#       is left as it is (Forgejo answers 409). TOKEN must be a user token
+#       with read:repository + write:package: the Actions token counts as
+#       anonymous on attachment downloads.
 set -euo pipefail
 
 : "${TOKEN:?}" "${REPO:?}" "${API:?}"
@@ -99,7 +101,7 @@ case "$cmd" in
                 409) echo "::notice::$name is already in the registry — left unchanged" ;;
                 401 | 403)
                     cat "$work/response" >&2
-                    die "HTTP $code from the package registry: set secret PACKAGE_TOKEN (a token of $owner with write:package)"
+                    die "HTTP $code from the package registry: PACKAGE_TOKEN must be a token of $owner with write:package"
                     ;;
                 *)
                     cat "$work/response" >&2
