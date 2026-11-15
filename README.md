@@ -73,25 +73,34 @@ sudo apt install ./iframe-plasma_*_ubuntu26.04_amd64.deb
 
 ### Arch Linux
 
-Every release is also published to a pacman repository on the Forgejo package
-registry, so `pacman -Syu` picks up new versions. One-time setup (trust the
-registry's signing key, then add the repository):
+Every release is also published to a private pacman repository on the Forgejo
+package registry, so `pacman -Syu` picks up new versions. It needs a Forgejo
+access token with the **read:package** scope. One-time setup (trust the
+registry's signing key, then add the repository; the token goes into a
+root-only file because `/etc/pacman.conf` is world-readable):
 
 ```bash
-curl -fsSLo /tmp/forgejo-arch.key \
+TOKEN=<read:package token>
+curl -fsSLo /tmp/forgejo-arch.key -u "v3djg6gl:$TOKEN" \
     https://forgejo.informethic.ch/api/packages/v3djg6gl/arch/repository.key
 sudo pacman-key --add /tmp/forgejo-arch.key
 sudo pacman-key --lsign-key 'v3djg6gl@noreply.forgejo.informethic.ch'
 
+sudo install -m 600 /dev/null /etc/pacman.d/forgejo-apps
+echo "Server = https://v3djg6gl:$TOKEN@forgejo.informethic.ch/api/packages/v3djg6gl/arch/apps/\$arch" \
+    | sudo tee /etc/pacman.d/forgejo-apps >/dev/null
 sudo tee -a /etc/pacman.conf <<'EOF'
 
 [v3djg6gl.apps.forgejo.informethic.ch]
 SigLevel = Required
-Server = https://forgejo.informethic.ch/api/packages/v3djg6gl/arch/apps/$arch
+Include = /etc/pacman.d/forgejo-apps
 EOF
 
 sudo pacman -Syu iframe-plasma
 ```
+
+The same repository also carries the owner's other Arch packages (e.g.
+`faster-whisper-frontend`).
 
 The same package (`iframe-plasma-*-x86_64.pkg.tar.zst`, with a `.sha256`) is
 attached to each release for a one-off install with `sudo pacman -U`. It is
