@@ -1337,11 +1337,15 @@ PlasmoidItem {
     // --- Keyboard shortcuts (scoped to popup-open so panel use isn't grabby) ---
     // Ctrl+R is the browser muscle-memory chord; StandardKey.Refresh is F5
     // on Linux/KDE (the platform-conventional reload key). Both bound here
-    // so either works.
+    // so either works. Some platform themes (generic, qt6ct, gtk3) also put
+    // the literal key in the StandardKey expansion, so this Shortcut holds
+    // two identical entries and every press arrives as activatedAmbiguously;
+    // handle it the same way (one event per press, so no double fire).
     Shortcut {
         sequences: ["Ctrl+R", StandardKey.Refresh]
         enabled: root.expanded
         onActivated: root._tabReloadRequested(root.currentTabIndex, "soft")
+        onActivatedAmbiguously: root._tabReloadRequested(root.currentTabIndex, "soft")
     }
     Shortcut {
         sequence: "Ctrl+Shift+R"
@@ -1353,15 +1357,19 @@ PlasmoidItem {
         enabled: root.expanded
         onActivated: root.expanded = false
     }
+    // Ambiguous for the same reason as the reload Shortcut above.
     Shortcut {
         sequences: ["Ctrl+Tab", StandardKey.NextChild]
         enabled: root.expanded && root.tabs.length > 1
         onActivated: root.setCurrentTab((root.currentTabIndex + 1) % root.tabs.length)
+        onActivatedAmbiguously: root.setCurrentTab((root.currentTabIndex + 1) % root.tabs.length)
     }
     Shortcut {
         sequences: ["Ctrl+Shift+Tab", StandardKey.PreviousChild]
         enabled: root.expanded && root.tabs.length > 1
         onActivated: root.setCurrentTab(
+            (root.currentTabIndex - 1 + root.tabs.length) % root.tabs.length)
+        onActivatedAmbiguously: root.setCurrentTab(
             (root.currentTabIndex - 1 + root.tabs.length) % root.tabs.length)
     }
     // Ctrl+1..9 → jump to tab N (Konsole/Dolphin convention).
