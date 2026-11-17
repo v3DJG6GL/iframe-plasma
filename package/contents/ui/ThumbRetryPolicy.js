@@ -55,6 +55,14 @@ function shouldHealBlank(applyResult, loadStatus) {
     return isFrameConfirmed(applyResult) && loadStatus === "blank";
 }
 
+// Whether a metadata change clears a "blank" slot on its own: once the
+// selector is cleared in place there is no canvas left to wait for, and
+// the engine's "observing" result never confirms a frame. A selector edit
+// is no render-mode change, so no reload heals it either.
+function shouldHealBlankOnSelectorCleared(selector, loadStatus) {
+    return String(selector || "").length === 0 && loadStatus === "blank";
+}
+
 // Whether a blank slot arms a reload retry. Only the thumbnail on screen
 // retries: a hidden page does not paint, so reloading it cannot help —
 // it reloads on its next landing instead (WebViewLifecycle.priorFailed).

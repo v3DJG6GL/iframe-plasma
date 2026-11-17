@@ -95,6 +95,18 @@ TestCase {
         verify(!R.shouldHealBlank("canvas-pending", "blank"));
         verify(!R.shouldHealBlank("observing", "blank"));
     }
+    function test_healBlank_selectorClearedInPlace() {
+        // Custom selector cleared without a mode change: the re-apply
+        // returns "observing", which never heals, and nothing reloads.
+        verify(R.shouldHealBlankOnSelectorCleared("", "blank"));
+        verify(R.shouldHealBlankOnSelectorCleared(undefined, "blank"));
+    }
+    function test_healBlank_selectorClearedInPlace_onlyBlankSlots() {
+        verify(!R.shouldHealBlankOnSelectorCleared(".u-wrap > canvas", "blank"));
+        verify(!R.shouldHealBlankOnSelectorCleared("", "ok"));
+        verify(!R.shouldHealBlankOnSelectorCleared("", "err"));
+        verify(!R.shouldHealBlankOnSelectorCleared("", "loading"));
+    }
     function test_armBlank_onlyCurrentAndObservable() {
         verify(R.shouldArmBlankRetry(true, true));
         verify(!R.shouldArmBlankRetry(false, true));   // hidden: reload on landing

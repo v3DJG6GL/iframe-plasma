@@ -2360,6 +2360,11 @@ PlasmoidItem {
                     function on_TabsMetadataChanged(idx) {
                         if (idx !== -1 && idx !== miniView.ownIndex) return;
                         const sel = miniView.ownSelector;
+                        if (ThumbRetryPolicy.shouldHealBlankOnSelectorCleared(sel, miniView.loadStatus)) {
+                            miniView.loadStatus = "ok";
+                            thumbRetryTimer.stop();
+                            root.setThumbError(miniView.ownIndex, "");
+                        }
                         if (miniView.needsCropEngine()) {
                             console.debug(Log.thumb, "iframe-plasma[compact] metadata apply idx=" + miniView.ownIndex
                                 + " selector=" + JSON.stringify(sel));
