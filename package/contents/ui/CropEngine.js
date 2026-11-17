@@ -198,8 +198,10 @@ const _APPLY_BODY = `(function(sel, opts){
       // transform-style:preserve-3d or content-visibility:auto becomes the
       // containing block of the fixed target below (react-grid-layout cards
       // are transform-positioned), which would pin and clip the target to
-      // that card instead of the viewport.
-      'html[data-ifp-isolate="1"] [data-ifp-keep="1"]{transform:none!important;translate:none!important;rotate:none!important;scale:none!important;filter:none!important;backdrop-filter:none!important;contain:none!important;will-change:auto!important;perspective:none!important;transform-style:flat!important;content-visibility:visible!important;}',
+      // that card instead of the viewport. An ancestor's clip-path or mask
+      // (a scroll container's fade mask-image) is not a containing block but
+      // still clips the fixed target to that ancestor's box.
+      'html[data-ifp-isolate="1"] [data-ifp-keep="1"]{transform:none!important;translate:none!important;rotate:none!important;scale:none!important;filter:none!important;backdrop-filter:none!important;contain:none!important;will-change:auto!important;perspective:none!important;transform-style:flat!important;content-visibility:visible!important;clip-path:none!important;mask:none!important;-webkit-mask:none!important;}',
       // Target placement: three scale-mode variants. The element is
       // always positioned fixed at the viewport top-left and elevated
       // above the (hidden) sibling DOM via z-index.

@@ -301,6 +301,38 @@ test("isolate: a kept ancestor's individual transform, preserve-3d and content-v
     }
 });
 
+test("isolate: a kept ancestor's clip-path and mask do not clip the target", () => {
+    // Chromium clips even a fixed descendant to an ancestor's clip-path or
+    // mask, so the crop would show only the ancestor's original box.
+    for (const scaleMode of ["stretch", "fit", "original"]) {
+        const dom = new JSDOM(
+            "<!doctype html><html><head><style>" +
+            ".card{clip-path:inset(0);mask:linear-gradient(black,black);overflow:hidden}" +
+            "</style></head><body><div id='card' class='card'><div id='t'>x</div></div></body></html>",
+            { runScripts: "outside-only" });
+        const w = dom.window;
+        w.MutationObserver = class { observe() {} disconnect() {} takeRecords() { return []; } };
+        w.ResizeObserver = class { observe() {} disconnect() {} };
+        w.requestAnimationFrame = (cb) => { cb(); return 0; };
+        w.cancelAnimationFrame = () => {};
+        w.setInterval = () => 0;
+        w.clearInterval = () => {};
+        w.console = { info: () => {}, warn: () => {}, error: () => {} };
+        const card = w.document.getElementById("card");
+
+        w.eval(`(${ce.buildApplyJs("#t", { scaleMode })})`);
+        assert.equal(card.getAttribute("data-ifp-keep"), "1", scaleMode);
+        const cs = w.getComputedStyle(card);
+        // jsdom neither expands the mask shorthand into mask-image nor parses
+        // -webkit-mask, so the shorthand is what can be checked here.
+        assert.equal(cs.getPropertyValue("clip-path"), "none", scaleMode);
+        assert.equal(cs.getPropertyValue("mask"), "none", scaleMode);
+
+        w.eval(ce.buildClearJs());
+        assert.notEqual(w.getComputedStyle(card).getPropertyValue("clip-path"), "none", scaleMode);
+    }
+});
+
 test("isolate: the target's own transform does not shift it off the viewport", () => {
     // translate(-50%,-50%) centering, or a grid item placed by translate.
     for (const scaleMode of ["stretch", "fit", "original"]) {
