@@ -462,6 +462,39 @@ test("isolate: a match inside an <svg> isolates the outer <svg>", () => {
     }
 });
 
+test("isolate: an HTML node inside a <foreignObject> isolates the outer <svg>", () => {
+    // Mermaid / d3 HTML labels have no ownerSVGElement. Kept as is, every
+    // <g> would lose its transform and the <foreignObject> (a containing
+    // block that clips) would pin the fixed target to the label's box.
+    for (const scaleMode of ["stretch", "fit", "original"]) {
+        const dom = new JSDOM(
+            "<!doctype html><html><body><div id='wrap'><svg id='s' width='400' height='300'>" +
+            "<g id='g' transform='translate(150,100)'><foreignObject id='fo' width='80' height='20'>" +
+            "<div id='t'>label</div></foreignObject><rect width='10' height='10'/></g></svg></div>" +
+            "<p id='rest'>rest</p></body></html>",
+            { runScripts: "outside-only" });
+        const w = dom.window;
+        w.MutationObserver = class { observe() {} disconnect() {} takeRecords() { return []; } };
+        w.ResizeObserver = class { observe() {} disconnect() {} };
+        w.requestAnimationFrame = (cb) => { cb(); return 0; };
+        w.cancelAnimationFrame = () => {};
+        w.setInterval = () => 0;
+        w.clearInterval = () => {};
+        w.console = { info: () => {}, warn: () => {}, error: () => {} };
+        const byId = (id) => w.document.getElementById(id);
+        assert.equal(byId("t").namespaceURI, "http://www.w3.org/1999/xhtml");
+
+        const r = w.eval(`(${ce.buildApplyJs("#t", { scaleMode })})`);
+        assert.equal(r, "matched-and-observing", scaleMode);
+        assert.equal(byId("s").getAttribute("data-ifp-target"), "1", scaleMode);
+        assert.equal(byId("t").hasAttribute("data-ifp-target"), false, scaleMode);
+        assert.equal(byId("g").hasAttribute("data-ifp-keep"), false, scaleMode);
+        assert.equal(byId("fo").hasAttribute("data-ifp-keep"), false, scaleMode);
+        assert.equal(byId("wrap").getAttribute("data-ifp-keep"), "1", scaleMode);
+        assert.equal(w.getComputedStyle(byId("rest")).display, "none", scaleMode);
+    }
+});
+
 test("style: the crop rules are also adopted as a constructed sheet, and cleared with it", () => {
     // A page CSP without style-src 'unsafe-inline' refuses the inline <style>;
     // constructed sheets are exempt. jsdom has neither CSP nor

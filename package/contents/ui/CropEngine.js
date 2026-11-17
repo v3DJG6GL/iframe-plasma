@@ -708,8 +708,12 @@ const _APPLY_BODY = `(function(sel, opts){
       // kept-ancestor rule would strip the transform off every <g> in its
       // chain. Isolate the outermost <svg> instead; matchedEl stays the
       // match, so the keyword scan keeps reading the selected element.
+      // The ancestor walk (not ownerSVGElement, which HTML elements lack)
+      // also lifts an HTML label inside a <foreignObject>: that box is a
+      // clipping containing block for the fixed target.
       let box = el;
-      while (box.ownerSVGElement) box = box.ownerSVGElement;
+      for (let p = el.parentElement; p; p = p.parentElement)
+        if (p.localName === 'svg' && p.namespaceURI === 'http://www.w3.org/2000/svg') box = p;
       isolateElement(box);
       // Fit-mode scaling runs after isolation so the element is in its
       // post-isolation layout context (siblings hidden, parent kept).
