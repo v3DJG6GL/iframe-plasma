@@ -392,6 +392,41 @@ test("isolate: a kept ancestor's zoom is reset", () => {
     assert.equal(rule.style.getPropertyPriority("zoom"), "important");
 });
 
+test("isolate: the target's own zoom and the root's are reset", () => {
+    // Zoom multiplies down the tree, and the keep walk stops at body: a
+    // picked grid the page shrinks with zoom:0.5, or a page's body{zoom:.8},
+    // would still leave the target covering only part of the view.
+    for (const scaleMode of ["stretch", "fit", "original"]) {
+        const dom = new JSDOM(
+            "<!doctype html><html><body style='zoom:0.8'><div><div id='t' style='zoom:0.5'>x</div></div></body></html>",
+            { runScripts: "outside-only" });
+        const w = dom.window;
+        w.MutationObserver = class { observe() {} disconnect() {} takeRecords() { return []; } };
+        w.ResizeObserver = class { observe() {} disconnect() {} };
+        w.requestAnimationFrame = (cb) => { cb(); return 0; };
+        w.cancelAnimationFrame = () => {};
+        w.setInterval = () => 0;
+        w.clearInterval = () => {};
+        w.console = { info: () => {}, warn: () => {}, error: () => {} };
+
+        w.eval(`(${ce.buildApplyJs("#t", { scaleMode })})`);
+        const doc = w.document;
+        assert.equal(doc.getElementById("t").getAttribute("data-ifp-target"), "1", scaleMode);
+        const rules = [...doc.getElementById("ifp-thumb-style").sheet.cssRules];
+        // The rules that apply to each node, read through the CSSOM (jsdom
+        // computes no zoom).
+        for (const [name, node] of [["html", doc.documentElement], ["body", doc.body], ["target", doc.getElementById("t")]]) {
+            const zooms = rules.filter((r) => r.style && r.style.getPropertyValue("zoom") !== "" &&
+                                              node.matches(r.selectorText));
+            assert.ok(zooms.length > 0, `${scaleMode}: no zoom reset on ${name}`);
+            for (const r of zooms) {
+                assert.equal(r.style.getPropertyValue("zoom"), "1", `${scaleMode} ${name}`);
+                assert.equal(r.style.getPropertyPriority("zoom"), "important", `${scaleMode} ${name}`);
+            }
+        }
+    }
+});
+
 test("isolate: the root's own scrollbar is hidden", () => {
     // body's overflow:hidden reaches the viewport only while html's overflow
     // is visible: a page with html{overflow-y:scroll} keeps its scrollbar

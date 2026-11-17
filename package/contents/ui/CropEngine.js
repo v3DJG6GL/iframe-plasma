@@ -199,8 +199,10 @@ const _APPLY_BODY = `(function(sel, opts){
       // overflow:hidden on html too: body's only reaches the viewport while
       // html's is visible, so a page with html{overflow-y:scroll} would keep
       // its scrollbar over the right edge of a 100vw stretched target.
-      'html[data-ifp-isolate="1"]{margin:0!important;padding:0!important;background:#181b1f!important;overflow:hidden!important;}',
-      'html[data-ifp-isolate="1"] body{margin:0!important;padding:0!important;background:#181b1f!important;overflow:hidden!important;}',
+      // Zoom is reset on both as on kept ancestors (below): the keep walk
+      // stops at body, and a page's body{zoom:.8} scales the target too.
+      'html[data-ifp-isolate="1"]{margin:0!important;padding:0!important;background:#181b1f!important;overflow:hidden!important;zoom:1!important;}',
+      'html[data-ifp-isolate="1"] body{margin:0!important;padding:0!important;background:#181b1f!important;overflow:hidden!important;zoom:1!important;}',
       'html[data-ifp-isolate="1"] body > *:not([data-ifp-keep="1"]):not([data-ifp-target="1"]),html[data-ifp-isolate="1"] [data-ifp-keep="1"] > *:not([data-ifp-keep="1"]):not([data-ifp-target="1"]){display:none!important;}',
       // A kept ancestor with a transform (or the individual translate/rotate/
       // scale properties Tailwind v4 emits), filter, contain, perspective,
@@ -246,16 +248,17 @@ const _APPLY_BODY = `(function(sel, opts){
       // vw/s counter-size included), and body's overflow:hidden cuts that
       // off. Stretch also drops the page's min-width/min-height, which would
       // beat max-width:100vw. Original keeps the page's own box model.
-      // Opacity and visibility are reset on the target as on its kept
+      // Opacity, visibility and zoom are reset on the target as on its kept
       // ancestors: an inactive carousel slide or a faded-out card often
-      // carries them itself.
+      // carries the first two itself, and a picked grid the page shrinks
+      // carries its own zoom.
       // Fit and original release the page's right/bottom: a target it
       // anchors with them (or inset:0, a "fill the card" layer) would be
       // stretched against the viewport, so fit measures ~viewport size and
       // barely scales, and original no longer shows the natural size.
-      'html[data-ifp-isolate="1"][data-ifp-scale="stretch"] [data-ifp-target="1"],html[data-ifp-isolate="1"]:not([data-ifp-scale]) [data-ifp-target="1"]{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:100vw!important;max-height:100vh!important;min-width:0!important;min-height:0!important;box-sizing:border-box!important;margin:0!important;z-index:2147483647!important;overflow:auto!important;opacity:1!important;visibility:visible!important;transform:none!important;translate:none!important;rotate:none!important;scale:none!important;}',
-      'html[data-ifp-isolate="1"][data-ifp-scale="fit"] [data-ifp-target="1"]{position:fixed!important;top:0!important;left:0!important;right:auto!important;bottom:auto!important;margin:0!important;box-sizing:border-box!important;z-index:2147483647!important;overflow:auto!important;opacity:1!important;visibility:visible!important;translate:none!important;rotate:none!important;scale:none!important;}',
-      'html[data-ifp-isolate="1"][data-ifp-scale="original"] [data-ifp-target="1"]{position:fixed!important;top:0!important;left:0!important;right:auto!important;bottom:auto!important;margin:0!important;z-index:2147483647!important;overflow:auto!important;opacity:1!important;visibility:visible!important;transform:none!important;translate:none!important;rotate:none!important;scale:none!important;}'
+      'html[data-ifp-isolate="1"][data-ifp-scale="stretch"] [data-ifp-target="1"],html[data-ifp-isolate="1"]:not([data-ifp-scale]) [data-ifp-target="1"]{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:100vw!important;max-height:100vh!important;min-width:0!important;min-height:0!important;box-sizing:border-box!important;margin:0!important;z-index:2147483647!important;overflow:auto!important;opacity:1!important;visibility:visible!important;zoom:1!important;transform:none!important;translate:none!important;rotate:none!important;scale:none!important;}',
+      'html[data-ifp-isolate="1"][data-ifp-scale="fit"] [data-ifp-target="1"]{position:fixed!important;top:0!important;left:0!important;right:auto!important;bottom:auto!important;margin:0!important;box-sizing:border-box!important;z-index:2147483647!important;overflow:auto!important;opacity:1!important;visibility:visible!important;zoom:1!important;translate:none!important;rotate:none!important;scale:none!important;}',
+      'html[data-ifp-isolate="1"][data-ifp-scale="original"] [data-ifp-target="1"]{position:fixed!important;top:0!important;left:0!important;right:auto!important;bottom:auto!important;margin:0!important;z-index:2147483647!important;overflow:auto!important;opacity:1!important;visibility:visible!important;zoom:1!important;transform:none!important;translate:none!important;rotate:none!important;scale:none!important;}'
     ].join('');
     if (!document.getElementById('ifp-thumb-style')) {
       const s = document.createElement('style');
