@@ -73,3 +73,12 @@ function shouldHealBlankOnSelectorCleared(selector, loadStatus) {
 function shouldArmBlankRetry(isCurrent, observable) {
     return isCurrent && observable;
 }
+
+// Whether a blank slot re-arms its retry when the panel turns observable
+// again. A retry that fell due while it was hidden was skipped
+// (shouldFireRetry), and a slot that stayed current gets no landing to
+// re-arm it; a short hide also never froze the view, so priorFailed does
+// not reload it either. A retry still pending needs no second one.
+function shouldRearmOnObservable(loadStatus, isCurrent, observable, retryPending) {
+    return loadStatus === "blank" && !retryPending && shouldArmBlankRetry(isCurrent, observable);
+}

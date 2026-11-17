@@ -2202,6 +2202,19 @@ PlasmoidItem {
                     }
                 }
 
+                // A blank retry that fell due while the panel was hidden
+                // (screen lock, Activity switch) was skipped. A slot that
+                // stayed current has no landing to re-arm it, so re-arm when
+                // it can be seen again; the bounded backoff still caps it.
+                Connections {
+                    target: root
+                    function onCompactObservableChanged() {
+                        if (ThumbRetryPolicy.shouldRearmOnObservable(miniView.loadStatus,
+                                miniView.ownIsCurrent, root.compactObservable, thumbRetryTimer.running))
+                            thumbRetryTimer.arm();
+                    }
+                }
+
                 // A new URL (range pick, metadata Apply) is a fresh target:
                 // drop the backoff budget and cancel any pending retry so the
                 // new navigation isn't immediately clobbered by a stale one.

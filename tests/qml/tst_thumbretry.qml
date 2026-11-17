@@ -121,6 +121,39 @@ TestCase {
         verify(!R.shouldArmBlankRetry(false, true));   // hidden: reload on landing
         verify(!R.shouldArmBlankRetry(true, false));   // panel off-screen / locked
     }
+    function test_rearmOnObservable_skippedBlankRetry() {
+        // The retry fell due while hidden and was skipped; nothing else
+        // re-arms a slot that stayed current.
+        verify(R.shouldRearmOnObservable("blank", true, true, false));
+    }
+    function test_rearmOnObservable_notWhenPendingHiddenOrHealthy() {
+        verify(!R.shouldRearmOnObservable("blank", true, true, true));    // retry still pending
+        verify(!R.shouldRearmOnObservable("blank", true, false, false));  // still not observable
+        verify(!R.shouldRearmOnObservable("blank", false, true, false));  // not on screen: landing re-arms
+        verify(!R.shouldRearmOnObservable("ok", true, true, false));
+        verify(!R.shouldRearmOnObservable("loading", true, true, false));
+        verify(!R.shouldRearmOnObservable("err", true, true, false));     // fires regardless of observability
+    }
+    function test_sequence_hiddenWhenRetryDue_resumesOnShow() {
+        // Replays main.qml: blank slot arms, the retry falls due while the
+        // screen is locked (skipped), then the panel shows again.
+        let attempt = 0;
+        let reloads = 0;
+        let pending = R.shouldArmBlankRetry(true, true) && R.backoffMs(attempt) >= 0;
+        if (pending) attempt++;
+        // Timer fires while hidden.
+        pending = false;
+        if (R.shouldFireRetry("blank", true, false)) reloads++;
+        compare(reloads, 0);
+        // Observable again.
+        if (R.shouldRearmOnObservable("blank", true, true, pending) && R.backoffMs(attempt) >= 0) {
+            attempt++;
+            pending = true;
+        }
+        verify(pending);
+        if (R.shouldFireRetry("blank", true, true)) reloads++;
+        compare(reloads, 1);
+    }
 
     // ============================================================
     //  Sequences
