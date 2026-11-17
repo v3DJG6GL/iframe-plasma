@@ -53,6 +53,10 @@ Item {
             && tab.webView.lifecycleState !== WebEngineView.LifecycleState.Active) {
             tab.loginInProgress = false;
         }
+        // A pick on a view nobody can see is useless (same policy as popup
+        // hide). Left running, its window-wide Esc Shortcut stays enabled
+        // and collides with a picker started on the next tab.
+        if (!tab.desiredActive && tab.pickerActive) tab.cancelPicker();
     }
 
     // Latches true the first time this tab is shown; gates viewLoader.
