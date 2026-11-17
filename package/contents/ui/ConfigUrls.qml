@@ -1445,7 +1445,10 @@ KCM.SimpleKCM {
                     QQC.Switch { id: addRefresh; text: i18n("every"); checked: true }
                     UnitSpinBox {
                         id: refreshInterval
-                        from: 5; to: 3600
+                        // Up to 1d: Grafana's picker offers 2h and 1d, and
+                        // Edit mode clamps the URL's value to this range
+                        // before writing it back.
+                        from: 5; to: 86400
                         value: 30
                         enabled: addRefresh.checked
                         suffix: " s"
@@ -1542,7 +1545,7 @@ KCM.SimpleKCM {
             }
             // Refresh — the interval in seconds when the URL carries
             // refresh=<N>s (the form transformUrl emits) or Grafana's own
-            // <N>m / <N>h. Anything else (30, 1d, no refresh) → toggle
+            // <N>m / <N>h / <N>d. Anything else (30, no refresh) → toggle
             // off, keep SpinBox at last value.
             let refreshOn = false;
             let refreshSec = refreshInterval.value;

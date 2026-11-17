@@ -380,14 +380,21 @@ TestCase {
         compare(G.parseRefreshSeconds("https://g/d-solo/x/y?refresh=5m&panelId=2", 5, 3600), 300);
         compare(G.parseRefreshSeconds("https://g/d-solo/x/y?refresh=1h", 5, 3600), 3600);
     }
+    function test_parseRefreshSeconds_days() {
+        // Grafana's picker also offers 1d. Unread, the Edit dialog showed
+        // the switch off and OK stripped auto-refresh entirely.
+        compare(G.parseRefreshSeconds("https://g/d-solo/x/y?refresh=1d", 5, 86400), 86400);
+        compare(G.parseRefreshSeconds("https://g/d-solo/x/y?refresh=1d&kiosk", 5, 86400), 86400);
+    }
     function test_parseRefreshSeconds_clampedToRange() {
         compare(G.parseRefreshSeconds("https://g/x?refresh=1s", 5, 3600), 5);
         compare(G.parseRefreshSeconds("https://g/x?refresh=2h", 5, 3600), 3600);
+        compare(G.parseRefreshSeconds("https://g/x?refresh=2d", 5, 86400), 86400);
     }
     function test_parseRefreshSeconds_absentOrUnreadable() {
         compare(G.parseRefreshSeconds("https://g/x", 5, 3600), -1);
         compare(G.parseRefreshSeconds("https://g/x?refresh=30", 5, 3600), -1);
-        compare(G.parseRefreshSeconds("https://g/x?refresh=1d", 5, 3600), -1);
+        compare(G.parseRefreshSeconds("https://g/x?refresh=1w", 5, 86400), -1);
         compare(G.parseRefreshSeconds("https://g/x?autorefresh=5m", 5, 3600), -1);
         compare(G.parseRefreshSeconds("https://g/x#a?refresh=1m", 5, 3600), -1);
         compare(G.parseRefreshSeconds(null, 5, 3600), -1);
