@@ -867,6 +867,52 @@ test("apply: a canvas that is not uPlot's is isolated, not left pending", () => 
     assert.equal(doc.getElementById("ifp-thumb-display"), null);
 });
 
+// One selector (".x") whose match the page swaps between a painted uPlot
+// canvas and a plain element. Every uPlot part gets a laid-out rect.
+function runSwapApply(html) {
+    const dom = new JSDOM(html, { runScripts: "outside-only" });
+    const w = dom.window;
+    w.HTMLCanvasElement.prototype.getContext = () => ({ drawImage() {} });
+    w.Element.prototype.getBoundingClientRect = function () {
+        return { left: 0, top: 0, width: 600, height: 300 };
+    };
+    w.MutationObserver = class { observe() {} disconnect() {} takeRecords() { return []; } };
+    w.ResizeObserver = class { observe() {} disconnect() {} };
+    w.requestAnimationFrame = (cb) => { cb(); return 0; };
+    w.cancelAnimationFrame = () => {};
+    w.setInterval = () => 0;
+    w.clearInterval = () => {};
+    w.console = { info: () => {}, warn: () => {}, error: () => {} };
+    w.eval(`(${ce.buildApplyJs(".x")})`);
+    return { w, doc: w.document, tick: () => w.__ifpThumbSchedule() };
+}
+const UPLOT_X = "<div class='u-wrap'><canvas class='x' width='600' height='300'></canvas><div class='u-over'></div></div>";
+
+test("swap: a canvas match replaced by an element drops the canvas overlay", () => {
+    const t = runSwapApply(`<!doctype html><html><body><div id='panel'>${UPLOT_X}</div></body></html>`);
+    assert.ok(t.doc.getElementById("ifp-thumb-display"));
+    assert.equal(t.doc.documentElement.getAttribute("data-ifp-thumb"), "1");
+    t.doc.getElementById("panel").innerHTML = "<div class='x'>No data</div>";
+    t.tick();
+    assert.equal(t.doc.getElementById("ifp-thumb-display"), null, "no frozen frame over the element");
+    assert.equal(t.doc.documentElement.getAttribute("data-ifp-thumb"), null);
+    assert.equal(t.doc.documentElement.getAttribute("data-ifp-isolate"), "1");
+});
+
+test("swap: an element match replaced by a canvas drops the isolation", () => {
+    const t = runSwapApply("<!doctype html><html><body><div id='panel'><div class='x'>No data</div></div></body></html>");
+    assert.equal(t.doc.documentElement.getAttribute("data-ifp-isolate"), "1");
+    t.doc.getElementById("panel").innerHTML = UPLOT_X;
+    t.tick();
+    // The isolation rules would hide the overlay (a <body> child that is
+    // neither kept nor the target) and leave a blank view.
+    assert.equal(t.doc.documentElement.getAttribute("data-ifp-isolate"), null);
+    assert.equal(t.doc.documentElement.getAttribute("data-ifp-thumb"), "1");
+    const disp = t.doc.getElementById("ifp-thumb-display");
+    assert.ok(disp);
+    assert.notEqual(t.w.getComputedStyle(disp).display, "none");
+});
+
 test("CROP: clear resets the remembered geometry", () => {
     const t = runCanvasApply();
     assert.ok(t.dom.window.__ifpLastCropKey);

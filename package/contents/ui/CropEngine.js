@@ -543,6 +543,12 @@ const _APPLY_BODY = `(function(sel, opts){
       // we leave the page un-blanked and report 'canvas-pending' so the QML
       // side can show a placeholder / arm a retry, and the observer + 3s
       // interval re-attempt the crop as the chart paints.
+      //
+      // The same selector may have isolated an element before (the page
+      // swapped it for this canvas): drop that isolation, or the stylesheet
+      // keeps hiding the page and the overlay with it.
+      document.documentElement.removeAttribute('data-ifp-isolate');
+      if (window.__ifpFitTarget) { releaseFitTarget(); forgetOwnMutations(); }
       if (cropAxes(el)) {
         document.documentElement.setAttribute('data-ifp-thumb','1');
       } else {
@@ -552,6 +558,12 @@ const _APPLY_BODY = `(function(sel, opts){
         return 'canvas-pending';
       }
     } else {
+      // The same selector may have matched a uPlot canvas before (the page
+      // swapped the chart for a "No data" element): its full-viewport
+      // overlay would keep a frozen frame over the isolated element.
+      document.documentElement.removeAttribute('data-ifp-thumb');
+      dropOverlay();
+      window.__ifpLastCropKey = null;
       isolateElement(el);
       // Fit-mode scaling runs after isolation so the element is in its
       // post-isolation layout context (siblings hidden, parent kept).
