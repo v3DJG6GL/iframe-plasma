@@ -2876,6 +2876,8 @@ PlasmoidItem {
                     // reload too: a Frozen one would otherwise resume on the
                     // stale "Authentication required" overlay. A Discarded
                     // one is left alone, it reloads when it is next shown.
+                    // The sibling's return must not emit authSucceeded again:
+                    // this handler already reloaded the profile's thumbnails.
                     onAuthSucceeded: {
                         for (const i of UrlUtils.tabIndicesSharingProfile(root.tabs, index, root.resolveTheme())) {
                             root._compactReloadRequested(i);
@@ -2883,7 +2885,7 @@ PlasmoidItem {
                             const sib = repeater.itemAt(i);
                             if (sib && sib.loadStatus === "auth" && sib.webView
                                 && sib.webView.lifecycleState !== WebEngineView.LifecycleState.Discarded)
-                                sib.reload();
+                                sib.reloadAfterSiblingLogin();
                         }
                     }
 

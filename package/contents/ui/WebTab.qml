@@ -95,6 +95,15 @@ Item {
     // LoadSucceededStatus handler gets to look at it.
     property bool _authPending: false
 
+    // Armed by reloadAfterSiblingLogin(). The return to the target that
+    // follows is not a new login: the login on the sibling tab already
+    // reloaded the profile's thumbnails, so this tab's authSucceeded is
+    // swallowed (else each parked sibling re-broadcasts that reload).
+    // Survives intermediate loads on the Authelia host; consumed by the next
+    // successful load elsewhere or by a failed load. A Login click (the
+    // user logging in here after all) overrides it.
+    property bool _quietNextAuthReturn: false
+
     // "" → no override (chip follows URL); "off"; or an interval like "30s".
     property string userRefreshChoice: ""
 
@@ -162,6 +171,12 @@ Item {
             return;
         }
         v.reload();
+    }
+    // Reload a tab parked on the login page after a login on another tab of
+    // the same profile, without its return re-announcing that login.
+    function reloadAfterSiblingLogin() {
+        tab._quietNextAuthReturn = true;
+        reload();
     }
     function hardReload() {
         tab.loginInProgress = false;
@@ -698,10 +713,15 @@ Item {
                                 statusOverlay.hide();
                             }
                         } else {
+                            const quiet = tab._quietNextAuthReturn && !tab.loginInProgress;
+                            tab._quietNextAuthReturn = false;
                             tab.loginInProgress = false;
                             tab.loadStatus = "ok";
                             statusOverlay.hide();
-                            if (wasAuthing || arrivedAtTargetFromElsewhere) {
+                            if (quiet && (wasAuthing || arrivedAtTargetFromElsewhere)) {
+                                console.debug(Log.load, "iframe-plasma[load] authSucceeded suppressed"
+                                    + " (return after a sibling tab's login)");
+                            } else if (wasAuthing || arrivedAtTargetFromElsewhere) {
                                 console.info(Log.load, "iframe-plasma[load] authSucceeded"
                                     + " wasAuthing=" + wasAuthing
                                     + " arrivedAtTarget=" + arrivedAtTargetFromElsewhere
@@ -737,6 +757,7 @@ Item {
                         // re-auth events render as a bare Authelia form with no
                         // "Authentication required" prompt.
                         tab.loginInProgress = false;
+                        tab._quietNextAuthReturn = false;
                         tab.loadStatus = "err";
                         statusOverlay.showError(info.errorString || "Load failed");
                     }
