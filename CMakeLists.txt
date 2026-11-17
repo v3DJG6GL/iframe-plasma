@@ -4,7 +4,8 @@
 cmake_minimum_required(VERSION 3.20)
 project(iframe-plasma VERSION 0.5.1 LANGUAGES CXX)
 
-set(QT_MIN_VERSION "6.8.0")
+# 6.9: main.qml creates profiles with WebEngineProfilePrototype (QtWebEngine 6.9+).
+set(QT_MIN_VERSION "6.9.0")
 set(KF6_MIN_VERSION "6.0.0")
 
 find_package(ECM ${KF6_MIN_VERSION} REQUIRED NO_MODULE)
