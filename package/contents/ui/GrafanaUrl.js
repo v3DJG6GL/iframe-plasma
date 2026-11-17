@@ -21,6 +21,9 @@
  *   parseTimeRange(u, presets) — the preset a URL's from/to window is,
  *                            "" when it is none of them.
  *
+ *   paramIsOn(u, key, onValues) — whether a query param carries one of
+ *                            the values that switch it on.
+ *
  *   splitFragment(u) → [base, "#frag"] — preserves an anchor through
  *                            subsequent stripParam/appendParam ops.
  *
@@ -189,4 +192,19 @@ function parseTimeRange(url, presets) {
     const tos = base.match(/[?&]to=[^&]*/g) || [];
     if (tos.some(function(t) { return t.substring(1) !== "to=now"; })) return "";
     return presets.indexOf(m[1]) !== -1 ? m[1] : "";
+}
+
+// Whether query param `key` carries one of `onValues` (fragment ignored).
+// The Edit dialog's hideLogo / hidePanelMenu switches read the value, not
+// the key's presence: a row with hideLogo=false opened with the switch on,
+// and OK then rewrote it to hideLogo=true without any user action.
+function paramIsOn(url, key, onValues) {
+    const base = splitFragment(String(url || ""))[0];
+    const q = base.indexOf("?");
+    if (q === -1) return false;
+    return base.substring(q + 1).split("&").some(function(kv) {
+        const eq = kv.indexOf("=");
+        return eq !== -1 && kv.substring(0, eq) === key
+            && onValues.indexOf(kv.substring(eq + 1)) !== -1;
+    });
 }

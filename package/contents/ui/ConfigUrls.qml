@@ -1524,8 +1524,10 @@ KCM.SimpleKCM {
                 theme:        /[?&]theme=/.test(u),
                 refreshOn:    refreshOn,
                 refreshSec:   refreshSec,
-                hideLogo:     /[?&]hideLogo=/.test(u),
-                hidePanelMenu:/[?&]_ifp_hidePanelMenu=/.test(u)
+                // Value, not presence: hideLogo=false shows the badge, and
+                // WebTab only acts on _ifp_hidePanelMenu=1.
+                hideLogo:     GrafanaUrl.paramIsOn(u, "hideLogo", ["true", "1"]),
+                hidePanelMenu:GrafanaUrl.paramIsOn(u, "_ifp_hidePanelMenu", ["1"])
             };
         }
 

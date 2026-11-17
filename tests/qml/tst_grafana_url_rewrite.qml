@@ -427,4 +427,23 @@ TestCase {
         compare(G.parseTimeRange("https://g/x?orgId=1#from=now-24h&to=now", _presets), "");
         compare(G.parseTimeRange("https://g/x?from=now-24h&to=now#to=now-1d", _presets), "24h");
     }
+
+    // ===== paramIsOn (Edit dialog switch pre-fill) ===================
+    function test_paramIsOn_hideLogoValueRead() {
+        compare(G.paramIsOn("https://g/d-solo/a/b?panelId=2&hideLogo=true", "hideLogo", ["true", "1"]), true);
+        compare(G.paramIsOn("https://g/d-solo/a/b?hideLogo=1&kiosk", "hideLogo", ["true", "1"]), true);
+        // An explicit false must read as off, else OK flips it to true.
+        compare(G.paramIsOn("https://g/d-solo/a/b?panelId=2&hideLogo=false", "hideLogo", ["true", "1"]), false);
+        compare(G.paramIsOn("https://g/d-solo/a/b?panelId=2", "hideLogo", ["true", "1"]), false);
+    }
+    function test_paramIsOn_hidePanelMenuValueRead() {
+        compare(G.paramIsOn("https://g/x?_ifp_hidePanelMenu=1", "_ifp_hidePanelMenu", ["1"]), true);
+        compare(G.paramIsOn("https://g/x?_ifp_hidePanelMenu=0", "_ifp_hidePanelMenu", ["1"]), false);
+    }
+    function test_paramIsOn_exactKeyAndFragmentIgnored() {
+        compare(G.paramIsOn("https://g/x?xhideLogo=true", "hideLogo", ["true"]), false);
+        compare(G.paramIsOn("https://g/x?a=1#hideLogo=true", "hideLogo", ["true"]), false);
+        compare(G.paramIsOn("https://g/x", "hideLogo", ["true"]), false);
+        compare(G.paramIsOn(null, "hideLogo", ["true"]), false);
+    }
 }
