@@ -1182,10 +1182,12 @@ PlasmoidItem {
     // by primeAuthProfiles: a re-read secret gets a fresh attempt.
     property var _basicAuthAnswered: ({})
 
-    // Handler invoked from WebTab on every authenticationDialogRequested.
+    // Handler invoked from WebTab and the panel thumbnail on every
+    // authenticationDialogRequested; `view` names the asker (see
+    // UrlUtils.basicAuthChallengeKey).
     // Contract: leave request.accepted=false to let Qt show its default prompt;
     // set accepted=true + dialogAccept(user,pw) to supply stored creds silently.
-    function handleBasicAuth(request, tabConfig) {
+    function handleBasicAuth(request, tabConfig, view) {
         try {
             // Stored credentials belong to the site (401). A proxy challenge
             // (407) still carries the proxied request's URL, so the host
@@ -1228,9 +1230,7 @@ PlasmoidItem {
             const secrets = root.authSupport ? root.authSupport.getMap(root.authSupport.profileKey(profile.id)) : {};
             const pw = (secrets && secrets.password) || "";
             if (pw.length > 0) {
-                // Keyed by request URL, not host: tabs that share a profile
-                // and host are each challenged once and must each be answered.
-                const challenge = profile.id + "|" + String(request.url) + "|" + (request.realm || "");
+                const challenge = UrlUtils.basicAuthChallengeKey(view, profile.id, request.url, request.realm);
                 const now = Date.now();
                 if (!UrlUtils.mayAutoAnswerBasicAuth(root._basicAuthAnswered[challenge], now)) {
                     console.warn(Log.auth, "iframe-plasma[auth] stored credentials were just rejected"
@@ -1997,7 +1997,8 @@ PlasmoidItem {
                     // A basic profile without preempt sends its credentials only
                     // here, and the popup may never have been opened to fill the
                     // auth cache. Answer with the stored ones like the popup does.
-                    root.handleBasicAuth(request, root._liveRow(miniView.ownIndex, miniView.ownTab));
+                    root.handleBasicAuth(request, root._liveRow(miniView.ownIndex, miniView.ownTab),
+                                         "thumb:" + miniView.ownIndex);
                     if (request.accepted) return;
                     // Nothing stored or not ours: reject, so Qt's prompt never
                     // opens over an unattended panel.
@@ -2924,7 +2925,7 @@ PlasmoidItem {
                     discardDelaySec: Plasmoid.configuration.popupDiscardDelaySec
                     lifecycleLabel: "popup[" + index + "]"
                     gcIntervalSec: Plasmoid.configuration.gcIntervalSec
-                    onBasicAuthRequested: req => root.handleBasicAuth(req, modelData)
+                    onBasicAuthRequested: req => root.handleBasicAuth(req, modelData, "popup:" + index)
                     onAuthRequired: () => root.expanded = true
                     onLoadStatusChanged: root.setTabStatus(index, loadStatus)
                     onSelectorPicked: sel => root.handlePickedSelector(index, sel)

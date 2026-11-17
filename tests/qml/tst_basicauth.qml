@@ -62,4 +62,36 @@ TestCase {
         const answered = { "profile|https://dash.example/d/x|realm": 1000 };
         verify(U.mayAutoAnswerBasicAuth(answered["profile|https://dash.example/d/y|realm"], 1010));
     }
+
+    // ===== basicAuthChallengeKey =====================================
+    function test_challengeKey_popupAndThumbOfSameTabDiffer() {
+        // Same profile, URL and realm: only the asking view tells them apart.
+        verify(U.basicAuthChallengeKey("popup:0", "p", "https://dash.example/d/x", "realm")
+               !== U.basicAuthChallengeKey("thumb:0", "p", "https://dash.example/d/x", "realm"));
+    }
+    function test_challengeKey_sameViewSameChallengeMatches() {
+        // The wrong-password loop guard still catches one view's re-challenge.
+        compare(U.basicAuthChallengeKey("popup:0", "p", "https://dash.example/d/x", "realm"),
+                U.basicAuthChallengeKey("popup:0", "p", "https://dash.example/d/x", "realm"));
+    }
+    function test_challengeKey_missingRealmMatchesEmpty() {
+        compare(U.basicAuthChallengeKey("thumb:1", "p", "https://dash.example/", undefined),
+                U.basicAuthChallengeKey("thumb:1", "p", "https://dash.example/", ""));
+    }
+    function test_sequence_popupAndThumbChallengedTogetherBothAnswered() {
+        // Both views of one tab reload together (password changed in the
+        // KCM) and are challenged 5 ms apart: each carries the password.
+        const answered = {};
+        let sent = 0;
+        let now = 1000;
+        for (const view of ["thumb:0", "popup:0"]) {
+            const key = U.basicAuthChallengeKey(view, "p", "https://dash.example/d/x", "realm");
+            if (U.mayAutoAnswerBasicAuth(answered[key], now)) {
+                answered[key] = now;
+                sent++;
+            }
+            now += 5;
+        }
+        compare(sent, 2);
+    }
 }

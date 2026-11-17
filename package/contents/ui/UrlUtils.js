@@ -191,6 +191,15 @@ function changedAuthProfileIds(oldBodies, newBodies) {
 // network speed (lockout, fail2ban) and Qt's prompt, the one place to type
 // a working password, would never show.
 const BASIC_AUTH_REANSWER_MS = 10000;
+// The key mayAutoAnswerBasicAuth's last-answer map is read and written
+// under. Keyed by request URL, not host: tabs that share a profile and host
+// are each challenged once and must each be answered. `view` names the
+// asking view ("popup:<i>", "thumb:<i>"): a tab's popup and its thumbnail
+// share profile and URL, and when both are challenged at once the second
+// must not be read as a rejection of the first one's answer.
+function basicAuthChallengeKey(view, profileId, requestUrl, realm) {
+    return String(view) + "|" + profileId + "|" + String(requestUrl) + "|" + (realm || "");
+}
 function mayAutoAnswerBasicAuth(lastAnsweredMs, nowMs) {
     if (!lastAnsweredMs) return true;
     const elapsed = nowMs - lastAnsweredMs;
