@@ -1271,6 +1271,33 @@ test("hidden page: a pending uPlot canvas scans the body, as apply() does", () =
     assert.deepEqual(t.kw(), ["[ifp-keyword] hit=true"]);
 });
 
+// jsdom has no innerText; Chromium's leaves out what is not rendered, which
+// is what makes a stale isolation hide the rest of the page from the scan.
+function emulateInnerText(w) {
+    const rendered = (n) => {
+        if (n.nodeType === 3) return n.data;
+        if (n.nodeType !== 1 || w.getComputedStyle(n).display === "none") return "";
+        return Array.from(n.childNodes).map(rendered).join("");
+    };
+    Object.defineProperty(w.HTMLElement.prototype, "innerText", {
+        configurable: true, get() { return rendered(this); } });
+}
+
+test("hidden page: a selector that stops matching drops the isolation before scanning the body", () => {
+    const hidden = { value: true };
+    const t = runKeywordApply(hidden,
+        "<p id='a' class='alert'>fine</p><div id='b'>OFFLINE</div>", ".alert", ["offline"]);
+    emulateInnerText(t.w);
+    t.tickInterval();
+    assert.deepEqual(t.kw(), ["[ifp-keyword] hit=false"]);
+    // The class goes away while the tab is hidden; nothing matches now.
+    t.w.document.getElementById("a").classList.remove("alert");
+    t.tickInterval();
+    assert.equal(t.w.document.documentElement.getAttribute("data-ifp-isolate"), null);
+    assert.deepEqual(t.kw(), ["[ifp-keyword] hit=false", "[ifp-keyword] hit=true"]);
+    assert.equal(t.rafCalls(), 0, "hidden page must not queue animation frames");
+});
+
 test("visible page: interval still goes through rAF", () => {
     const hidden = { value: false };
     const t = runKeywordApply(hidden);

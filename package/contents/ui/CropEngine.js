@@ -762,6 +762,10 @@ const _APPLY_BODY = `(function(sel, opts){
           // 'canvas-pending' and scans <body>; the bare canvas has no text,
           // so scanning it would clear a hit the visible page just reported.
           if (matchedEl && isUplotCanvas(matchedEl) && !window.__ifpLastCropKey) matchedEl = null;
+          // And drop the crop, as apply() does in each of those cases: a
+          // stale isolation keeps every other part of <body> display:none,
+          // which innerText leaves out of the scan.
+          if (!matchedEl) dropCrop();
         }
         runKeywordScan();
       }
