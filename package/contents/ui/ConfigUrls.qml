@@ -11,6 +11,7 @@ import org.kde.kirigami as Kirigami
 import "./GrafanaUrl.js" as GrafanaUrl
 import "./RowSchema.js" as RowSchema
 import "./UrlUtils.js" as UrlUtils
+import "./WheelScroll.js" as WheelScroll
 
 KCM.SimpleKCM {
     id: page
@@ -59,6 +60,16 @@ KCM.SimpleKCM {
     function _setRowField(idx, field, val) {
         listModel.setProperty(idx, field, val);
         store.serialize();
+    }
+
+    // Scroll a just-appended card into view once the ListView has laid it
+    // out. SimpleKCM expands the list to full height, so setting
+    // urlList.currentIndex scrolled nothing (see WheelScroll.ensureVisible).
+    function _revealLastRow() {
+        Qt.callLater(() => {
+            urlList.forceLayout();
+            WheelScroll.ensureVisible(urlList.itemAtIndex(listModel.count - 1));
+        });
     }
 
     // Keyword chip-list helpers. The on-row field stores a JSON-string
@@ -348,7 +359,7 @@ KCM.SimpleKCM {
                 onClicked: {
                     listModel.append({ label: "", url: "https://", rowEnabled: true, authProfileId: "", thumbMode: "chartOnly", thumbSelector: "", thumbText: "", thumbIconName: "", thumbTimeRange: "", thumbScaleMode: "fit", thumbExcludeKeywords: "[]", thumbShowLabel: false, excludeFromRotation: false, popupMode: "fullPanel", popupSelector: "" });
                     store.serialize();
-                    urlList.currentIndex = listModel.count - 1;
+                    page._revealLastRow();
                 }
             }
             QQC.Button {
@@ -1635,6 +1646,7 @@ KCM.SimpleKCM {
             const lbl = deriveLabel(vpMatch ? vpMatch[1] : null);
             listModel.append({ label: lbl, url: out, rowEnabled: true, authProfileId: "", thumbMode: "chartOnly", thumbSelector: "", thumbText: "", thumbIconName: "", thumbTimeRange: "", thumbScaleMode: "fit", thumbExcludeKeywords: "[]", thumbShowLabel: false, excludeFromRotation: false, popupMode: "fullPanel", popupSelector: "" });
             store.serialize();
+            page._revealLastRow();
             // Paste fields + control defaults are reset centrally in onClosed
             // (accept() closes the dialog), covering this path and cancel alike.
         }

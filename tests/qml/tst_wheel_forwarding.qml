@@ -5,6 +5,7 @@
 import QtQuick
 import QtTest
 import "../../package/contents/ui"
+import "../../package/contents/ui/WheelScroll.js" as WheelScroll
 
 // ScrollForwardingWheelHandler, NoWheel and PopupWheelForwarder scroll the
 // nearest overflowing
@@ -82,6 +83,24 @@ Item {
         PopupWheelForwarder {
             combo: fakeCombo
             scrollTarget: popupTarget
+        }
+    }
+
+    // The KCM row-list shape: SimpleKCM's page Flickable around a ListView
+    // expanded to its full content height, so only the page scrolls.
+    ListModel { id: rowModel }
+    Flickable {
+        id: pageFlick
+        y: 300
+        width: 400; height: 100
+        contentHeight: rowList.height
+        ListView {
+            id: rowList
+            width: parent.width
+            height: contentHeight
+            interactive: false
+            model: rowModel
+            delegate: Rectangle { width: 100; height: 60 }
         }
     }
 
@@ -216,6 +235,44 @@ Item {
             popupTarget.contentY = 1190;
             wheelDown(popupList);
             compare(popupTarget.contentY, 1200);
+        }
+
+        // ===== ensureVisible: reveal a newly added KCM row ===========
+        // "Add URL" / "Add profile" set ListView.currentIndex, which
+        // cannot scroll a list the page expanded to full height: the new
+        // card stayed below the fold. ensureVisible moves the page.
+        function _rows(n) {
+            rowModel.clear();
+            for (let i = 0; i < n; i++) rowModel.append({});
+            rowList.forceLayout();
+            pageFlick.contentY = 0;
+        }
+        function test_ensureVisible_scrollsPageToAppendedRow() {
+            _rows(4);
+            rowModel.append({});
+            rowList.forceLayout();
+            tryCompare(pageFlick, "contentHeight", 300);
+            WheelScroll.ensureVisible(rowList.itemAtIndex(4));
+            // Row 4 spans 240..300 in a 100-px viewport.
+            compare(pageFlick.contentY, 200);
+        }
+        function test_ensureVisible_visibleRowStaysPut() {
+            _rows(5);
+            pageFlick.contentY = 30;
+            WheelScroll.ensureVisible(rowList.itemAtIndex(1));
+            compare(pageFlick.contentY, 30);
+        }
+        function test_ensureVisible_rowAboveScrollsUp() {
+            _rows(5);
+            pageFlick.contentY = 200;
+            WheelScroll.ensureVisible(rowList.itemAtIndex(1));
+            compare(pageFlick.contentY, 60);
+        }
+        function test_ensureVisible_nullItemIgnored() {
+            _rows(5);
+            pageFlick.contentY = 40;
+            WheelScroll.ensureVisible(null);
+            compare(pageFlick.contentY, 40);
         }
     }
 }

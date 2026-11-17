@@ -38,8 +38,27 @@ function findOverflowing(item) {
 
 // Scroll `p` by a wheel delta `dy` (positive = up), clamped to its range.
 function scrollBy(p, dy) {
+    p.contentY = _clamp(p, p.contentY - dy);
+}
+
+function _clamp(p, y) {
     const o = p.originY !== undefined ? p.originY : 0;
     const lo = o - (p.topMargin || 0);
     const hi = o + p.contentHeight + (p.bottomMargin || 0) - p.height;
-    p.contentY = Math.max(lo, Math.min(hi, p.contentY - dy));
+    return Math.max(lo, Math.min(hi, y));
+}
+
+// Scroll the nearest overflowing ancestor of `item` the least distance
+// that brings `item` fully into view (its top, when taller than the
+// viewport). In the KCM pages the row ListView sits in a ScrollView that
+// SimpleKCM expands to full content height, so ListView.currentIndex
+// cannot scroll it: only the page Flickable around it moves.
+function ensureVisible(item) {
+    const p = item ? findOverflowing(item.parent) : null;
+    if (!p || !p.contentItem) return;
+    const top = item.mapToItem(p.contentItem, 0, 0).y;
+    let y = p.contentY;
+    if (top + item.height > y + p.height) y = top + item.height - p.height;
+    if (top < y) y = top;
+    p.contentY = _clamp(p, y);
 }

@@ -9,6 +9,7 @@ import org.kde.kcmutils as KCM
 import org.kde.kirigami as Kirigami
 import "sanitize.js" as Sanitize
 import "./RowSchema.js" as RowSchema
+import "./WheelScroll.js" as WheelScroll
 
 KCM.SimpleKCM {
     id: page
@@ -250,7 +251,12 @@ KCM.SimpleKCM {
             preempt: false
         });
         store.serialize();
-        profileList.currentIndex = listModel.count - 1;
+        // currentIndex cannot scroll the full-height list: move the page
+        // Flickable around it instead (see WheelScroll.ensureVisible).
+        Qt.callLater(() => {
+            profileList.forceLayout();
+            WheelScroll.ensureVisible(profileList.itemAtIndex(listModel.count - 1));
+        });
     }
 
     QQC.ScrollView {
