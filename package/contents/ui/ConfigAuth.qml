@@ -495,13 +495,11 @@ KCM.SimpleKCM {
                         }
                     }
 
+                    // Shown for every type: the widget applies the host to
+                    // `none` profiles too (an SSO-fronted page that handles
+                    // its own login), so hiding it left a set value stuck.
                     RowLayout {
                         Layout.fillWidth: true
-                        // Authelia re-auth overlay only makes sense when the
-                        // profile carries credentials worth re-presenting on
-                        // a redirect. `none` profiles let the page handle
-                        // its own login end-to-end.
-                        visible: card.authType !== "none"
                         QQC.Label { text: i18n("Authelia host:"); Layout.preferredWidth: Kirigami.Units.gridUnit * 8 }
                         QQC.TextField {
                             Layout.fillWidth: true

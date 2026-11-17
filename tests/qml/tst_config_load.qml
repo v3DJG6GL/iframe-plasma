@@ -24,6 +24,24 @@ Item {
     function i18np(singular, plural, n) { return n === 1 ? singular : plural; }
     function i18ncp(context, singular, plural, n) { return n === 1 ? singular : plural; }
 
+    // Depth-first search of a page's object tree (popups live in `data`,
+    // not `children`).
+    function findObject(obj, pred, seen) {
+        seen = seen || [];
+        if (!obj || seen.indexOf(obj) !== -1) return null;
+        seen.push(obj);
+        if (pred(obj)) return obj;
+        for (const key of ["data", "children", "contentItem"]) {
+            const v = obj[key];
+            const list = (v && v.length !== undefined) ? v : (v ? [v] : []);
+            for (let i = 0; i < list.length; i++) {
+                const hit = findObject(list[i], pred, seen);
+                if (hit) return hit;
+            }
+        }
+        return null;
+    }
+
     Component { id: urlsPage; Ui.ConfigUrls {} }
     Component { id: authPage; Ui.ConfigAuth {} }
 
@@ -84,37 +102,21 @@ Item {
         name: "ConfigUrlsGrafanaHelper"
         when: windowShown
 
-        // Depth-first search of the page's object tree (popups live in
-        // `data`, not `children`).
-        function _find(obj, pred, seen) {
-            if (!obj || seen.indexOf(obj) !== -1) return null;
-            seen.push(obj);
-            if (pred(obj)) return obj;
-            for (const key of ["data", "children", "contentItem"]) {
-                const v = obj[key];
-                const list = (v && v.length !== undefined) ? v : (v ? [v] : []);
-                for (let i = 0; i < list.length; i++) {
-                    const hit = _find(list[i], pred, seen);
-                    if (hit) return hit;
-                }
-            }
-            return null;
-        }
         function _helper(page) {
-            const d = _find(page, o => o.editingIndex !== undefined
-                                    && o.standardButton !== undefined, []);
+            const d = root.findObject(page, o => o.editingIndex !== undefined
+                                    && o.standardButton !== undefined);
             verify(d !== null);
             return d;
         }
         function _pasteField(dialog) {
-            const f = _find(dialog.contentItem, o => typeof o.placeholderText === "string"
-                && o.placeholderText.indexOf("grafana.example.com/d/") !== -1, []);
+            const f = root.findObject(dialog.contentItem, o => typeof o.placeholderText === "string"
+                && o.placeholderText.indexOf("grafana.example.com/d/") !== -1);
             verify(f !== null);
             return f;
         }
         function _errorShown(dialog) {
-            return _find(dialog.contentItem, o => o.type === Kirigami.MessageType.Error
-                && o.visible === true && typeof o.text === "string", []) !== null;
+            return root.findObject(dialog.contentItem, o => o.type === Kirigami.MessageType.Error
+                && o.visible === true && typeof o.text === "string") !== null;
         }
 
         // A URL wrapped across two lines made OK a silent no-op: the dialog
@@ -132,6 +134,31 @@ Item {
             verify(!_errorShown(dialog));
             compare(dialog.standardButton(Dialog.Ok).enabled, true);
             dialog.close();
+        }
+    }
+
+    // The Authentication page's per-profile cards.
+    TestCase {
+        name: "ConfigAuthCards"
+        when: windowShown
+
+        // The widget applies a None profile's Authelia host (overlay plus
+        // forced popup on every redirect there), but the card hid the
+        // field, so a host set before switching to None could not be
+        // cleared.
+        function test_noneProfile_showsAutheliaHost() {
+            const page = createTemporaryObject(authPage, root, {
+                cfg_authProfilesJson: JSON.stringify([{ id: "p", name: "SSO",
+                    authType: "none", username: "", autheliaHost: "auth.example.com",
+                    preempt: false }]) });
+            verify(page !== null);
+            let field = null;
+            tryVerify(() => {
+                field = root.findObject(page, o => o.text === "auth.example.com"
+                                      && typeof o.placeholderText === "string");
+                return field !== null;
+            });
+            verify(field.parent.visible);
         }
     }
 }
