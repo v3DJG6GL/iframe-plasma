@@ -1709,6 +1709,29 @@ test("keyword scan: a display:none matched element's own aria-label does not mat
     assert.deepEqual(t.kw(), ["[ifp-keyword] hit=false"]);
 });
 
+test("keyword scan: an svg match reads only its rendered text", () => {
+    // Chromium has innerText on HTML elements only; an svg's textContent
+    // would also read its <style> rules, <title> and display:none groups.
+    for (const shown of ["<text><tspan>Offline</tspan></text>",
+                         "<foreignObject><div>Offline</div></foreignObject>"]) {
+        const hidden = { value: true };
+        const t = runKeywordApply(hidden,
+            "<div id='box'><svg id='chart'><style>.error-text{fill:red}</style>" +
+            "<title>error</title><g style='display:none'><text>offline</text></g>" +
+            "<text>OK</text></svg></div>", "#chart", ["error", "offline"]);
+        emulateInnerText(t.w);
+        emulateCheckVisibility(t.w);
+        t.tickInterval();
+        assert.equal(t.kw().at(-1), "[ifp-keyword] hit=false", shown);
+        // Drawn text still counts, in a <text> run or a <foreignObject>.
+        t.w.document.getElementById("chart").insertAdjacentHTML("beforeend", shown);
+        assert.equal(t.w.document.getElementById("chart").lastChild.namespaceURI,
+                     "http://www.w3.org/2000/svg", shown);
+        t.tickInterval();
+        assert.equal(t.kw().at(-1), "[ifp-keyword] hit=true", shown);
+    }
+});
+
 // ============================================================
 // apply: the first rendered match is isolated
 // ============================================================

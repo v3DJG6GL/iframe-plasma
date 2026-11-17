@@ -519,14 +519,31 @@ const _APPLY_BODY = `(function(sel, opts){
   // instead; fall back to textContent there so the scan still works.
   // Empty-string innerText IS respected (means the rendered content is
   // genuinely empty, e.g. a banner intentionally hidden via display:none).
+  // SVG elements have no innerText (Chromium has it on HTMLElement only),
+  // and their textContent would read <style> rules, <title>/<desc> and
+  // display:none groups: svgScanText() reads only what is drawn.
+  function svgScanText(root) {
+    var nodes = root.matches('text, text *') ? [root]
+      : Array.prototype.slice.call(root.querySelectorAll('text, foreignObject > *'));
+    var parts = [];
+    for (var i = 0; i < nodes.length; i++) {
+      var n = nodes[i];
+      if (n.checkVisibility
+          && !n.checkVisibility({ checkVisibilityCSS: true, visibilityProperty: true })) continue;
+      var t = n.innerText;
+      parts.push(typeof t === 'string' ? t : (n.textContent || ''));
+    }
+    return parts.join('\\n');
+  }
   function getScanText() {
     var root = matchedEl || document.body;
     if (!root) return '';
     var txt = '';
     try {
       var it = root.innerText;
-      if (typeof it !== 'string') txt = root.textContent || '';
-      else txt = it;
+      if (typeof it === 'string') txt = it;
+      else if (root.namespaceURI === 'http://www.w3.org/2000/svg') txt = svgScanText(root);
+      else txt = root.textContent || '';
     } catch (e) {
       try { txt = root.textContent || ''; } catch (e2) { txt = ''; }
     }
