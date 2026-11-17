@@ -2666,6 +2666,7 @@ PlasmoidItem {
             refreshInterval: root.activeTab ? root.activeTab.currentRefreshInterval : ""
             isGrafana:       root.activeTab?.webView ? root.isGrafanaEmbed(root.activeTab.webView.url) : false
             pinned:          Plasmoid.configuration.popupPinned
+            pickerActive:    root.activeTab ? root.activeTab.pickerActive : false
             onPinToggled:    Plasmoid.configuration.popupPinned = !Plasmoid.configuration.popupPinned
             onReloadClicked:        root._tabReloadRequested(root.currentTabIndex, "soft")
             onHardReloadClicked:    root._tabReloadRequested(root.currentTabIndex, "hard")

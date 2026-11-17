@@ -49,6 +49,10 @@ Rectangle {
     // the checked state of the pin button below; we never write the
     // config from here (this component owns no state — see file header).
     property bool pinned: false
+    // Bound from main.qml to the active tab's pickerActive. The picker
+    // menu item toggles (main.qml cancels a running picker), so its
+    // label has to say so.
+    property bool pickerActive: false
     // True while the full popup representation is on screen. Infinite
     // animations (reload spinner, chip-pulse) gate on this so they
     // don't keep the QtQuick animation timer ticking while the full
@@ -218,7 +222,9 @@ Rectangle {
         QQC.Menu {
             id: moreMenu
             QQC.MenuItem {
-                text: i18n("Pick element to crop…")
+                objectName: "pickerMenuItem"
+                text: tb.pickerActive ? i18n("Cancel element picker")
+                                      : i18n("Pick element to crop…")
                 icon.name: "tool_color_picker"
                 // Same gate as the previous standalone picker button —
                 // pickerStart on a blank tab has nothing to inject into.

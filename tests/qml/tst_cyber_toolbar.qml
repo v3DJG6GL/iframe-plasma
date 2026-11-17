@@ -32,6 +32,7 @@ Item {
             toolbar.isGrafana = true;
             toolbar.refreshInterval = "";
             toolbar.fullRepVisible = false;
+            toolbar.pickerActive = false;
         }
 
         // ============================================================
@@ -76,6 +77,20 @@ Item {
             toolbar.isGrafana = false;
             verify(!chip.visible);
             verify(!chip.pulseEnabled);
+        }
+
+        // ============================================================
+        //  picker menu item
+        // ============================================================
+        function test_pickerMenuItem_labelFollowsPickerState() {
+            const item = findChild(toolbar, "pickerMenuItem");
+            verify(item !== null);
+            compare(item.text, "Pick element to crop…");
+            // main.qml cancels a running picker on this item.
+            toolbar.pickerActive = true;
+            compare(item.text, "Cancel element picker");
+            toolbar.pickerActive = false;
+            compare(item.text, "Pick element to crop…");
         }
     }
 }
