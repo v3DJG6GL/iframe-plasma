@@ -161,8 +161,11 @@ function authCoversRequest(tabUrl, requestUrl) {
 
 // id -> JSON body of every auth profile: the snapshot main.qml keeps so a
 // later authProfilesJson change can be diffed against what was live before.
+// Null-prototype map: an imported id like "__proto__" or "constructor" must
+// be an own key, not hit an Object.prototype member (QV4 throws on the
+// "__proto__" write, which aborted main.qml's auth priming).
 function authProfileBodies(profiles) {
-    const out = {};
+    const out = Object.create(null);
     if (!Array.isArray(profiles)) return out;
     for (const p of profiles) {
         if (p && p.id) out[p.id] = JSON.stringify(p);
@@ -171,15 +174,18 @@ function authProfileBodies(profiles) {
 }
 
 // Ids added, removed or body-different between two authProfileBodies maps.
+// Own keys only, so an id naming an Object.prototype member is never read
+// as, or found via, an inherited function.
 function changedAuthProfileIds(oldBodies, newBodies) {
     const o = oldBodies || {};
     const n = newBodies || {};
+    const has = (m, id) => Object.prototype.hasOwnProperty.call(m, id);
     const changed = [];
-    for (const id in n) {
-        if (n[id] !== o[id]) changed.push(id);
+    for (const id of Object.keys(n)) {
+        if (!has(o, id) || n[id] !== o[id]) changed.push(id);
     }
-    for (const id in o) {
-        if (!(id in n)) changed.push(id);
+    for (const id of Object.keys(o)) {
+        if (!has(n, id)) changed.push(id);
     }
     return changed;
 }

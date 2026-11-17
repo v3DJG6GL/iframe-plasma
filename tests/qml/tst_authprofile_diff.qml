@@ -82,6 +82,34 @@ TestCase {
         compare(U.changedAuthProfileIds(null, U.authProfileBodies([{ id: "a" }])), ["a"]);
     }
 
+    // ===== ids naming Object.prototype members ======================
+    // isSafeAuthProfileId accepts them and a Backup import can carry one.
+    // A "__proto__" write threw (aborting main.qml's auth priming), and
+    // "constructor" / "toString" were diffed against inherited functions.
+    function test_bodies_protoIdIsOwnKey() {
+        const b = U.authProfileBodies([{ id: "__proto__" }, { id: "a" }]);
+        compare(Object.keys(b).sort(), ["__proto__", "a"]);
+        compare(b["__proto__"], JSON.stringify({ id: "__proto__" }));
+    }
+    function test_changed_prototypeNameIdRemoved() {
+        compare(U.changedAuthProfileIds(U.authProfileBodies([{ id: "toString" }]), {}),
+                ["toString"]);
+    }
+    function test_changed_prototypeNameIdAdded() {
+        compare(U.changedAuthProfileIds({}, U.authProfileBodies([{ id: "constructor" }])),
+                ["constructor"]);
+    }
+    function test_changed_prototypeNameIdBodyDiffers() {
+        compare(U.changedAuthProfileIds(
+            U.authProfileBodies([{ id: "valueOf", username: "u" }]),
+            U.authProfileBodies([{ id: "valueOf", username: "v" }])), ["valueOf"]);
+    }
+    function test_changed_prototypeNameIdUnchanged() {
+        compare(U.changedAuthProfileIds(
+            U.authProfileBodies([{ id: "hasOwnProperty" }]),
+            U.authProfileBodies([{ id: "hasOwnProperty" }])), []);
+    }
+
     // ===== First change of a session =================================
     function test_firstConfigChange_reportsEditedProfile() {
         // Seed as main.qml's Component.onCompleted does. No test above

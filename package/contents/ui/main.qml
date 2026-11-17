@@ -446,12 +446,14 @@ PlasmoidItem {
 
     // authProfileId -> WebEngineProfile (cached, lifetime = root).
     // Key "" is the ephemeral off-the-record profile used by all auth=None tabs.
-    property var _profiles: ({})
+    // Both caches are null-prototype maps: an imported id like "constructor"
+    // or "__proto__" must miss, not return an Object.prototype member.
+    property var _profiles: Object.create(null)
     // authProfileId -> BasicAuthInterceptor (per-profile m_headers so the
     // Authorization header registered for profile "admin" never injects on
     // requests routed through profile "viewer" or the ephemeral profile).
     // Ephemeral profile gets no interceptor at all.
-    property var _interceptors: ({})
+    property var _interceptors: Object.create(null)
 
     // Component template — Qt 6.9+ deprecated direct `WebEngineProfile`
     // instantiation from QML; the replacement is `WebEngineProfilePrototype`,
