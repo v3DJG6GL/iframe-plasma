@@ -91,6 +91,14 @@ function parseAuthProfiles(jsonStr, logCategory) {
     }
 }
 
+// Whether an auth-profile id may name on-disk profile storage. main.qml
+// concatenates the id into storageName and persistentStoragePath, so an id
+// like "../x" from a Backup import would escape the storage root. Generated
+// ids are hex-and-dash UUIDs (ConfigAuth newUuid).
+function isSafeAuthProfileId(id) {
+    return typeof id === "string" && /^[A-Za-z0-9_-]+$/.test(id);
+}
+
 // Host key of a URL in the exact form the C++ interceptor looks up
 // (canonicalizeHost): lowercased, IPv6 literal bracketed, the scheme's
 // default port dropped. QML's `URL` is QUrl-backed, not WHATWG: its `.host`

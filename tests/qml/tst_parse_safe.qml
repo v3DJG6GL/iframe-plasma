@@ -94,6 +94,23 @@ TestCase {
         compare(out[0].authType, "oauth2");
     }
 
+    // ----- isSafeAuthProfileId (the id becomes a profile storage path) -----
+    function test_isSafeAuthProfileId_acceptsGeneratedUuid() {
+        verify(U.isSafeAuthProfileId("3f2a9c1e-7b4d-4e8f-9a01-23456789abcd"));
+    }
+    function test_isSafeAuthProfileId_rejectsTraversal() {
+        verify(!U.isSafeAuthProfileId("../../../x"));
+        verify(!U.isSafeAuthProfileId("../otherPlasmoid/abc"));
+        verify(!U.isSafeAuthProfileId(".."));
+    }
+    function test_isSafeAuthProfileId_rejectsSeparatorsAndEmpty() {
+        verify(!U.isSafeAuthProfileId("a/b"));
+        verify(!U.isSafeAuthProfileId("a\\b"));
+        verify(!U.isSafeAuthProfileId(""));
+        verify(!U.isSafeAuthProfileId(null));
+        verify(!U.isSafeAuthProfileId(42));
+    }
+
     // ----- hostKey (must equal the C++ canonicalizeHost lookup key) -----
     function test_hostKey_data() {
         return [

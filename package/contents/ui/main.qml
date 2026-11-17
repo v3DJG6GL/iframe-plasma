@@ -475,6 +475,14 @@ PlasmoidItem {
         const key = authProfileId || "";
         if (root._profiles[key]) return root._profiles[key];
         const isEphemeral = (key.length === 0);
+        if (!isEphemeral && !UrlUtils.isSafeAuthProfileId(key)) {
+            // The id becomes a storage path below; never let it leave the
+            // storage root. The ephemeral profile keeps the tab usable
+            // without touching disk or carrying any credential.
+            console.warn(Log.auth, "iframe-plasma[profile] refusing unsafe auth-profile id="
+                + JSON.stringify(key) + " — using the ephemeral profile");
+            return root.profileForAuthId("");
+        }
         // Empty storageName + empty persistentStoragePath drives the
         // underlying QQuickWebEngineProfile into off-the-record mode for the
         // ephemeral path (no cookies/cache touch disk).  offTheRecord = true
