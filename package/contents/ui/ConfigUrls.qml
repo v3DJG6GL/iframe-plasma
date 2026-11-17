@@ -619,9 +619,12 @@ KCM.SimpleKCM {
                             // round-trip and reaches WebEngineView navigation.
                             // Same threat-class as the helper reject + the
                             // auth-interceptor C0-byte reject + the userAgent
-                            // CR/LF strip.
+                            // CR/LF strip. Also trim like GrafanaUrl.transform:
+                            // a pasted leading space/tab would fail
+                            // isSafeTabUrl's ^https? test and silently drop
+                            // the enabled row from the live tab set.
                             onEditingFinished: {
-                                const cleaned = String(text).replace(/[\r\n\0]/g, "");
+                                const cleaned = String(text).replace(/[\r\n\0]/g, "").trim();
                                 page._setRowField(index, "url", cleaned);
                                 // Re-bind rather than assign: a plain `text =
                                 // cleaned` would detach the field from the
