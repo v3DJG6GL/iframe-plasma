@@ -22,13 +22,13 @@
 #       → same path, no version bump.
 #
 # Setup:
-#   * secret RELEASE_TOKEN (or CI_TOKEN), an owner token with
-#     write:repository — the version job needs it to push to protected master;
-#   * secret PACKAGE_TOKEN (user-level is fine), an owner token with
-#     write:package + read:repository, for the Arch registry upload: it
-#     downloads the package from the release (the run's own token counts as
-#     anonymous on attachment downloads, which a private owner refuses) and
-#     pushes it to the registry.
+#   * secret FJ_REPO_WRITE (user level is fine), a Forgejo owner token with
+#     write:repository: the version job pushes to protected master with it, and
+#     the Arch registry step downloads the package from the release with it
+#     (the run's own token counts as anonymous on attachment downloads, which a
+#     private owner refuses);
+#   * secret FJ_PACKAGES_WRITE, a Forgejo owner token with write:package, for
+#     the push into the Arch package registry.
 #
 # The release API calls live in scripts/forgejo-release.sh. Forgejo swallows
 # events pushed with the Actions token, so the version job's tag push starts no
@@ -81,13 +81,13 @@ jobs:
         env:
           BUMP: ${{ inputs.bump }}
           # Must carry write:repository (a read-only token's push 403s).
-          PUSH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.CI_TOKEN }}
+          PUSH_TOKEN: ${{ secrets.FJ_REPO_WRITE }}
           # The run-scoped Actions token, for the tag push (see below).
           ACTIONS_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           if [ -z "$PUSH_TOKEN" ]; then
-            echo "::error::no RELEASE_TOKEN (or CI_TOKEN) secret — the version bump cannot be pushed to protected $GITHUB_REF_NAME"
+            echo "::error::no FJ_REPO_WRITE secret — the version bump cannot be pushed to protected $GITHUB_REF_NAME"
             exit 1
           fi
           scripts/version.sh --check
@@ -367,12 +367,13 @@ jobs:
       # next `pacman -Syu`.
       - name: Push the Arch package to the package registry
         env:
-          TOKEN: ${{ secrets.PACKAGE_TOKEN }}
+          TOKEN: ${{ secrets.FJ_REPO_WRITE }}
+          REGISTRY_TOKEN: ${{ secrets.FJ_PACKAGES_WRITE }}
           REPO: ${{ github.repository }}
           API: ${{ github.api_url }}
         run: |
-          if [ -z "$TOKEN" ]; then
-            echo "::error::no PACKAGE_TOKEN secret (owner token with write:package + read:repository) — the Arch package was not pushed to the registry"
+          if [ -z "$TOKEN" ] || [ -z "$REGISTRY_TOKEN" ]; then
+            echo "::error::FJ_REPO_WRITE (download) and FJ_PACKAGES_WRITE (registry push) secrets are both required — the Arch package was not pushed to the registry"
             exit 1
           fi
           scripts/forgejo-release.sh arch-registry "${{ needs.draft.outputs.release_id }}" \

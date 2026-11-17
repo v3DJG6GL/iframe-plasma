@@ -18,13 +18,13 @@
 # releases created by the Actions token), manual releases/edits emit `release`, and two
 # daily crons reconcile anything missed.
 #
-# Setup: secret GH_MIRROR_TOKEN (repository or user level), a GitHub token that can write
-# releases on the mirror repo: classic with `repo` scope, or fine-grained with
-# "Contents: read and write" on that repo. Without it the job only logs a notice.
-# Secret PACKAGE_TOKEN (see release.yml; read:repository is what this job uses) to download
-# the release assets: the run's own token counts as anonymous on attachment downloads, which a
-# private owner refuses. Without it the job falls back to the run token, which only works
-# while the owner is public.
+# Setup (secrets, user level is fine):
+#   * GH_REPO_PACKAGES_WRITE: GitHub token that can write releases on the mirror repo
+#     (classic `repo`, or fine-grained "Contents: read and write"). Without it the job
+#     only logs a notice.
+#   * FJ_REPO_WRITE: Forgejo owner token (write:repository; this job only reads) to download
+#     the release assets. The run's own token counts as anonymous on attachment downloads,
+#     which a private owner refuses with a 404.
 #
 # Sync semantics:
 #   * Drafts are skipped.
@@ -60,10 +60,10 @@ jobs:
     steps:
       - name: Sync releases (create missing, patch drift, fill assets)
         env:
-          GH_MIRROR_TOKEN: ${{ secrets.GH_MIRROR_TOKEN }}
+          DST_TOKEN: ${{ secrets.GH_REPO_PACKAGES_WRITE }}
           # An owner token, not the run token: the run token counts as anonymous on attachment
           # downloads, which a private owner refuses (see the Setup header).
-          SRC_TOKEN: ${{ secrets.PACKAGE_TOKEN || secrets.GITHUB_TOKEN }}
+          SRC_TOKEN: ${{ secrets.FJ_REPO_WRITE }}
         run: |
           set -euo pipefail
 
@@ -72,25 +72,29 @@ jobs:
           dst_api="https://api.github.com"
           echo "Syncing releases $SRC_REPO -> github.com/$DST_REPO"
 
-          if [ -z "$GH_MIRROR_TOKEN" ]; then
-            echo "::notice::GH_MIRROR_TOKEN secret not configured — skipping mirror"
+          if [ -z "$DST_TOKEN" ]; then
+            echo "::notice::GH_REPO_PACKAGES_WRITE secret not configured — skipping mirror"
             exit 0
+          fi
+          if [ -z "$SRC_TOKEN" ]; then
+            echo "::error::FJ_REPO_WRITE secret not configured — the release assets cannot be downloaded"
+            exit 1
           fi
           command -v jq >/dev/null || { apt-get update -qq && apt-get install -y -qq jq; }
 
           SRC_HDR="Authorization: token $SRC_TOKEN"
-          DST_HDR="Authorization: Bearer $GH_MIRROR_TOKEN"
+          DST_HDR="Authorization: Bearer $DST_TOKEN"
           # Reads retry (transient network); writes do not (a retried POST could double-create;
           # a failed write converges on the next run).
           # On failure, name the URL: curl's own message does not, and a 404 from a
           # token that cannot see the repo looks the same on either side.
           urls() { local a; for a; do case $a in http*) printf '%s ' "$a" ;; esac; done; }
           sget() { curl -fsS --retry 3 --retry-delay 5 --retry-connrefused --retry-all-errors -H "$SRC_HDR" "$@" \
-            || { local rc=$?; echo "::error::source request failed (SRC_TOKEN): $(urls "$@")" >&2; return $rc; }; }
+            || { local rc=$?; echo "::error::source request failed (FJ_REPO_WRITE): $(urls "$@")" >&2; return $rc; }; }
           dget() { curl -fsS --retry 3 --retry-delay 5 --retry-connrefused --retry-all-errors -H "$DST_HDR" "$@" \
-            || { local rc=$?; echo "::error::github.com request failed (GH_MIRROR_TOKEN): $(urls "$@")" >&2; return $rc; }; }
+            || { local rc=$?; echo "::error::github.com request failed (GH_REPO_PACKAGES_WRITE): $(urls "$@")" >&2; return $rc; }; }
           dput() { curl -fsS -H "$DST_HDR" "$@" \
-            || { local rc=$?; echo "::error::github.com write failed (GH_MIRROR_TOKEN): $(urls "$@")" >&2; return $rc; }; }
+            || { local rc=$?; echo "::error::github.com write failed (GH_REPO_PACKAGES_WRITE): $(urls "$@")" >&2; return $rc; }; }
 
           # ---- source releases (paginated), drafts dropped, oldest first ----
           page=1

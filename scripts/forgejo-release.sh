@@ -18,8 +18,9 @@
 #       Push every .pkg.tar.zst attached to release <id> to the owner's Arch
 #       package registry under <group>. A version the registry already holds
 #       is left as it is (Forgejo answers 409). TOKEN must be a user token
-#       with read:repository + write:package: the Actions token counts as
-#       anonymous on attachment downloads.
+#       that can read the repository (the Actions token counts as anonymous on
+#       attachment downloads); REGISTRY_TOKEN, a token of <owner> with
+#       write:package, does the registry push (defaults to TOKEN).
 set -euo pipefail
 
 : "${TOKEN:?}" "${REPO:?}" "${API:?}"
@@ -82,6 +83,7 @@ case "$cmd" in
     arch-registry)
         id=$1 owner=$2 group=$3
         registry="${API%/api/v1}/api/packages/$owner/arch/$group"
+        reg_hdr="Authorization: token ${REGISTRY_TOKEN:-$TOKEN}"
         work=$(mktemp -d)
         assets=$(curl -fsS -H "$hdr" "$rel/$id/assets")
         url_of() { jq -r --arg n "$1" '.[] | select(.name == $n) | .browser_download_url' <<<"$assets"; }
@@ -93,7 +95,7 @@ case "$cmd" in
             curl -fsS -L -H "$hdr" -o "$work/$name" "$(url_of "$name")"
             curl -fsS -L -H "$hdr" -o "$work/$name.sha256" "$sum"
             (cd "$work" && sha256sum -c "$name.sha256")
-            code=$(curl -sS -o "$work/response" -w '%{http_code}' -X PUT -H "$hdr" \
+            code=$(curl -sS -o "$work/response" -w '%{http_code}' -X PUT -H "$reg_hdr" \
                 -H 'Content-Type: application/octet-stream' \
                 --data-binary "@$work/$name" "$registry")
             case "$code" in
@@ -101,7 +103,7 @@ case "$cmd" in
                 409) echo "::notice::$name is already in the registry — left unchanged" ;;
                 401 | 403)
                     cat "$work/response" >&2
-                    die "HTTP $code from the package registry: PACKAGE_TOKEN must be a token of $owner with write:package"
+                    die "HTTP $code from the package registry: FJ_PACKAGES_WRITE must be a token of $owner with write:package"
                     ;;
                 *)
                     cat "$work/response" >&2
