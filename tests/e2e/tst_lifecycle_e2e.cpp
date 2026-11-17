@@ -107,7 +107,11 @@ private Q_SLOTS:
         // Accumulate baseline beats while Active. Long window so even
         // the slow software backend gets at least a couple in.
         QTest::qWait(2000);
-        const int baseline = heartbeats(fixture.port());
+        // Read the baseline directly: an unreachable /_report gives 0 beats,
+        // and the skip below would pass a broken fixture off as a skip.
+        const QJsonObject baseRep = fetchReport(fixture.port());
+        QVERIFY2(baseRep.contains(u"heartbeats"_s), "fixture /_report unreachable");
+        const int baseline = baseRep.value(u"heartbeats"_s).toInt();
         if (baseline < 1) {
             QSKIP("software backend did not fire any beats within 2 s; "
                   "frozen-vs-active comparison would be meaningless");
