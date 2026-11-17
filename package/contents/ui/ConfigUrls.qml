@@ -1311,6 +1311,23 @@ KCM.SimpleKCM {
         width: Math.min((parent ? parent.width : Kirigami.Units.gridUnit * 42) * 0.9,
                         Kirigami.Units.gridUnit * 42)
 
+        // GrafanaUrl.transform rejects a URL with CR/LF/NUL inside it (after
+        // trimming), and OK then did nothing visible: the dialog closed and
+        // dropped the paste. Say why and keep OK disabled instead. Edit mode
+        // checks the card's stored URL (an import can carry the bytes).
+        readonly property bool sourceHasLineBreak: {
+            const src = editingIndex >= 0
+                ? (listModel.get(editingIndex) || {}).url
+                : pastedUrl.text;
+            return /[\r\n\0]/.test(String(src || "").trim());
+        }
+        function _syncOkButton() {
+            const ok = standardButton(QQC.Dialog.Ok);
+            if (ok) ok.enabled = !sourceHasLineBreak;
+        }
+        onSourceHasLineBreakChanged: _syncOkButton()
+        onOpened: _syncOkButton()
+
         // Pin PlainText on the title-rendering Label. The default QQC.Dialog
         // header is a Label whose `textFormat` is `Text.AutoText`; `editingLabel`
         // is sourced from a tab card's `label` field (set by openForEdit:955),
@@ -1477,6 +1494,16 @@ KCM.SimpleKCM {
                 type: Kirigami.MessageType.Warning
                 visible: grafanaHelper.editingIndex < 0 && pastedUrl.text.indexOf("/goto/") !== -1
                 text: i18n("This is a `/goto/<id>` short URL. Grafana's short-link redirect drops the options added here (kiosk, theme, refresh, time range), and the `/d/` → `/d-solo/` rewrite needs the resolved dashboard URL. Open the link in a browser and paste the resolved `/d/...?...&viewPanel=panel-N` URL instead.")
+            }
+
+            Kirigami.InlineMessage {
+                Layout.fillWidth: true
+                Layout.topMargin: Kirigami.Units.smallSpacing
+                type: Kirigami.MessageType.Error
+                visible: grafanaHelper.sourceHasLineBreak
+                text: grafanaHelper.editingIndex >= 0
+                    ? i18n("This card's URL contains a line break or NUL character, so it can't be rebuilt here. Fix the URL field on the card first.")
+                    : i18n("The pasted URL contains a line break, probably from wrapping in an email or chat. Remove it to continue.")
             }
         }
 

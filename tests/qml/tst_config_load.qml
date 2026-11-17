@@ -4,6 +4,8 @@
  */
 import QtQuick
 import QtTest
+import QtQuick.Controls
+import org.kde.kirigami as Kirigami
 import "../../package/contents/ui" as Ui
 
 // Load-time behaviour of the URLs and Authentication config pages, created
@@ -74,6 +76,62 @@ Item {
             const page = _open(authPage, { cfg_authProfilesJson: clean });
             wait(50);
             compare(changedSpy.count, 0);
+        }
+    }
+
+    // The Grafana helper dialog on the URLs page.
+    TestCase {
+        name: "ConfigUrlsGrafanaHelper"
+        when: windowShown
+
+        // Depth-first search of the page's object tree (popups live in
+        // `data`, not `children`).
+        function _find(obj, pred, seen) {
+            if (!obj || seen.indexOf(obj) !== -1) return null;
+            seen.push(obj);
+            if (pred(obj)) return obj;
+            for (const key of ["data", "children", "contentItem"]) {
+                const v = obj[key];
+                const list = (v && v.length !== undefined) ? v : (v ? [v] : []);
+                for (let i = 0; i < list.length; i++) {
+                    const hit = _find(list[i], pred, seen);
+                    if (hit) return hit;
+                }
+            }
+            return null;
+        }
+        function _helper(page) {
+            const d = _find(page, o => o.editingIndex !== undefined
+                                    && o.standardButton !== undefined, []);
+            verify(d !== null);
+            return d;
+        }
+        function _pasteField(dialog) {
+            const f = _find(dialog.contentItem, o => typeof o.placeholderText === "string"
+                && o.placeholderText.indexOf("grafana.example.com/d/") !== -1, []);
+            verify(f !== null);
+            return f;
+        }
+        function _errorShown(dialog) {
+            return _find(dialog.contentItem, o => o.type === Kirigami.MessageType.Error
+                && o.visible === true && typeof o.text === "string", []) !== null;
+        }
+
+        // A URL wrapped across two lines made OK a silent no-op: the dialog
+        // closed and the paste was gone, with no row added and no message.
+        function test_pasteWithInteriorLineBreak_blocksOkWithError() {
+            const page = createTemporaryObject(urlsPage, root, { cfg_urlsJson: "[]" });
+            const dialog = _helper(page);
+            dialog.open();
+            tryCompare(dialog, "opened", true);
+            const field = _pasteField(dialog);
+            field.text = "https://g/d/abc?orgId=1&\nviewPanel=panel-5";
+            verify(_errorShown(dialog));
+            compare(dialog.standardButton(Dialog.Ok).enabled, false);
+            field.text = "https://g/d/abc?orgId=1&viewPanel=panel-5\n";
+            verify(!_errorShown(dialog));
+            compare(dialog.standardButton(Dialog.Ok).enabled, true);
+            dialog.close();
         }
     }
 }
