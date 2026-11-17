@@ -219,6 +219,34 @@ TestCase {
         compare(G.transform("https://g/x?refresh=10s", opts),
                 "https://g/x?refresh=10s");
     }
+    // Grafana matches refresh= as a string against its interval list
+    // (5s..1m..1d); an unlisted "60s" fell back to the first entry (5s).
+    // Whole minutes/hours/days must be written in that unit, and a value
+    // with no whole larger unit stays in seconds.
+    function test_refresh_writtenInLargestWholeUnit() {
+        const opts = _off(); opts.refresh = true;
+        opts.refreshSeconds = 60;
+        compare(G.transform("https://g/x", opts), "https://g/x?refresh=1m");
+        opts.refreshSeconds = 300;
+        compare(G.transform("https://g/x", opts), "https://g/x?refresh=5m");
+        opts.refreshSeconds = 7200;
+        compare(G.transform("https://g/x", opts), "https://g/x?refresh=2h");
+        opts.refreshSeconds = 86400;
+        compare(G.transform("https://g/x", opts), "https://g/x?refresh=1d");
+        opts.refreshSeconds = 90;
+        compare(G.transform("https://g/x", opts), "https://g/x?refresh=90s");
+    }
+    // The Edit-dialog round-trip: parse Grafana's own value, confirm
+    // unchanged, and the URL must keep the same token.
+    function test_refresh_editRoundTripKeepsGrafanaToken() {
+        const tokens = ["30s", "1m", "5m", "1h", "2h", "1d"];
+        for (let i = 0; i < tokens.length; ++i) {
+            const url = "https://g/d-solo/x/y?orgId=1&panelId=2&refresh=" + tokens[i];
+            const opts = _off(); opts.refresh = true;
+            opts.refreshSeconds = G.parseRefreshSeconds(url, 5, 86400);
+            compare(G.transform(url, opts), url, tokens[i]);
+        }
+    }
 
     // ===== hideLogo + hidePanelMenu ===================================
     function test_hideLogo_added() {

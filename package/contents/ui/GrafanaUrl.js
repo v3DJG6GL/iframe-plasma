@@ -69,6 +69,17 @@ function stripParam(u, key) {
     return path + (kept.length ? "?" + kept.join("&") : "") + frag;
 }
 
+// Seconds as a Grafana refresh token in the largest unit that divides it
+// exactly: 60 -> "1m", 7200 -> "2h", 86400 -> "1d", 90 -> "90s". The inverse
+// of parseRefreshSeconds's unit table.
+function refreshToken(seconds) {
+    const n = Number(seconds);
+    if (n > 0 && n % 86400 === 0) return (n / 86400) + "d";
+    if (n > 0 && n % 3600 === 0) return (n / 3600) + "h";
+    if (n > 0 && n % 60 === 0) return (n / 60) + "m";
+    return String(seconds) + "s";
+}
+
 // Full URL transformation. `opts` shape:
 //   { convertDSolo:bool, timeRange:string, kiosk:bool, theme:bool,
 //     refresh:bool, refreshSeconds:number, hideLogo:bool,
@@ -140,9 +151,13 @@ function transform(input, opts) {
     }
 
     // 5) Refresh — omit entirely when off (empty refresh= is buggy).
+    //    Written in the largest whole unit (60 -> 1m, 86400 -> 1d): Grafana
+    //    matches the value as a string against its interval list
+    //    (5s..1m..1d), and older versions fall back to the FIRST entry
+    //    (5s) for an unlisted "60s", polling far faster than chosen.
     if (opts.refresh) {
         base = stripParam(base, "refresh");
-        base = appendParam(base, "refresh", String(opts.refreshSeconds) + "s");
+        base = appendParam(base, "refresh", refreshToken(opts.refreshSeconds));
     }
 
     // 6) hideLogo — strip the "Powered by Grafana" overlay on 12.4+.
