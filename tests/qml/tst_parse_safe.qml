@@ -315,6 +315,24 @@ TestCase {
         // Slugless Grafana rows keep their chart crop too.
         compare(U.effectiveThumbMode("chartOnly", "https://g/d-solo/abc?orgId=1&panelId=5"), "chartOnly");
     }
+    // The URL helper keeps a /goto/<id> short link as-is; it redirects to a
+    // /d/ page where the miniView crop applies, so its chart preset must
+    // survive even though isGrafanaEmbed (toolbar gate) rejects /goto/.
+    function test_effectiveThumbMode_chartPresetOnGotoLinkIsKept() {
+        compare(U.effectiveThumbMode("chartOnly", "https://g/goto/abc?kiosk&from=now-1h&to=now"), "chartOnly");
+        compare(U.effectiveThumbMode("chartWithAxes", "https://g/goto/abc"), "chartWithAxes");
+        verify(!U.isGrafanaEmbed("https://g/goto/abc"));
+    }
+    function test_hasGrafanaChart() {
+        verify(U.hasGrafanaChart("https://g/d-solo/abc/x"));
+        verify(U.hasGrafanaChart("https://g/goto/abc"));
+        verify(U.hasGrafanaChart("https://g/goto/a_b-1?orgId=1"));
+        verify(!U.hasGrafanaChart("https://g/goto/"));
+        verify(!U.hasGrafanaChart("https://g/gotox/abc"));
+        verify(!U.hasGrafanaChart("https://example.com/page#/goto/abc"));
+        verify(!U.hasGrafanaChart("https://ha.local/lovelace"));
+        verify(!U.hasGrafanaChart(null));
+    }
     function test_effectiveThumbMode_genericModesPassThrough() {
         compare(U.effectiveThumbMode("custom", "https://ha.local/lovelace"), "custom");
         compare(U.effectiveThumbMode("text", "https://ha.local/lovelace"), "text");

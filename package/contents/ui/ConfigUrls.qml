@@ -443,7 +443,9 @@ KCM.SimpleKCM {
                         { value: "text",      display: i18n("Text label") },
                         { value: "icon",      display: i18n("Icon") }
                     ];
-                    if (!page.isGrafanaEmbed(url)) return generic;
+                    // Same predicate as shownThumbMode, so a /goto/ row's
+                    // chart preset stays selectable.
+                    if (!UrlUtils.hasGrafanaChart(url)) return generic;
                     return [
                         { value: "chartOnly",     display: i18n("Chart only") },
                         { value: "chartWithAxes", display: i18n("Chart + axes") }
@@ -771,7 +773,7 @@ KCM.SimpleKCM {
                                 onActivated: _ => page._setRowField(index, "thumbMode", thumbModePresets[currentIndex].value)
                                 QQC.ToolTip.visible: hovered
                                 QQC.ToolTip.delay: 600
-                                QQC.ToolTip.text: page.isGrafanaEmbed(url)
+                                QQC.ToolTip.text: UrlUtils.hasGrafanaChart(url)
                                     ? i18n(
                                         "How the panel slot renders this tab.\n\n"
                                       + "  • Chart only      — uPlot's painted canvas (no axes, no title).\n"

@@ -399,7 +399,19 @@ function nextCycleTabIndex(currentIndex, tabs, runtimeExcluded) {
 // such a row renders (and is shown on the config page) as full page. The
 // stored value is left alone so pointing the URL back at Grafana restores it.
 function effectiveThumbMode(mode, url) {
-    if ((mode === "chartOnly" || mode === "chartWithAxes") && !isGrafanaEmbed(url))
+    if ((mode === "chartOnly" || mode === "chartWithAxes") && !hasGrafanaChart(url))
         return "fullPanel";
     return mode;
+}
+
+// Whether a URL can carry the chart thumbnail presets: a Grafana embed, or
+// a Grafana /goto/<id> short link the URL helper keeps as-is (it redirects
+// to a /d/ page, where the miniView applies the crop after the load).
+// Unlike isGrafanaEmbed (toolbar gate), which rejects /goto/ on purpose.
+function hasGrafanaChart(u) {
+    if (isGrafanaEmbed(u)) return true;
+    const s = String(u || "");
+    const hashIdx = s.indexOf("#");
+    const base = hashIdx === -1 ? s : s.slice(0, hashIdx);
+    return /\/goto\/[A-Za-z0-9_-]+(?:[\/?]|$)/.test(base);
 }
