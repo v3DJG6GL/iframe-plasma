@@ -162,6 +162,9 @@ QQC.SpinBox {
         function commitBuffer() {
             if (edit.activeFocus) {
                 root.value = root.valueFromText(edit.text, root.locale);
+                // Re-render here too: a value clamped to a limit disables
+                // that arrow, so no step (and no valueModified) follows.
+                edit.text = root.textFromValue(root.value, root.locale);
             }
         }
     }

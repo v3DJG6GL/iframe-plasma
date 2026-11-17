@@ -92,6 +92,38 @@ Item {
             compare(spin.contentItem.text, "3600 s");
         }
 
+        // At the limit the clamp disables the arrow, so no step and no
+        // valueModified follow: the commit itself has to re-render the editor.
+        function test_arrowKeyAtLimit_editorShowsClampedValueWhileFocused() {
+            spin.contentItem.forceActiveFocus();
+            tryCompare(spin.contentItem, "activeFocus", true);
+            typeOver(spin, [Qt.Key_9, Qt.Key_9, Qt.Key_9, Qt.Key_9]);
+            keyClick(Qt.Key_Up);
+            verify(spin.contentItem.activeFocus);
+            compare(spin.value, 3600);
+            compare(spin.contentItem.text, "3600 s");
+        }
+
+        function test_arrowButtonAtLimit_editorShowsClampedValueWhileFocused() {
+            spin.contentItem.forceActiveFocus();
+            tryCompare(spin.contentItem, "activeFocus", true);
+            typeOver(spin, [Qt.Key_9, Qt.Key_9, Qt.Key_9, Qt.Key_9]);
+            mouseClick(spin.up.indicator);
+            verify(spin.contentItem.activeFocus);
+            compare(spin.value, 3600);
+            compare(spin.contentItem.text, "3600 s");
+        }
+
+        function test_arrowKeyBelowFrom_editorShowsSentinelWhileFocused() {
+            sentinel.contentItem.forceActiveFocus();
+            tryCompare(sentinel.contentItem, "activeFocus", true);
+            typeOver(sentinel, [Qt.Key_Minus, Qt.Key_5]);
+            keyClick(Qt.Key_Down);
+            verify(sentinel.contentItem.activeFocus);
+            compare(sentinel.value, 0);
+            compare(sentinel.contentItem.text, "never");
+        }
+
         function test_arrowKeysOnSentinelText() {
             sentinel.contentItem.forceActiveFocus();
             tryCompare(sentinel.contentItem, "activeFocus", true);
