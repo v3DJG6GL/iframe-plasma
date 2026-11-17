@@ -1027,7 +1027,7 @@ PlasmoidItem {
     // pushes selector updates directly to the live WebTab + compact
     // thumbnail, and sets the _suppressTabsRebuildOnce guard so the
     // urlsJson write triggers persistence WITHOUT a rebuild.
-    function savePickedSelector(tabIdx, scope, sel) {
+    function savePickedSelector(tabIdx, scope, sel, pickedUrl) {
         // Hoist fr so the early-return and catch paths can re-engage
         // popup isolation that the picker's _PICKER_START_BODY stripped
         // before the dialog opened. savePickedDialog._saved=true skips
@@ -1040,6 +1040,14 @@ PlasmoidItem {
             }
         }
         try {
+            // The dialog only holds a numeric index; a structural rebuild
+            // while it was open would land the selector on another URL.
+            if (!UrlUtils.pickerTargetMatches(root.tabs, tabIdx, pickedUrl)) {
+                console.warn(Log.picker, "iframe-plasma[picker] tab list changed while the save dialog"
+                    + " was open; selector not saved idx=" + tabIdx);
+                _restoreOnAbort();
+                return;
+            }
             const arr = JSON.parse(Plasmoid.configuration.urlsJson || "[]");
             // tabIdx indexes the FILTERED live tab set (root.tabs); arr is the
             // FULL on-disk list including disabled/unsafe rows. Map across so a
@@ -2584,6 +2592,9 @@ PlasmoidItem {
                 modal: true
                 title: i18n("Save picked element selector")
                 property int tabIdx: -1
+                // URL of the row at tabIdx when the pick happened; the save
+                // aborts if the row there changed meanwhile.
+                property string tabUrl: ""
                 property string pickedSelector: ""
                 // Flipped by every Save action before close(). onClosed
                 // uses it to distinguish "user saved" from "user cancelled
@@ -2594,7 +2605,8 @@ PlasmoidItem {
                 function _finishSave(scope) {
                     savePickedDialog._saved = true;
                     root.savePickedSelector(savePickedDialog.tabIdx, scope,
-                                            savePickedDialog.pickedSelector);
+                                            savePickedDialog.pickedSelector,
+                                            savePickedDialog.tabUrl);
                     savePickedDialog.close();
                 }
                 standardButtons: Kirigami.Dialog.NoButton
@@ -2663,6 +2675,7 @@ PlasmoidItem {
         function showSavePickedDialog(tabIdx, sel) {
             const dlg = savePickedDialogComponent.createObject(fullRoot, {
                 tabIdx: tabIdx,
+                tabUrl: (root.tabs[tabIdx] && root.tabs[tabIdx].url) || "",
                 pickedSelector: sel
             });
             if (dlg) dlg.open();

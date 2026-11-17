@@ -280,6 +280,16 @@ function pickerSaveNeedsPopupRestore(scope, prevPopupSelector, newPopupSelector)
     return scope === "thumb" || prevPopupSelector === newPopupSelector;
 }
 
+// Whether the live row a picker save targets is still the one the selector
+// was picked on. The save dialog outlives a structural urlsJson change (KCM
+// Apply that adds, removes or reorders URLs; backup import), after which the
+// numeric index names a different dashboard.
+function pickerTargetMatches(tabs, tabIdx, pickedUrl) {
+    const row = Array.isArray(tabs) ? tabs[tabIdx] : null;
+    return !!row && typeof pickedUrl === "string" && pickedUrl.length > 0
+        && row.url === pickedUrl;
+}
+
 // Whether a metadata-only change flips a row's render mode (thumbnail or
 // popup), which needs a reload of that tab. Compares EFFECTIVE modes: a row
 // without the field (default config, legacy or hand-written JSON) renders

@@ -290,4 +290,24 @@ TestCase {
         const row = _tab("https://a/", { popupMode: "fullPanel", popupSelector: ".x" });
         verify(!_pickerSaveNeedsRestore(row, "popup", ".x"));
     }
+
+    // ===== Picker save: target row still the picked one ==============
+    function test_pickerTarget_sameRow_matches() {
+        const tabs = [_tab("https://a/"), _tab("https://b/")];
+        verify(U.pickerTargetMatches(tabs, 1, "https://b/"));
+    }
+    function test_pickerTarget_rowsReordered_rejected() {
+        // A KCM Apply reordered the list under the open save dialog: the
+        // index now names another dashboard.
+        const tabs = [_tab("https://b/"), _tab("https://a/")];
+        verify(!U.pickerTargetMatches(tabs, 1, "https://b/"));
+    }
+    function test_pickerTarget_rowRemoved_rejected() {
+        verify(!U.pickerTargetMatches([_tab("https://a/")], 1, "https://b/"));
+    }
+    function test_pickerTarget_noPickedUrl_rejected() {
+        verify(!U.pickerTargetMatches([_tab("https://a/")], 0, ""));
+        verify(!U.pickerTargetMatches([_tab("https://a/")], 0, undefined));
+        verify(!U.pickerTargetMatches(null, 0, "https://a/"));
+    }
 }
