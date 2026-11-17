@@ -333,6 +333,39 @@ test("isolate: a kept ancestor's clip-path and mask do not clip the target", () 
     }
 });
 
+test("isolate: a kept ancestor's opacity and visibility do not hide the target", () => {
+    // Opacity on an ancestor fades its fixed descendants with it, and a
+    // hidden ancestor's visibility is inherited: a reveal-on-scroll section
+    // waiting at opacity:0 would crop to an invisible target.
+    for (const scaleMode of ["stretch", "fit", "original"]) {
+        const dom = new JSDOM(
+            "<!doctype html><html><head><style>" +
+            ".card{opacity:0;visibility:hidden}" +
+            "</style></head><body><div id='card' class='card'><div id='t'>x</div></div></body></html>",
+            { runScripts: "outside-only" });
+        const w = dom.window;
+        w.MutationObserver = class { observe() {} disconnect() {} takeRecords() { return []; } };
+        w.ResizeObserver = class { observe() {} disconnect() {} };
+        w.requestAnimationFrame = (cb) => { cb(); return 0; };
+        w.cancelAnimationFrame = () => {};
+        w.setInterval = () => 0;
+        w.clearInterval = () => {};
+        w.console = { info: () => {}, warn: () => {}, error: () => {} };
+        const card = w.document.getElementById("card");
+        const el = w.document.getElementById("t");
+
+        w.eval(`(${ce.buildApplyJs("#t", { scaleMode })})`);
+        assert.equal(card.getAttribute("data-ifp-keep"), "1", scaleMode);
+        assert.equal(w.getComputedStyle(card).opacity, "1", scaleMode);
+        assert.equal(w.getComputedStyle(card).visibility, "visible", scaleMode);
+        assert.equal(w.getComputedStyle(el).visibility, "visible", scaleMode);
+
+        w.eval(ce.buildClearJs());
+        assert.equal(w.getComputedStyle(card).opacity, "0", scaleMode);
+        assert.equal(w.getComputedStyle(card).visibility, "hidden", scaleMode);
+    }
+});
+
 test("isolate: the target's own transform does not shift it off the viewport", () => {
     // translate(-50%,-50%) centering, or a grid item placed by translate.
     for (const scaleMode of ["stretch", "fit", "original"]) {
