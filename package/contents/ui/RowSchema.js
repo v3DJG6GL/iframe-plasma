@@ -23,6 +23,9 @@
  * tabRowNeedsRewrite(entry, row)
  *                            — true when ConfigUrls must re-persist the
  *                              row it loaded (row = normaliseTabRow(entry)).
+ * authProfileRowNeedsRewrite(entry, row)
+ *                            — the same for ConfigAuth
+ *                              (row = normaliseAuthProfileRow(entry).row).
  *
  * Neither function mutates `entry`.
  */
@@ -273,6 +276,22 @@ function normaliseAuthProfileRow(entry, uuidGen) {
         },
         synthesized: synthesized,
     };
+}
+
+// Auth-side twin of tabRowNeedsRewrite (row = normaliseAuthProfileRow(
+// entry, ...).row). main.qml reads authProfilesJson raw (`profile.authType
+// || "basic"`, `profile.username || ""`), so a numeric authType the KCM
+// shows as "basic" sends no credentials, and a numeric username is sent
+// until an unrelated Apply blanks it. Only fields the entry has count, so
+// older saved configs are not marked dirty on open; preempt is skipped
+// because the widget resolves it through effectivePreempt like this page.
+function authProfileRowNeedsRewrite(entry, row) {
+    for (const key of AUTH_FIELDS) {
+        if (key === "preempt") continue;
+        if (Object.prototype.hasOwnProperty.call(entry, key)
+         && JSON.stringify(entry[key]) !== JSON.stringify(row[key])) return true;
+    }
+    return false;
 }
 
 // Pure serialise of ONE already-normalised auth-profile row to its on-disk

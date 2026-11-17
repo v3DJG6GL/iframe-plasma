@@ -312,4 +312,38 @@ TestCase {
     function test_isRowObject(d) {
         compare(Schema.isRowObject(d.entry), d.want);
     }
+
+    // ===== authProfileRowNeedsRewrite: ConfigAuth's re-persist gate ===
+    // The gate used to fire only for a synthesised id or a sanitised
+    // autheliaHost. A coerced field showed as the default in the KCM
+    // while main.qml kept using the raw value (a numeric authType sends
+    // no credentials, a numeric username is sent until the next Apply).
+    function _needsRewrite(entry) {
+        return Schema.authProfileRowNeedsRewrite(
+            entry, Schema.normaliseAuthProfileRow(entry, _gen).row);
+    }
+    function test_rewrite_savedRowUnchanged() {
+        verify(!_needsRewrite(Schema.serialiseAuthProfileRow(
+            { id: "p", name: "N", authType: "bearer", username: "u", preempt: true })));
+    }
+    function test_rewrite_missingFieldsIgnored() {
+        verify(!_needsRewrite({ id: "p" }));
+    }
+    function test_rewrite_missingPreemptIgnored() {
+        verify(!_needsRewrite({ id: "p", name: "", authType: "basic",
+                                username: "", autheliaHost: "" }));
+    }
+    function test_rewrite_nonBooleanPreemptIgnored() {
+        verify(!_needsRewrite({ id: "p", authType: "bearer", preempt: 1 }));
+    }
+    function test_rewrite_numericUsername() {
+        verify(_needsRewrite({ id: "p", authType: "basic", username: 1234 }));
+    }
+    function test_rewrite_numericAuthType() {
+        verify(_needsRewrite({ id: "p", authType: 3 }));
+    }
+    function test_rewrite_nonStringNameAndHost() {
+        verify(_needsRewrite({ id: "p", name: 1 }));
+        verify(_needsRewrite({ id: "p", autheliaHost: ["auth.example"] }));
+    }
 }

@@ -98,6 +98,9 @@ KCM.SimpleKCM {
                 // re-persist so it leaves disk too.
                 if (!RowSchema.isRowObject(entry)) { synthesized = true; continue; }
                 const norm = RowSchema.normaliseAuthProfileRow(entry, newUuid);
+                // Likewise any field normalising coerced (a numeric authType
+                // or username from an import): main.qml reads the raw JSON.
+                if (RowSchema.authProfileRowNeedsRewrite(entry, norm.row)) synthesized = true;
                 // Re-persist when sanitize actually mutates a stored value,
                 // otherwise an on-disk autheliaHost carrying a ZWSP/bidi byte
                 // (legacy config, backup import, manual edit) is displayed
