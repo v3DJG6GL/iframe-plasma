@@ -1481,7 +1481,15 @@ PlasmoidItem {
         readonly property bool verticalPanel:   Plasmoid.formFactor === PlasmaCore.Types.Vertical
 
         // User-configured long-axis size (Configure → Display → Preview size).
-        readonly property int longAxisPx: Plasmoid.configuration.compactPreviewLongAxisPx
+        // With the preview off the slot only holds the square fallback icon,
+        // so in a panel it shrinks to the panel thickness (the Display page
+        // disables Preview size then, so the user could not shrink it).
+        // The desktop keeps the configured size.
+        readonly property int longAxisPx: Plasmoid.configuration.compactPreviewEnabled
+            ? Plasmoid.configuration.compactPreviewLongAxisPx
+            : horizontalPanel ? height
+            : verticalPanel   ? width
+            : Plasmoid.configuration.compactPreviewLongAxisPx
 
         Layout.minimumWidth:  Kirigami.Units.iconSizes.smallMedium
         Layout.minimumHeight: Kirigami.Units.iconSizes.smallMedium
