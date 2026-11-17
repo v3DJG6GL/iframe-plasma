@@ -809,8 +809,11 @@ Item {
                 onCertificateError: function(error) {
                     console.warn(Log.load, "iframe-plasma[cert] error type=" + error.type
                         + " url=" + Log.redactUrl(error.url) + " overridable=" + error.overridable
-                        + " desc=" + error.description);
-                    tab.lastCertError = true;
+                        + " mainFrame=" + error.isMainFrame + " desc=" + error.description);
+                    // The chip reports the tab's own page. A rejected subframe
+                    // (e.g. a self-signed iframe in a panel) never renders and
+                    // says nothing about the page's certificate.
+                    if (error.isMainFrame !== false) tab.lastCertError = true;
                     error.rejectCertificate();
                 }
 
