@@ -23,11 +23,15 @@ QtObject {
     readonly property color error:       "#f7768e"
     readonly property color magenta:     "#bb9af7"
 
-    // Hack + IBM Plex Mono are both verified installed via fc-list on
-    // Ubuntu 25.10. On systems without them, Qt's own font matching falls
-    // back to the platform default monospace.
-    readonly property string fontHeader: "Hack"
-    readonly property string fontBody:   "IBM Plex Mono"
+    // Preferred: Hack + IBM Plex Mono. Neither ships by default on every
+    // distro, and Qt resolves an unknown family to the default *sans*
+    // (QML font.family can't carry a monospace style hint), so a missing
+    // font falls back to fontconfig's "monospace" alias explicitly.
+    function monoFamily(preferred) {
+        return Qt.fontFamilies().indexOf(preferred) >= 0 ? preferred : "monospace";
+    }
+    readonly property string fontHeader: monoFamily("Hack")
+    readonly property string fontBody:   monoFamily("IBM Plex Mono")
 
     // Spacing scale
     readonly property int s2: 8
