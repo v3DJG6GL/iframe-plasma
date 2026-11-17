@@ -332,6 +332,9 @@ const _APPLY_BODY = `(function(sel, opts){
     for (let j = 0; j < oldTargets.length; j++) {
       if (oldTargets[j] !== el) oldTargets[j].removeAttribute('data-ifp-target');
     }
+    // The target may be a former target's ancestor and still carry its keep
+    // marker; the stylesheet would then hide every child of the target.
+    el.removeAttribute('data-ifp-keep');
     el.setAttribute('data-ifp-target', '1');
     document.documentElement.setAttribute('data-ifp-isolate', '1');
     document.documentElement.setAttribute('data-ifp-scale', scaleMode);

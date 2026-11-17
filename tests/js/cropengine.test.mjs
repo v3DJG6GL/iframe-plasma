@@ -241,6 +241,34 @@ test("apply: re-injection clears previous data-ifp-keep markers", () => {
     assert.equal(dom.window.document.getElementById("b").getAttribute("data-ifp-keep"), "1");
 });
 
+test("apply: a match that moves up to an ancestor shows that ancestor's children", () => {
+    // The new target was kept as the old target's ancestor; a leftover keep
+    // marker on it would hide all of its children.
+    const dom = new JSDOM(
+        "<!doctype html><html><body><div id='a'><div id='mid'><div id='d' class='sel'>x</div></div>" +
+        "<div id='sib'>y</div></div></body></html>",
+        { runScripts: "outside-only" });
+    const w = dom.window;
+    w.MutationObserver = class { observe() {} disconnect() {} };
+    w.ResizeObserver = class { observe() {} disconnect() {} };
+    w.requestAnimationFrame = (cb) => { cb(); return 0; };
+    w.cancelAnimationFrame = () => {};
+    w.setInterval = () => 0;
+    w.clearInterval = () => {};
+    w.console = { info: () => {}, warn: () => {}, error: () => {} };
+    const doc = w.document;
+    w.eval(`(${ce.buildApplyJs(".sel")})`);
+    assert.equal(doc.getElementById("a").getAttribute("data-ifp-keep"), "1");
+
+    doc.getElementById("a").classList.add("sel");   // now the first match
+    w.__ifpThumbSchedule();
+    const a = doc.getElementById("a");
+    assert.equal(a.getAttribute("data-ifp-target"), "1");
+    assert.equal(a.getAttribute("data-ifp-keep"), null);
+    assert.notEqual(w.getComputedStyle(doc.getElementById("mid")).display, "none");
+    assert.notEqual(w.getComputedStyle(doc.getElementById("sib")).display, "none");
+});
+
 test("clear: removes data-ifp-isolate marker", () => {
     const dom = new JSDOM(
         "<!doctype html><html><body><div id='t'/></body></html>",
