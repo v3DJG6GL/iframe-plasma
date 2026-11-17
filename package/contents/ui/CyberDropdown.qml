@@ -91,6 +91,10 @@ QQC.Popup {
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
+                        // A style exit fade (org.kde.desktop: ~200 ms) keeps
+                        // the rows clickable after close(); a double-click
+                        // would select twice and reload the page twice.
+                        if (!dd.opened) return;
                         dd.valueSelected(row.modelData.val);
                         dd.close();
                     }
