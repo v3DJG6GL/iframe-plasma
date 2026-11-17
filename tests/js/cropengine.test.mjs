@@ -850,6 +850,31 @@ function runPicker(html) {
     };
 }
 
+test("picker: the outline follows a hovered element that moved", () => {
+    const p = runPicker("<!doctype html><html><body><div id='big'>x</div><div id='o'>y</div></body></html>");
+    const big = p.doc.getElementById("big");
+    let top = 100;
+    big.getBoundingClientRect = () => ({ left: 0, top, width: 50, height: 40 });
+    const outline = p.doc.getElementById("__ifpPickerOutline");
+    p.pointAt(big);
+    p.fire(big, "mousemove");
+    assert.equal(outline.style.top, "100px");
+    // The page re-lays the element out; the pointer stays on it.
+    top = -200;
+    p.fire(big, "mousemove");
+    assert.equal(outline.style.top, "-200px");
+    // A scroll under a still pointer sends no mousemove.
+    top = 50;
+    big.dispatchEvent(new p.w.Event("scroll"));
+    assert.equal(outline.style.top, "50px");
+    // ...and may bring another element under the pointer.
+    const o = p.doc.getElementById("o");
+    o.getBoundingClientRect = () => ({ left: 0, top: 7, width: 50, height: 40 });
+    p.pointAt(o);
+    p.doc.dispatchEvent(new p.w.Event("scroll"));
+    assert.equal(outline.style.top, "7px");
+});
+
 test("picker: the rest of the picking gesture does not reach the page", () => {
     // The pick is taken on pointerdown; the click of the same gesture must
     // not then activate the picked button or link.

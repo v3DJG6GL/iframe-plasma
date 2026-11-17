@@ -942,20 +942,29 @@ ${_TEARDOWN_BODY}
   }
 
   let lastHover = null;
+  let lastPoint = null;
   function move(e) {
+    lastPoint = { clientX: e.clientX, clientY: e.clientY };
     // Hide the outline so elementFromPoint returns the underlying element,
     // not the outline itself.
     outline.style.display = 'none';
     const t = document.elementFromPoint(e.clientX, e.clientY);
     outline.style.display = 'block';
     if (!t || t === outline || t === banner) return;
-    if (t === lastHover) return;
+    // Measured on every move, even over the same element: the page may have
+    // scrolled or re-laid it out since the last one.
     lastHover = t;
     const r = t.getBoundingClientRect();
     outline.style.left   = r.left   + 'px';
     outline.style.top    = r.top    + 'px';
     outline.style.width  = Math.max(2, r.width)  + 'px';
     outline.style.height = Math.max(2, r.height) + 'px';
+  }
+  // A scroll under a still pointer moves the page but sends no mousemove:
+  // hit-test the last pointer position again so the outline follows.
+  // (Capture phase on window: scroll does not bubble from inner containers.)
+  function scroll() {
+    if (lastPoint) move(lastPoint);
   }
   function click(e) {
     outline.style.display = 'none';
@@ -1021,6 +1030,7 @@ ${_TEARDOWN_BODY}
     // already populated by React/Vue/etc. and our handler would have
     // been preempted there; see attach block below.)
     window.removeEventListener('mousemove',   move,  true);
+    window.removeEventListener('scroll',      scroll, true);
     window.removeEventListener('pointerdown', click, true);
     window.removeEventListener('mousedown',   click, true);
     window.removeEventListener('click',       click, true);
@@ -1054,6 +1064,7 @@ ${_TEARDOWN_BODY}
   // pages where neither press event reaches us. The rest of a picking
   // gesture is kept from the page by swallowGestureTail().
   window.addEventListener('mousemove',   move,  true);
+  window.addEventListener('scroll',      scroll, true);
   window.addEventListener('pointerdown', click, true);
   window.addEventListener('mousedown',   click, true);
   window.addEventListener('click',       click, true);
