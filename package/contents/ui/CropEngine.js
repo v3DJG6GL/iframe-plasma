@@ -546,6 +546,12 @@ const _APPLY_BODY = `(function(sel, opts){
   // this instead of issuing a second document.querySelector(sel) just
   // moments after apply() already did one.
   let matchedEl = null;
+  // True for a match that cannot be isolated: <body>, <html>, or anything
+  // outside <body> (in <head>).
+  function isWholePage(el) {
+    return el === document.body || el === document.documentElement
+        || !(document.body && document.body.contains(el));
+  }
   function apply() {
     // Picker-armed guard: same as isolateElement(). Short-circuits
     // every code path that could re-set data-ifp-isolate while the
@@ -567,10 +573,12 @@ const _APPLY_BODY = `(function(sel, opts){
       dropCrop();
       return 'wait';
     }
-    if (el === document.body || el === document.documentElement) {
+    if (isWholePage(el)) {
       // The whole page was asked for, so there is nothing to isolate — and
       // isolating would hide every child of <body> (none is an ancestor of
       // the target) while still reporting a match: a silently blank view.
+      // A first match inside <head> ('title', '[href]' on a stylesheet link)
+      // is the same case: it shows nothing, so the page is shown instead.
       // matchedEl stays null, which makes the keyword scan read <body>.
       // The same selector may have cropped a descendant before (the page
       // put the matching class on <body>): show the whole page now.
@@ -756,8 +764,9 @@ const _APPLY_BODY = `(function(sel, opts){
         // good. Look the target up again on every tick, as apply() would.
         if (sel) {
           try { matchedEl = document.querySelector(sel); } catch (e) { matchedEl = null; }
-          // Same as apply(): a body/html match means "scan the whole page".
-          if (matchedEl === document.body || matchedEl === document.documentElement) matchedEl = null;
+          // Same as apply(): a body/html (or <head>) match means "scan the
+          // whole page".
+          if (matchedEl && isWholePage(matchedEl)) matchedEl = null;
           // Also as apply(): a uPlot canvas with no crop drawn yet is
           // 'canvas-pending' and scans <body>; the bare canvas has no text,
           // so scanning it would clear a hit the visible page just reported.

@@ -166,6 +166,22 @@ test("apply: a body or html selector shows the whole page instead of blanking it
     }
 });
 
+test("apply: a first match inside <head> shows the whole page instead of blanking it", () => {
+    // Isolating a <head> element would tag <head> and <html> as kept and
+    // hide every child of <body>, while still reporting a match.
+    for (const selector of ["title", "[href]", "meta"]) {
+        const { dom, result } = runApply(
+            "<!doctype html><html><head><meta charset='utf-8'><title>x</title>" +
+            "<link rel='stylesheet' href='a.css'></head>" +
+            "<body><div id='a' href='x'>hello</div></body></html>",
+            selector);
+        const doc = dom.window.document;
+        assert.equal(result, "matched-and-observing", selector);
+        assert.equal(doc.documentElement.getAttribute("data-ifp-isolate"), null, selector);
+        assert.equal(doc.querySelectorAll("[data-ifp-keep], [data-ifp-target]").length, 0, selector);
+    }
+});
+
 test("apply: invalid selector does not throw; status is 'invalid'", () => {
     const { result } = runApply(
         "<!doctype html><html><body><div/></body></html>",
@@ -1296,6 +1312,20 @@ test("hidden page: a selector that stops matching drops the isolation before sca
     assert.equal(t.w.document.documentElement.getAttribute("data-ifp-isolate"), null);
     assert.deepEqual(t.kw(), ["[ifp-keyword] hit=false", "[ifp-keyword] hit=true"]);
     assert.equal(t.rafCalls(), 0, "hidden page must not queue animation frames");
+});
+
+test("hidden page: a first match that moves into <head> scans the body", () => {
+    // As apply(): a <head> element shows nothing, so the whole page counts.
+    const hidden = { value: true };
+    const t = runKeywordApply(hidden, "<div class='s'>OFFLINE</div>", ".s", ["offline"]);
+    t.tickInterval();
+    assert.deepEqual(t.kw(), ["[ifp-keyword] hit=true"]);
+    const meta = t.w.document.createElement("meta");
+    meta.className = "s";
+    t.w.document.head.appendChild(meta);
+    t.tickInterval();
+    assert.deepEqual(t.kw(), ["[ifp-keyword] hit=true"]);
+    assert.equal(t.w.document.documentElement.getAttribute("data-ifp-isolate"), null);
 });
 
 test("visible page: interval still goes through rAF", () => {
