@@ -155,9 +155,13 @@ Rectangle {
 
             QQC.AbstractButton {
                 id: caretBtn
+                objectName: "caretBtn"
                 width: 14; height: 20
                 hoverEnabled: true
-                onClicked: reloadMenu.popup()
+                // Below the caret, not at the cursor: a menu covering the
+                // caret turned a second caret click into a Reload.
+                onClicked: if (reloadMenu.visible && !reloadMenu._closing) reloadMenu.close();
+                           else reloadMenu.popup(caretBtn, 0, caretBtn.height)
                 contentItem: Rectangle {
                     color: caretBtn.hovered ? Theme.surfaceHi : Theme.surface
                     border.color: Theme.fgMute
@@ -177,6 +181,11 @@ Rectangle {
         QQC.Menu {
             id: reloadMenu
             objectName: "reloadMenu"
+            // As CyberDropdown: a press on the opening button must reach
+            // its toggle with the menu still open, or the press closes it
+            // and the click reopens it.
+            parent: caretBtn
+            closePolicy: QQC.Popup.CloseOnEscape | QQC.Popup.CloseOnPressOutsideParent
             // The style's exit fade (org.kde.desktop) keeps the items
             // clickable after close(), so a double-click would fire twice.
             // Not `opened`: that is false during the enter fade too.
@@ -208,13 +217,15 @@ Rectangle {
         // reload variants and this menu groups all session-rare actions.
         QQC.AbstractButton {
             id: moreBtn
+            objectName: "moreBtn"
             width: 22; height: 20
             padding: 0
             Layout.alignment: Qt.AlignVCenter
             Layout.preferredWidth: width
             Layout.preferredHeight: height
             hoverEnabled: true
-            onClicked: moreMenu.popup(moreBtn, 0, moreBtn.height)
+            onClicked: if (moreMenu.visible && !moreMenu._closing) moreMenu.close();
+                       else moreMenu.popup(moreBtn, 0, moreBtn.height)
             QQC.ToolTip.text: i18n("More actions — element picker, clear cache, open externally")
             QQC.ToolTip.visible: hovered
             QQC.ToolTip.delay: 600
@@ -240,6 +251,9 @@ Rectangle {
         QQC.Menu {
             id: moreMenu
             objectName: "moreMenu"
+            // Same toggle-from-its-button closePolicy as reloadMenu.
+            parent: moreBtn
+            closePolicy: QQC.Popup.CloseOnEscape | QQC.Popup.CloseOnPressOutsideParent
             // Same exit-fade double-fire guard as reloadMenu; a second
             // picker trigger would cancel the picker it just started.
             property bool _closing: false

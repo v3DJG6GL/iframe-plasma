@@ -208,6 +208,48 @@ Item {
             menu.enter = null;
         }
 
+        // The second press on the opening button must reach its toggle
+        // with the menu still open; the press closing it and the click
+        // reopening it left the menu stuck open.
+        function test_gearClick_whileOpen_closesMenu() {
+            const menu = findChild(toolbar, "moreMenu");
+            const btn = findChild(toolbar, "moreBtn");
+            verify(menu !== null);
+            verify(btn !== null);
+            mouseClick(btn);
+            tryCompare(menu, "opened", true);
+            mouseClick(btn);
+            tryCompare(menu, "visible", false);
+        }
+
+        function test_caretClick_whileOpen_closesMenuWithoutReload() {
+            const menu = findChild(toolbar, "reloadMenu");
+            const btn = findChild(toolbar, "caretBtn");
+            verify(menu !== null);
+            verify(btn !== null);
+            reloadSpy.clear();
+            mouseClick(btn);
+            tryCompare(menu, "opened", true);
+            mouseClick(btn);
+            tryCompare(menu, "visible", false);
+            compare(reloadSpy.count, 0);
+        }
+
+        // Opened at the cursor, the menu covered the caret, so a second
+        // caret click a few px off landed on "Reload".
+        function test_caretClick_opensMenuClearOfCaret() {
+            const menu = findChild(toolbar, "reloadMenu");
+            const btn = findChild(toolbar, "caretBtn");
+            mouseClick(btn);
+            tryCompare(menu, "opened", true);
+            const bg = menu.background;
+            const p = bg.mapFromItem(btn, btn.width / 2, btn.height / 2);
+            verify(p.x < 0 || p.y < 0 || p.x >= bg.width || p.y >= bg.height,
+                   "menu covers the caret at " + p.x + "," + p.y);
+            menu.close();
+            tryCompare(menu, "visible", false);
+        }
+
         function test_fullRepHidden_whileMoreMenuOpen_closesMenu() {
             const menu = findChild(toolbar, "moreMenu");
             verify(menu !== null);
