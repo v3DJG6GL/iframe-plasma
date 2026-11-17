@@ -21,6 +21,10 @@
 # Setup: secret GH_MIRROR_TOKEN (repository or user level), a GitHub token that can write
 # releases on the mirror repo: classic with `repo` scope, or fine-grained with
 # "Contents: read and write" on that repo. Without it the job only logs a notice.
+# Secret PACKAGE_TOKEN (see release.yml; read:repository is what this job uses) to download
+# the release assets: the run's own token counts as anonymous on attachment downloads, which a
+# private owner refuses. Without it the job falls back to the run token, which only works
+# while the owner is public.
 #
 # Sync semantics:
 #   * Drafts are skipped.
@@ -57,8 +61,9 @@ jobs:
       - name: Sync releases (create missing, patch drift, fill assets)
         env:
           GH_MIRROR_TOKEN: ${{ secrets.GH_MIRROR_TOKEN }}
-          # The run token also covers reading releases if this repository is ever made private.
-          SRC_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # An owner token, not the run token: the run token counts as anonymous on attachment
+          # downloads, which a private owner refuses (see the Setup header).
+          SRC_TOKEN: ${{ secrets.PACKAGE_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
 
@@ -157,7 +162,7 @@ jobs:
               sumsfound=$((sumsfound + 1))
               # Not inside an `if`: a failed download must fail the job, not silently
               # degrade the check below to a size comparison.
-              sget -o sums.txt "$(jq -r '.browser_download_url' <<<"$sasset")"
+              sget -L -o sums.txt "$(jq -r '.browser_download_url' <<<"$sasset")"
               cat sums.txt >> allsums.txt
               rm -f sums.txt
             done <<<"$assets"
@@ -184,7 +189,7 @@ jobs:
                 dput -X DELETE "$dst_api/repos/$DST_REPO/releases/assets/$(jq -r '.id' <<<"$match")"
               fi
               echo "[$tag] uploading $aname ($asize bytes)"
-              sget -o asset.bin "$(jq -r '.browser_download_url' <<<"$asset")"
+              sget -L -o asset.bin "$(jq -r '.browser_download_url' <<<"$asset")"
               dl=$(stat -c%s asset.bin)
               if [ "$dl" != "$asize" ]; then
                 echo "::error::[$tag] $aname downloaded $dl bytes, expected $asize"
