@@ -35,9 +35,9 @@ Item {
         ]
     }
 
-    // The production style (org.kde.desktop) fades a Popup out on close;
-    // the Basic style the tests run under has no exit transition, so this
-    // one supplies it.
+    // The production style (org.kde.desktop) fades a Popup in on open and
+    // out on close; the Basic style the tests run under has neither
+    // transition, so this one supplies them.
     CyberDropdown {
         id: fadingDropdown
         x: 20
@@ -47,6 +47,9 @@ Item {
             { val: "",   label: "(URL default)" },
             { val: "1h", label: "Last 1 hour" }
         ]
+        enter: Transition {
+            NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 300 }
+        }
         exit: Transition {
             NumberAnimation { property: "opacity"; from: 1; to: 0; duration: 300 }
         }
@@ -102,23 +105,41 @@ Item {
         }
 
         // ============================================================
-        //  row click during the close fade
+        //  row click during the open / close fades
         // ============================================================
+        function fadingRow(val) {
+            const kids = fadingDropdown.contentItem.children;
+            for (let i = 0; i < kids.length; ++i)
+                if (kids[i].modelData !== undefined && kids[i].modelData.val === val)
+                    return kids[i];
+            return null;
+        }
+
         // The second click of a double-click lands while the exit fade
         // still shows the rows; it must not select (and reload) again.
         function test_doubleClickRow_duringExitFade_selectsOnce() {
             fadingDropdown.hits = 0;
             fadingDropdown.open();
             tryCompare(fadingDropdown, "opened", true);
-            let row = null;
-            const kids = fadingDropdown.contentItem.children;
-            for (let i = 0; i < kids.length; ++i)
-                if (kids[i].modelData !== undefined && kids[i].modelData.val === "1h")
-                    row = kids[i];
+            const row = fadingRow("1h");
             verify(row !== null);
             mouseDoubleClickSequence(row);
             tryCompare(fadingDropdown, "visible", false);
             compare(fadingDropdown.hits, 1);
+        }
+
+        // `opened` is false during the enter fade as well; a quick
+        // chip-then-row pick there must still select and close.
+        function test_clickRow_duringEnterFade_selects() {
+            fadingDropdown.hits = 0;
+            fadingDropdown.open();
+            verify(fadingDropdown.visible);
+            verify(!fadingDropdown.opened);
+            const row = fadingRow("1h");
+            verify(row !== null);
+            mouseClick(row);
+            compare(fadingDropdown.hits, 1);
+            tryCompare(fadingDropdown, "visible", false);
         }
 
         // ============================================================

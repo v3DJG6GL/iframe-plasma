@@ -25,6 +25,13 @@ QQC.Popup {
     property string currentValue: ""
     signal valueSelected(string value)
 
+    // True from close() until the next open(). `opened` can't stand in:
+    // it is false during the enter fade too, which would drop a quick
+    // chip-then-row pick.
+    property bool _closing: false
+    onAboutToShow: _closing = false
+    onAboutToHide: _closing = true
+
     padding: 1
     modal: false
     focus: true
@@ -94,7 +101,7 @@ QQC.Popup {
                         // A style exit fade (org.kde.desktop: ~200 ms) keeps
                         // the rows clickable after close(); a double-click
                         // would select twice and reload the page twice.
-                        if (!dd.opened) return;
+                        if (dd._closing) return;
                         dd.valueSelected(row.modelData.val);
                         dd.close();
                     }
