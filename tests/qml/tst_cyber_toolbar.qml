@@ -250,6 +250,24 @@ Item {
             tryCompare(menu, "visible", false);
         }
 
+        // The long-press path still opened the menu at the cursor, over
+        // the adjacent caret: the caret click meant to close it hit
+        // "Reload" instead.
+        function test_reloadLongPress_caretClickClosesMenuWithoutReload() {
+            const menu = findChild(toolbar, "reloadMenu");
+            const reload = findChild(toolbar, "reloadBtn");
+            const caret = findChild(toolbar, "caretBtn");
+            verify(menu !== null);
+            verify(reload !== null);
+            reloadSpy.clear();
+            mousePress(reload, 11, 6);
+            tryCompare(menu, "opened", true, 3000);
+            mouseRelease(reload, 11, 6);
+            mouseClick(caret);
+            tryCompare(menu, "visible", false);
+            compare(reloadSpy.count, 0);
+        }
+
         function test_fullRepHidden_whileMoreMenuOpen_closesMenu() {
             const menu = findChild(toolbar, "moreMenu");
             verify(menu !== null);

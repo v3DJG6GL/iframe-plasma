@@ -116,10 +116,13 @@ Rectangle {
 
             QQC.AbstractButton {
                 id: reloadBtn
+                objectName: "reloadBtn"
                 width: 22; height: 20
                 hoverEnabled: true
                 onClicked: tb.reloadClicked()
-                onPressAndHold: reloadMenu.popup()
+                // Same place as the caret opens it: at the cursor it
+                // covered the caret, whose closing click then hit Reload.
+                onPressAndHold: reloadMenu.popup(caretBtn, 0, caretBtn.height)
                 QQC.ToolTip.text: i18n("Reload (Ctrl+R) — long-press for more")
                 QQC.ToolTip.visible: hovered
                 QQC.ToolTip.delay: 600
