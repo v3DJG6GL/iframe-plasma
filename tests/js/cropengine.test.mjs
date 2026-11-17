@@ -1370,6 +1370,40 @@ test("hidden page: an armed picker suppresses the scan", () => {
 });
 
 // ============================================================
+// Keyword scan: aria-labels follow innerText's visibility rule
+// ============================================================
+
+// jsdom has no checkVisibility; Chromium's returns false for a node that
+// is display:none itself or sits under one.
+function emulateCheckVisibility(w) {
+    w.Element.prototype.checkVisibility = function () {
+        for (let n = this; n && n.nodeType === 1; n = n.parentElement)
+            if (w.getComputedStyle(n).display === "none") return false;
+        return true;
+    };
+}
+
+test("keyword scan: a display:none node's aria-label does not match", () => {
+    const hidden = { value: true };
+    const t = runKeywordApply(hidden,
+        "<div id='t'><p>All systems nominal</p>" +
+        "<div style='display:none'><span aria-label='Stream offline'></span></div></div>",
+        "#t", ["offline"]);
+    emulateCheckVisibility(t.w);
+    t.tickInterval();
+    assert.deepEqual(t.kw(), ["[ifp-keyword] hit=false"]);
+});
+
+test("keyword scan: a rendered node's aria-label still matches", () => {
+    const hidden = { value: true };
+    const t = runKeywordApply(hidden,
+        "<div id='t'><span aria-label='Stream offline'></span></div>", "#t", ["offline"]);
+    emulateCheckVisibility(t.w);
+    t.tickInterval();
+    assert.deepEqual(t.kw(), ["[ifp-keyword] hit=true"]);
+});
+
+// ============================================================
 // Fit mode: no self-retriggering (H2)
 // ============================================================
 
