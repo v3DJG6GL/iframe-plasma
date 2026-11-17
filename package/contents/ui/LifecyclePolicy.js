@@ -24,6 +24,15 @@
  */
 .pragma library
 
+// A QML Timer's interval is an int: a delay of 2^31 ms (~24.8 days) or more
+// wraps negative and the timer never fires (or wraps to an arbitrary
+// positive delay). config/main.xml invites a "very high" discard delay to
+// get freeze-only, so a hand-edited one must wait the longest step instead.
+const MAX_TIMER_MS = 2147483647;
+function _timerMs(sec) {
+    return Math.min(sec * 1000, MAX_TIMER_MS);
+}
+
 // Called from _reevaluate() when desiredActive flips or target changes.
 // priorFailed (optional, defaults falsy) is true when the view's last load
 // failed or rendered blank — in that case promote-and-reload regardless of how
@@ -69,7 +78,7 @@ function decideOnChange(currentState, desiredActive, frozenAtMs,
     const intervalSec = (currentState === "active")
         ? Math.max(1, freezeDelaySec)
         : Math.max(1, discardDelaySec - freezeDelaySec);
-    return { scheduleMs: intervalSec * 1000 };
+    return { scheduleMs: _timerMs(intervalSec) };
 }
 
 // Tracks when the view's current renderer process started, from the pid
@@ -104,7 +113,7 @@ function decideOnTimer(currentState, recommendedState,
     // A loading or audible view is pinned Active by Chromium —
     // reschedule for the freeze interval, try again then.
     if (recommendedState === "active") {
-        return { scheduleMs: Math.max(1, freezeDelaySec) * 1000 };
+        return { scheduleMs: _timerMs(Math.max(1, freezeDelaySec)) };
     }
     if (currentState === "active") {
         return { setState: "frozen", frozenAtMs: now, chainReevaluate: true };
@@ -118,7 +127,7 @@ function decideOnTimer(currentState, recommendedState,
         const retrySec = (recycleDue === true || discardDelaySec === undefined)
             ? 60
             : Math.max(60, discardDelaySec - freezeDelaySec);
-        return { scheduleMs: retrySec * 1000, reason: "pinned-frozen" };
+        return { scheduleMs: _timerMs(retrySec), reason: "pinned-frozen" };
     }
     return {};
 }

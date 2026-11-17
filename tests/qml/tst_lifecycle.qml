@@ -159,6 +159,16 @@ TestCase {
         const a = P.decideOnChange("frozen", false, 0, 60, 30, 0, 1000);
         compare(a.scheduleMs, 1000);
     }
+    // A Timer interval is an int: a hand-edited "very high" delay (30 days
+    // here) must cap at INT_MAX ms, not wrap negative and never fire.
+    function test_hugeDiscardDelay_cappedBelowIntOverflow() {
+        const a = P.decideOnChange("frozen", false, 0, 5, 2592000, 0, 1000);
+        compare(a.scheduleMs, 2147483647);
+    }
+    function test_hugeFreezeDelay_cappedBelowIntOverflow() {
+        const a = P.decideOnChange("active", false, 0, 2147483647, 2147483647, 0, 1000);
+        compare(a.scheduleMs, 2147483647);
+    }
 
     // ============================================================
     //  decideOnTimer — second decision point
@@ -201,6 +211,14 @@ TestCase {
         // discard <= freeze would give a zero/negative retry → clamp to 60 s.
         const a = P.decideOnTimer("frozen", "frozen", 60, 5000, 30);
         compare(a.scheduleMs, 60000);
+    }
+    function test_onTimer_recommendedActive_hugeFreezeDelayCapped() {
+        const a = P.decideOnTimer("active", "active", 2592000, 1000);
+        compare(a.scheduleMs, 2147483647);
+    }
+    function test_onTimer_frozenPinned_hugeDiscardDelayCapped() {
+        const a = P.decideOnTimer("frozen", "frozen", 5, 5000, 31536000);
+        compare(a.scheduleMs, 2147483647);
     }
     function test_onTimer_frozenPinned_fourArgCallerRetries60s() {
         const a = P.decideOnTimer("frozen", "frozen", 30, 5000);
