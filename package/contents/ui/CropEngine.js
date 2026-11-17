@@ -763,25 +763,13 @@ const _APPLY_BODY = `(function(sel, opts){
   window.__ifpThumbInterval = setInterval(function(){
     if (document.hidden) {
       if (!window.__ifpPickerArmed) {
-        // apply() does not run here, so matchedEl may be a node the page
-        // has since replaced, or one still in the page that the selector no
-        // longer picks first (its class moved to a sibling); its old text
-        // would keep the keyword hit (and the tab's exclusion) alive for
-        // good. Look the target up again on every tick, as apply() would.
-        if (sel) {
-          try { matchedEl = document.querySelector(sel); } catch (e) { matchedEl = null; }
-          // Same as apply(): a body/html (or <head>) match means "scan the
-          // whole page".
-          if (matchedEl && isWholePage(matchedEl)) matchedEl = null;
-          // Also as apply(): a uPlot canvas with no crop drawn yet is
-          // 'canvas-pending' and scans <body>; the bare canvas has no text,
-          // so scanning it would clear a hit the visible page just reported.
-          if (matchedEl && isUplotCanvas(matchedEl) && !window.__ifpLastCropKey) matchedEl = null;
-          // And drop the crop, as apply() does in each of those cases: a
-          // stale isolation keeps every other part of <body> display:none,
-          // which innerText leaves out of the scan.
-          if (!matchedEl) dropCrop();
-        }
+        // Re-resolve the match as the visible path does: matchedEl may be a
+        // node the page has since replaced, or one the selector no longer
+        // picks first, and a stale isolation hides part of the new match
+        // (or all of <body>) from innerText. apply() queues no animation
+        // frame, so it runs on a hidden page; it isolates the new match, or
+        // drops the crop and scans <body> (miss, whole page, pending canvas).
+        apply();
         runKeywordScan();
       }
       return;

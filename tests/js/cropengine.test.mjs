@@ -1314,14 +1314,22 @@ test("hidden page: a pending uPlot canvas scans the body, as apply() does", () =
 
 // jsdom has no innerText; Chromium's leaves out what is not rendered, which
 // is what makes a stale isolation hide the rest of the page from the scan.
+// On an element that is itself not rendered it returns textContent, as
+// Blink does, hidden descendants included.
 function emulateInnerText(w) {
     const rendered = (n) => {
         if (n.nodeType === 3) return n.data;
         if (n.nodeType !== 1 || w.getComputedStyle(n).display === "none") return "";
         return Array.from(n.childNodes).map(rendered).join("");
     };
+    const isRendered = (el) => {
+        for (let n = el; n && n.nodeType === 1; n = n.parentElement)
+            if (w.getComputedStyle(n).display === "none") return false;
+        return true;
+    };
     Object.defineProperty(w.HTMLElement.prototype, "innerText", {
-        configurable: true, get() { return rendered(this); } });
+        configurable: true,
+        get() { return isRendered(this) ? rendered(this) : this.textContent; } });
 }
 
 test("hidden page: a selector that stops matching drops the isolation before scanning the body", () => {
@@ -1336,6 +1344,39 @@ test("hidden page: a selector that stops matching drops the isolation before sca
     t.tickInterval();
     assert.equal(t.w.document.documentElement.getAttribute("data-ifp-isolate"), null);
     assert.deepEqual(t.kw(), ["[ifp-keyword] hit=false", "[ifp-keyword] hit=true"]);
+    assert.equal(t.rafCalls(), 0, "hidden page must not queue animation frames");
+});
+
+test("hidden page: a match that moves to a kept ancestor is isolated before the scan", () => {
+    // The old target's isolation would hide the ancestor's other children,
+    // so the scan would read only the old target's text.
+    const hidden = { value: true };
+    const t = runKeywordApply(hidden,
+        "<div id='card'><span id='a' class='s'>fine</span><p>OFFLINE</p></div>", ".s", ["offline"]);
+    emulateInnerText(t.w);
+    t.tickInterval();
+    assert.deepEqual(t.kw(), ["[ifp-keyword] hit=false"]);
+    t.w.document.getElementById("a").classList.remove("s");
+    t.w.document.getElementById("card").classList.add("s");
+    t.tickInterval();
+    assert.equal(t.w.document.getElementById("card").getAttribute("data-ifp-target"), "1");
+    assert.deepEqual(t.kw(), ["[ifp-keyword] hit=false", "[ifp-keyword] hit=true"]);
+    assert.equal(t.rafCalls(), 0, "hidden page must not queue animation frames");
+});
+
+test("hidden page: a re-mounted target's CSS-hidden text does not match", () => {
+    // The stale isolation hides the new node, and innerText on a node that
+    // is not rendered reads all of its text, CSS-hidden parts included.
+    const hidden = { value: true };
+    const t = runKeywordApply(hidden,
+        "<div id='root'><div id='t'>Offline</div></div>", "#t", ["offline"]);
+    emulateInnerText(t.w);
+    t.tickInterval();
+    assert.deepEqual(t.kw(), ["[ifp-keyword] hit=true"]);
+    t.w.document.getElementById("root").innerHTML =
+        "<div id='t'>Online <span style='display:none'>Offline</span></div>";
+    t.tickInterval();
+    assert.deepEqual(t.kw(), ["[ifp-keyword] hit=true", "[ifp-keyword] hit=false"]);
     assert.equal(t.rafCalls(), 0, "hidden page must not queue animation frames");
 });
 
