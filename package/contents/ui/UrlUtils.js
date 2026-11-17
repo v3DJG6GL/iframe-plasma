@@ -296,11 +296,14 @@ function pickerTargetMatches(tabs, tabIdx, pickedUrl) {
 // popup), which needs a reload of that tab. Compares EFFECTIVE modes: a row
 // without the field (default config, legacy or hand-written JSON) renders
 // as "chartOnly" / "fullPanel", and the config page writes those defaults
-// out on its first save — that is not a mode change.
+// out on its first save — that is not a mode change. Nor is switching
+// between modes that render the same: the chart presets render as full page
+// on a non-Grafana URL (effectiveThumbMode, as thumbSelectorFor applies it).
 function isRenderModeChange(oldRow, newRow) {
     const o = oldRow || {};
     const n = newRow || {};
-    return (o.thumbMode || "chartOnly") !== (n.thumbMode || "chartOnly")
+    return effectiveThumbMode(o.thumbMode || "chartOnly", o.url)
+            !== effectiveThumbMode(n.thumbMode || "chartOnly", n.url)
         || (o.popupMode || "fullPanel") !== (n.popupMode || "fullPanel");
 }
 
