@@ -121,15 +121,6 @@ PlasmoidItem {
         return i18np("1 tab", "%1 tabs (%2 active)", tabs.length, currentTabIndex + 1);
     }
 
-    // Tab URLs are loaded as the primary navigation in a WebEngineView whose
-    // profile is per-authProfileId (auth=None tabs use the ephemeral profile).
-    // Restrict to http(s) so a pasted `data:`, `file:`, `javascript:`, `blob:`
-    // etc. cannot execute in any profile's cookie/storage origin or read
-    // local files.
-    function _isSafeTabUrl(s) {
-        return UrlUtils.isSafeTabUrl(s);
-    }
-
     function parseTabs(jsonStr) {
         return UrlUtils.parseTabs(jsonStr, Log.config);
     }

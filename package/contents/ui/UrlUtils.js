@@ -9,7 +9,7 @@
  *
  * Nothing in here touches Plasmoid.configuration, Kirigami.Theme, or any
  * other singleton — every input arrives by argument. main.qml's QML-side
- * wrappers (parseAuthProfiles / parseTabs / _isSafeTabUrl / resolveTheme /
+ * wrappers (parseAuthProfiles / parseTabs / resolveTheme /
  * resolveUrl / isGrafanaEmbed) are now one-line forwarders to these.
  */
 .pragma library
