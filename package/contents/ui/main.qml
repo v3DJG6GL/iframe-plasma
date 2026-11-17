@@ -1994,6 +1994,13 @@ PlasmoidItem {
                     request.reject();
                 }
                 onAuthenticationDialogRequested: function(request) {
+                    // A basic profile without preempt sends its credentials only
+                    // here, and the popup may never have been opened to fill the
+                    // auth cache. Answer with the stored ones like the popup does.
+                    root.handleBasicAuth(request, root._liveRow(miniView.ownIndex, miniView.ownTab));
+                    if (request.accepted) return;
+                    // Nothing stored or not ours: reject, so Qt's prompt never
+                    // opens over an unattended panel.
                     console.warn(Log.policy, "iframe-plasma[mini-auth] rejected dialog type=" + request.type
                         + " url=" + Log.redactUrl(request.url));
                     request.dialogReject();
