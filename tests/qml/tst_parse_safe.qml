@@ -120,8 +120,39 @@ TestCase {
     }
     function test_tabIndicesSharingProfile_ephemeralShared() {
         // Missing and "" authProfileId both use the one ephemeral profile.
-        const tabs = [{ authProfileId: "" }, { authProfileId: "a" }, {}];
+        const tabs = [{ authProfileId: "", url: "https://g.example/a" },
+                      { authProfileId: "a", url: "https://g.example/b" },
+                      { url: "https://g.example/c" }];
         compare(U.tabIndicesSharingProfile(tabs, 0), [0, 2]);
+    }
+    function test_tabIndicesSharingProfile_ephemeralOnlySameHost() {
+        // The "" jar is shared by every auth=None tab, but a login cookie is
+        // host-scoped: tabs on other hosts must not be reloaded.
+        const tabs = [{ authProfileId: "", url: "https://grafana.a/d/1" },
+                      { authProfileId: "", url: "https://news.b/" },
+                      { authProfileId: "", url: "https://GRAFANA.a:443/d/2" },
+                      { authProfileId: "x", url: "https://grafana.a/d/3" }];
+        compare(U.tabIndicesSharingProfile(tabs, 0), [0, 2]);
+        compare(U.tabIndicesSharingProfile(tabs, 1), [1]);
+    }
+    function test_tabIndicesSharingProfile_ephemeralThemeHost() {
+        const tabs = [{ authProfileId: "", url: "https://${theme}.g.example/a" },
+                      { authProfileId: "", url: "https://dark.g.example/b" },
+                      { authProfileId: "", url: "https://light.g.example/c" }];
+        compare(U.tabIndicesSharingProfile(tabs, 0, "dark"), [0, 1]);
+        compare(U.tabIndicesSharingProfile(tabs, 0), [0, 2]);
+    }
+    function test_tabIndicesSharingProfile_namedProfileIgnoresHost() {
+        // A real auth profile keeps the profile-wide fan-out (SSO domains).
+        const tabs = [{ authProfileId: "a", url: "https://one.example/" },
+                      { authProfileId: "a", url: "https://two.example/" }];
+        compare(U.tabIndicesSharingProfile(tabs, 0), [0, 1]);
+    }
+    function test_tabIndicesSharingProfile_ephemeralUnparsableUrl() {
+        // An unparsable own URL still lists the tab itself, nobody else.
+        const tabs = [{ authProfileId: "", url: "https://[bad/" },
+                      { authProfileId: "", url: "https://[bad/" }];
+        compare(U.tabIndicesSharingProfile(tabs, 0), [0]);
     }
     function test_tabIndicesSharingProfile_badInput() {
         compare(U.tabIndicesSharingProfile(null, 0), []);

@@ -2825,9 +2825,10 @@ PlasmoidItem {
                     // reload broadcast so the miniView re-fetches with the
                     // now-valid cookies on its own. Every thumbnail on the
                     // same profile shares that cookie jar and was parked on
-                    // the same login page, so all of them reload.
+                    // the same login page, so all of them reload (on the
+                    // shared auth=None jar, only those on the same host).
                     onAuthSucceeded: {
-                        for (const i of UrlUtils.tabIndicesSharingProfile(root.tabs, index))
+                        for (const i of UrlUtils.tabIndicesSharingProfile(root.tabs, index, root.resolveTheme()))
                             root._compactReloadRequested(i);
                     }
 

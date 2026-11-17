@@ -102,12 +102,22 @@ function isSafeAuthProfileId(id) {
 // Indices of every tab that shares tab `idx`'s WebEngineProfile, i.e. its
 // cookie jar (main.qml caches one profile per authProfileId; "" is the
 // shared ephemeral one). A login on one of them fills the jar for all.
-function tabIndicesSharingProfile(tabs, idx) {
+// The "" jar is shared by every auth=None tab whatever its host, and a
+// login cookie is host-scoped, so there only tabs on the same host count.
+// `theme` resolves ${theme} in the URLs (default "light").
+function tabIndicesSharingProfile(tabs, idx, theme) {
     if (!Array.isArray(tabs) || idx < 0 || idx >= tabs.length || !tabs[idx]) return [];
     const key = tabs[idx].authProfileId || "";
+    const th = theme || "light";
+    function hostOf(t) {
+        try { return hostKey(substituteTheme(t.url, th)); } catch (e) { return null; }
+    }
+    const ownHost = key === "" ? hostOf(tabs[idx]) : null;
     const out = [];
     for (let i = 0; i < tabs.length; i++) {
-        if (tabs[i] && (tabs[i].authProfileId || "") === key) out.push(i);
+        if (!tabs[i] || (tabs[i].authProfileId || "") !== key) continue;
+        if (key === "" && i !== idx && (ownHost === null || hostOf(tabs[i]) !== ownHost)) continue;
+        out.push(i);
     }
     return out;
 }
