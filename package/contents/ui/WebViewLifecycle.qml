@@ -70,7 +70,10 @@ QtObject {
     // discardDelaySec, and reloads fresh on its next appearance. 0 = never.
     // Only a view that leaves the screen regularly (rotating thumbnail) is
     // ever recycled — a visible or wanted view is never discarded.
-    property int recycleAfterSec: 0
+    // double, not int: main.qml binds minutes * 60, and an int would wrap a
+    // hand-edited huge value to a tiny (recycle every rotation) or negative
+    // (never) delay. isRecycleDue does its arithmetic in doubles.
+    property double recycleAfterSec: 0
 
     // Renderer pid last sampled, and Date.now() ms when that renderer was
     // first seen (0 while there is none). Sampled at every decision point,

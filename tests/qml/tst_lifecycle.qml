@@ -5,6 +5,7 @@
 import QtQuick
 import QtTest
 import "../../package/contents/ui/LifecyclePolicy.js" as P
+import "../../package/contents/ui" as Ui
 
 TestCase {
     name: "Lifecycle"
@@ -393,6 +394,15 @@ TestCase {
     }
     function test_recycle_over() {
         verify(P.isRecycleDue(1000, 7200, 1e12));
+    }
+    // main.qml binds thumbnailRecycleMin * 60 into recycleAfterSec; an int
+    // property wrapped a hand-edited 71582789 min to 44 s (recycle on every
+    // rotation). Untargeted: only the property storage is under test.
+    Ui.WebViewLifecycle { id: recycleCtl }
+    function test_recycle_afterSecKeepsHugeProduct() {
+        recycleCtl.recycleAfterSec = 71582789 * 60;
+        compare(recycleCtl.recycleAfterSec, 4294967340);
+        verify(!P.isRecycleDue(1000, recycleCtl.recycleAfterSec, 1000 + 3600 * 1000));
     }
     function test_trackRenderer_firstPidStartsClock() {
         const r = P.trackRenderer(0, 0, 4242, 5000);
