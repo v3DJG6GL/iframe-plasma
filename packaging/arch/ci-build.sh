@@ -41,8 +41,10 @@ su builder -c "cd '$work' && makepkg --noconfirm --cleanbuild"
 pkg=$(find "$work" -maxdepth 1 -name "$pkgname-$ver-*-x86_64.pkg.tar.zst" -print -quit)
 [ -n "$pkg" ] || { echo "makepkg produced no package" >&2; exit 1; }
 # The C++ plugin must land in Qt's own QML import path, or plasmashell can't
-# load it without a QML_IMPORT_PATH tweak.
-bsdtar -tf "$pkg" | grep -q '^usr/lib/qt6/qml/io/github/v3DJG6GL/iframe/libiframe_plasma_qml.so$' \
+# load it without a QML_IMPORT_PATH tweak. No `grep -q`: it exits on the first
+# match, bsdtar then dies of SIGPIPE on the entries after the .so, and pipefail
+# turns that into a false "plugin not under" failure.
+bsdtar -tf "$pkg" | grep '^usr/lib/qt6/qml/io/github/v3DJG6GL/iframe/libiframe_plasma_qml.so$' >/dev/null \
   || { echo "plugin not under usr/lib/qt6/qml in $pkg" >&2; bsdtar -tf "$pkg" >&2; exit 1; }
 # Lint only: namcap's dependency hints are advice, not a gate.
 namcap "$work/PKGBUILD" "$pkg" || true
