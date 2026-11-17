@@ -46,12 +46,16 @@ case "${1:-}" in
 esac
 
 IFS=. read -r major minor patch <<<"$current"
+# Force base 10: bash arithmetic reads a leading 0 as octal (010 + 1 = 9,
+# 08 is an error) should CMakeLists.txt ever hold one.
+major=$((10#$major)) minor=$((10#$minor)) patch=$((10#$patch))
 case "$1" in
     major) new="$((major + 1)).0.0" ;;
     minor) new="$major.$((minor + 1)).0" ;;
     patch) new="$major.$minor.$((patch + 1))" ;;
     *)
-        [[ $1 =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "expected patch, minor, major or X.Y.Z, got '$1'"
+        # SemVer form: no leading zeros, which the next bump would misread.
+        [[ $1 =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || die "expected patch, minor, major or X.Y.Z, got '$1'"
         new=$1
         ;;
 esac
