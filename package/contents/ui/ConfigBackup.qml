@@ -171,7 +171,10 @@ KCM.SimpleKCM {
                       i18n("All files (*)")]
         onAccepted: {
             const path = page._urlToPath(selectedFile);
-            const result = IframePlasma.BackupBridge.importFromFile(path, page._collectConfig());
+            // The revert-point snapshot holds the persisted config, not the
+            // page: after an unapplied earlier import the page holds values
+            // that were never saved.
+            const result = IframePlasma.BackupBridge.importFromFile(path, page._persisted);
             if (result.ok) {
                 // Compare against the persisted config, the same test the
                 // shell enables Apply by. Re-importing a backup identical to
