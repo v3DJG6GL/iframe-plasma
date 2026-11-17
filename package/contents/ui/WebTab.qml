@@ -458,20 +458,9 @@ Item {
 
     // (Re)installs the refresh-control user script on `view` with the Off
     // choice baked into its source (PageScripts.refreshControlSource).
-    //
-    // WebEngineScript is a value type in Qt 6 and can't be inlined in
-    // QML — must build it imperatively via the WebEngine.script() factory.
     function _installRefreshScript(view, off) {
-        const name = "iframe-plasma-refresh-control";
-        const old = view.userScripts.find(name);
-        for (let i = 0; i < old.length; ++i) view.userScripts.remove(old[i]);
-        const s = WebEngine.script();
-        s.name = name;
-        s.injectionPoint = WebEngineScript.DocumentCreation;
-        s.worldId = WebEngineScript.MainWorld;
-        s.runOnSubFrames = false;
-        s.sourceCode = PageScripts.refreshControlSource(off);
-        view.userScripts.insert(s);
+        UserScripts.replace(view, "iframe-plasma-refresh-control",
+                            PageScripts.refreshControlSource(off));
     }
 
     // (Re)installs the Qt 6.10 GC workaround script (a no-op unless
@@ -479,18 +468,7 @@ Item {
     // Replaced by name so a changed interval, or 0, reaches the next load
     // instead of the one baked in when the view was created.
     function _installGcScript(view, sec) {
-        const name = "iframe-plasma-gc";
-        const old = view.userScripts.find(name);
-        for (let i = 0; i < old.length; ++i) view.userScripts.remove(old[i]);
-        const src = PageScripts.gcWorkaroundSource(sec);
-        if (src.length === 0) return;
-        const s = WebEngine.script();
-        s.name = name;
-        s.injectionPoint = WebEngineScript.DocumentCreation;
-        s.worldId = WebEngineScript.MainWorld;
-        s.runOnSubFrames = false;
-        s.sourceCode = src;
-        view.userScripts.insert(s);
+        UserScripts.replace(view, "iframe-plasma-gc", PageScripts.gcWorkaroundSource(sec));
     }
 
     function onAutheliaHost(currentUrl) {
@@ -580,12 +558,7 @@ Item {
                     //
                     // Sources: PanelMenu.tsx + e2e-selectors/components.ts on
                     // grafana/grafana at tags v12.0.0, v12.4.0, main.
-                    const hp = WebEngine.script();
-                    hp.name = "iframe-plasma-hide-panel-menu";
-                    hp.injectionPoint = WebEngineScript.DocumentCreation;
-                    hp.worldId = WebEngineScript.MainWorld;
-                    hp.runOnSubFrames = false;
-                    hp.sourceCode =
+                    UserScripts.replace(webview, "iframe-plasma-hide-panel-menu",
                         "(function(){\n" +
                         "  if (window.__ifpPanelMenuStyled) return;\n" +
                         // Gate on the sentinel — same URL is reused for tabs that
@@ -613,8 +586,7 @@ Item {
                         "  } else {\n" +
                         "    inject();\n" +
                         "  }\n" +
-                        "})();";
-                    webview.userScripts.insert(hp);
+                        "})();");
 
                     // Bridge MainWorld history navigation into an isolated-world
                     // DOM event so CropEngine's selector re-evaluates on SPA route
@@ -626,12 +598,7 @@ Item {
                     // here, dispatch `ifp-navigation`, and the IIFE listens for it.
                     // Coexists with the refresh-control history patch above —
                     // wrapping is order-independent (both call origPS/origRS).
-                    const nb = WebEngine.script();
-                    nb.name = "iframe-plasma-nav-bridge";
-                    nb.injectionPoint = WebEngineScript.DocumentCreation;
-                    nb.worldId = WebEngineScript.MainWorld;
-                    nb.runOnSubFrames = false;
-                    nb.sourceCode =
+                    UserScripts.replace(webview, "iframe-plasma-nav-bridge",
                         "(function(){\n" +
                         "  if (window.__ifpNavBridged) return;\n" +
                         "  window.__ifpNavBridged = true;\n" +
@@ -644,8 +611,7 @@ Item {
                         "  history.replaceState = function(){ var r = origRS.apply(history, arguments); fire(); return r; };\n" +
                         "  window.addEventListener('popstate', fire);\n" +
                         "  window.addEventListener('hashchange', fire);\n" +
-                        "})();";
-                    webview.userScripts.insert(nb);
+                        "})();");
 
                     // Qt 6.10 GC workaround — a no-op unless plasmashell runs
                     // with --js-flags=--expose-gc. See PageScripts.js.

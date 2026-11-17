@@ -1,2 +1,3 @@
 singleton Theme 1.0 Theme.qml
 singleton Log 1.0 Log.qml
+singleton UserScripts 1.0 UserScripts.qml
