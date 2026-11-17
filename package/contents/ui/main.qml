@@ -2525,32 +2525,6 @@ PlasmoidItem {
             }
         }
 
-        // Bridge for root.savePickedSelector — it can't reach the
-        // Repeater's `id: repeater` directly because QML Components
-        // are ID-isolated (a lazy fullRepresentation Component owns a
-        // separate ID namespace from root). The previous direct
-        // `repeater.itemAt(tabIdx)` from root scope threw
-        // `ReferenceError: repeater is not defined`, the try/catch
-        // swallowed it, and every picker save silently no-op'd
-        // (urlsJson never even got written). This helper lives in
-        // Force-apply helper. savePickedSelector NO LONGER calls this —
-        // the binding-driven path (serial bump → popupSelector binding
-        // re-evaluates → onPopupSelectorChanged → _applyPopupSelector)
-        // does it on its own. Kept solely for explicit re-apply needs
-        // (currently unused; harmless to leave in case a future caller
-        // wants a force without going through urlsJson). NEVER writes
-        // wt.popupSelector — that would sever its binding and break
-        // every subsequent metadata-Apply for this tab. Same severance
-        // rule applies to restorePopupSelectorAt below.
-        function applyPopupSelectorAt(tabIdx, sel) {
-            const wt = repeater.itemAt(tabIdx);
-            if (wt && typeof wt.applyImmediately === "function") {
-                wt.applyImmediately(sel);
-                return true;
-            }
-            return false;
-        }
-
         // Re-engage the popup's CropEngine isolation for the CURRENT
         // value of root.tabs[tabIdx] — used by the save-picked dialog's
         // Cancel path AND by savePickedSelector's thumb-only branch.
@@ -2559,9 +2533,11 @@ PlasmoidItem {
         // without this restore, dismissal leaves the popup un-isolated
         // until the user reloads or switches tabs. Reads root.tabs[]
         // directly (the live model is the truth) and calls
-        // applyImmediately so the page-side state matches. Does NOT
-        // touch wt.popupSelector — see severance note in
-        // applyPopupSelectorAt above.
+        // applyImmediately so the page-side state matches. Lives here
+        // because root cannot reach `id: repeater` (the lazy
+        // fullRepresentation Component has its own ID namespace). NEVER
+        // writes wt.popupSelector — an imperative write severs its
+        // binding and breaks every later metadata Apply for this tab.
         function restorePopupSelectorAt(tabIdx) {
             const wt = repeater.itemAt(tabIdx);
             if (!wt || typeof wt.applyImmediately !== "function") return false;
