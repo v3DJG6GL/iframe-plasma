@@ -656,6 +656,12 @@ PlasmoidItem {
     // Reusing _tabReloadRequested here would also reload the foreground tab.
     signal _compactReloadRequested(int tabIdx)
 
+    // Soft-reload ONLY the popup WebTab at tabIdx, and only when its view is
+    // not Discarded (a Discarded view reloads on its next landing anyway, so
+    // waking it would start a renderer for an invisible view). The popup-
+    // side counterpart of _compactReloadRequested.
+    signal _popupReloadRequested(int tabIdx)
+
     // Monotonic NOTIFY counter for in-place metadata updates to
     // root.tabs[]. When the KCM Apply path detects a metadata-only
     // urlsJson change (no URL/profile/order change — see
@@ -714,8 +720,10 @@ PlasmoidItem {
         // routers keep stale layouts) when the wrapping isolation flips on
         // or off — the *intended* viewport is now genuinely different. A
         // soft reload re-navigates to the same URL and lets the page paint
-        // at its new natural extent. Per-tab only, no other tabs touched.
-        const reloadTabs = [];
+        // at its new natural extent. Per-tab and per-view: only the view
+        // (thumbnail or popup) whose mode flipped reloads.
+        const thumbReloadTabs = [];
+        const popupReloadTabs = [];
         // Tabs whose exclude-keyword list changed AND that currently hold a
         // runtime exclusion. Their excluded miniView is frozen/discarded
         // (desiredActive is gated by previewTabIdx, which this exclusion
@@ -728,7 +736,8 @@ PlasmoidItem {
             const o = cur[i];
             const n = newArr[i];
             if (!o || !n) continue;
-            const modeChanged = UrlUtils.isRenderModeChange(o, n);
+            const thumbModeChanged = UrlUtils.isThumbModeChange(o, n);
+            const popupModeChanged = UrlUtils.isPopupModeChange(o, n);
             const oldKeywords = Array.isArray(o.thumbExcludeKeywords)
                                 ? JSON.stringify(o.thumbExcludeKeywords) : "";
             const newKeywords = Array.isArray(n.thumbExcludeKeywords)
@@ -752,9 +761,8 @@ PlasmoidItem {
             o.excludeFromRotation  = n.excludeFromRotation === true;
             o.popupMode            = n.popupMode || "fullPanel";
             o.popupSelector        = n.popupSelector || "";
-            if (modeChanged) {
-                reloadTabs.push(i);
-            }
+            if (thumbModeChanged) thumbReloadTabs.push(i);
+            if (popupModeChanged) popupReloadTabs.push(i);
             if (oldKeywords !== newKeywords && root._runtimeExcluded[i]) {
                 delete root._runtimeExcluded[i];
                 exclusionCleared = true;
@@ -767,15 +775,16 @@ PlasmoidItem {
         root._tabsMetadataChanged(-1);
         console.debug(Log.config, "iframe-plasma[urls] metadata-only apply rows=" + cur.length
             + " serial=" + root._tabsMetadataSerial
-            + " modeChangedTabs=" + JSON.stringify(reloadTabs));
-        // Per-tab soft reloads (popup WebTab + miniView) for the mode-flip
-        // rows. Uses the broadcast _tabReloadRequested signal — same
-        // routing as Ctrl+R / the toolbar reload button — so the popup
-        // tab + slot delegate both pick it up, and the page renders fresh
-        // at the now-correct viewport size.
-        for (let r = 0; r < reloadTabs.length; r++) {
-            root._tabReloadRequested(reloadTabs[r], "soft");
-        }
+            + " thumbModeChangedTabs=" + JSON.stringify(thumbReloadTabs)
+            + " popupModeChangedTabs=" + JSON.stringify(popupReloadTabs));
+        // Per-view soft reloads for the mode-flip rows, so the page renders
+        // fresh at the now-correct viewport size. Not the shared
+        // _tabReloadRequested broadcast: that would also re-navigate the
+        // other view of the row and wake a Discarded one, whose next landing
+        // reloads with the live row's mode anyway. Both targeted signals
+        // skip Discarded views.
+        for (const i of thumbReloadTabs) root._compactReloadRequested(i);
+        for (const i of popupReloadTabs) root._popupReloadRequested(i);
     }
 
     // Session-only runtime exclusion map. Populated by miniView delegates
@@ -2393,15 +2402,16 @@ PlasmoidItem {
                         on_TabReloadRequested(miniView.ownIndex, "soft");
                     }
 
-                    // Post-auth refresh targeted at the compact view only
-                    // (the popup tab that authenticated is already current).
+                    // Refresh targeted at the compact view only: post-auth
+                    // (the popup tab that authenticated is already current)
+                    // and a thumbnail-mode flip on KCM Apply.
                     // A Discarded view is skipped: waking it here would start
                     // a renderer for an invisible view, and WebEngine reloads
                     // it anyway (with the new cookies) on its next landing.
                     function on_CompactReloadRequested(tabIdx) {
                         if (tabIdx !== miniView.ownIndex) return;
                         if (miniView.lifecycleState === WebEngineView.LifecycleState.Discarded) {
-                            console.debug(Log.load, "iframe-plasma[compact] post-login reload skipped (discarded) idx=" + tabIdx);
+                            console.debug(Log.load, "iframe-plasma[compact] targeted reload skipped (discarded) idx=" + tabIdx);
                             return;
                         }
                         on_TabReloadRequested(tabIdx, "soft");
@@ -2894,6 +2904,14 @@ PlasmoidItem {
                             if (tabIdx !== index) return;
                             if (kind === "hard") hardReload();
                             else                 reload();
+                        }
+                        // Popup-mode flip on KCM Apply. A Discarded view is
+                        // left alone: it reloads with the new mode when it
+                        // is next shown.
+                        function on_PopupReloadRequested(tabIdx) {
+                            if (tabIdx !== index) return;
+                            if (webView && webView.lifecycleState === WebEngineView.LifecycleState.Discarded) return;
+                            reload();
                         }
                     }
                 }

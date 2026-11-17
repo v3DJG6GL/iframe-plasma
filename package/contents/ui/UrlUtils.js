@@ -351,12 +351,20 @@ function pickerTargetMatches(tabs, tabIdx, pickedUrl) {
 // out on its first save — that is not a mode change. Nor is switching
 // between modes that render the same: the chart presets render as full page
 // on a non-Grafana URL (effectiveThumbMode, as thumbSelectorFor applies it).
-function isRenderModeChange(oldRow, newRow) {
+// Thumbnail and popup are checked apart so the in-place applicator reloads
+// only the view whose viewport changed: a thumbnail-only flip must not
+// re-navigate the popup tab the user may be reading, and vice versa.
+function isThumbModeChange(oldRow, newRow) {
     const o = oldRow || {};
     const n = newRow || {};
     return effectiveThumbMode(o.thumbMode || "chartOnly", o.url)
-            !== effectiveThumbMode(n.thumbMode || "chartOnly", n.url)
-        || (o.popupMode || "fullPanel") !== (n.popupMode || "fullPanel");
+        !== effectiveThumbMode(n.thumbMode || "chartOnly", n.url);
+}
+
+function isPopupModeChange(oldRow, newRow) {
+    const o = oldRow || {};
+    const n = newRow || {};
+    return (o.popupMode || "fullPanel") !== (n.popupMode || "fullPanel");
 }
 
 // Auto-cycle stepper. Given the current tab index and the live `tabs`

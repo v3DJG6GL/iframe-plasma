@@ -160,7 +160,8 @@ TestCase {
             true);
     }
 
-    // ===== isRenderModeChange: which metadata-only rows need a reload =
+    // ===== isThumbModeChange / isPopupModeChange: which metadata-only
+    // rows need a reload (either half flipping reloads that view) =====
     //
     // The in-place applicator reloads a tab whose thumbnail or popup mode
     // flipped. A row without the fields (the shipped default config, any
@@ -225,7 +226,39 @@ TestCase {
         ];
     }
     function test_renderMode(d) {
-        compare(U.isRenderModeChange(d.o, d.n), d.want);
+        compare(U.isThumbModeChange(d.o, d.n) || U.isPopupModeChange(d.o, d.n), d.want);
+    }
+
+    // Each half reports only its own view, so a thumbnail-only flip does
+    // not reload the popup tab (and vice versa).
+    function test_renderModeHalves_data() {
+        return [
+            { tag: "thumbOnly",
+              o: _tab("https://a/", { thumbMode: "chartOnly", popupMode: "fullPanel" }),
+              n: _tab("https://a/", { thumbMode: "custom", popupMode: "fullPanel" }),
+              thumb: true, popup: false },
+            { tag: "thumbTextToCustom",
+              o: _tab("https://a/", { thumbMode: "text" }),
+              n: _tab("https://a/", { thumbMode: "custom" }),
+              thumb: true, popup: false },
+            { tag: "popupOnly",
+              o: _tab("https://a/", { thumbMode: "custom", popupMode: "fullPanel" }),
+              n: _tab("https://a/", { thumbMode: "custom", popupMode: "custom" }),
+              thumb: false, popup: true },
+            { tag: "both",
+              o: _tab("https://a/", { thumbMode: "text", popupMode: "custom" }),
+              n: _tab("https://a/", { thumbMode: "custom", popupMode: "fullPanel" }),
+              thumb: true, popup: true },
+            { tag: "neither",
+              o: _tab("https://a/", { label: "Old" }),
+              n: _tab("https://a/", { label: "New" }),
+              thumb: false, popup: false },
+            { tag: "nullRows", o: null, n: undefined, thumb: false, popup: false },
+        ];
+    }
+    function test_renderModeHalves(d) {
+        compare(U.isThumbModeChange(d.o, d.n), d.thumb);
+        compare(U.isPopupModeChange(d.o, d.n), d.popup);
     }
 
     // ===== Mixed: one row structural, another metadata-only → struct
