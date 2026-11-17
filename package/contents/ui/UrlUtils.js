@@ -77,10 +77,13 @@ function configIndexForTab(arr, tabIndex) {
 }
 
 // Same shape as parseTabs but no URL filter — profile rows aren't URLs.
+// Non-object rows (null, strings, arrays from a Backup import or a
+// hand-edited appletsrc) are dropped so every consumer can read `p.id`.
 function parseAuthProfiles(jsonStr, logCategory) {
     try {
         const arr = JSON.parse(jsonStr || "[]");
-        return Array.isArray(arr) ? arr : [];
+        if (!Array.isArray(arr)) return [];
+        return arr.filter(p => p !== null && typeof p === "object" && !Array.isArray(p));
     } catch (e) {
         if (logCategory) console.warn(logCategory, "iframe-plasma: bad authProfilesJson:", e.message);
         else console.warn("iframe-plasma: bad authProfilesJson:", e.message);

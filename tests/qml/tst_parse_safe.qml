@@ -80,6 +80,13 @@ TestCase {
         compare(out[0].id, "a");
         compare(out[1].authType, "bearer");
     }
+    function test_parseAuthProfiles_dropsNonObjectRows() {
+        // A null row would make profileById's `p.id` throw for every caller.
+        const out = U.parseAuthProfiles('[null,{"id":"a"},"x",42,[1],{"id":"b"}]');
+        compare(out.length, 2);
+        compare(out[0].id, "a");
+        compare(out[1].id, "b");
+    }
     function test_parseAuthProfiles_doesNotValidateAuthType() {
         // Unknown authType is preserved; consumer code falls back via
         // authSpec() — testing tolerance here.
