@@ -13,7 +13,10 @@
 // aliases can store something other than the value assigned (a SpinBox
 // clamps to its range), so both answers come from `after`, never from
 // `wanted`:
-//   changed  — some live value differs from the persisted one (Apply is enabled)
+//   changed  — some live value differs from the persisted one (Apply is
+//              enabled). Judged over every key the page holds, as the
+//              shell's Apply test is: an earlier unapplied import can have
+//              changed a key this file does not carry.
 //   adjusted — keys whose stored value is not the imported one
 // Keys the page does not hold (absent from `after`) are ignored.
 function importOutcome(before, wanted, after) {
@@ -22,6 +25,8 @@ function importOutcome(before, wanted, after) {
     for (const k in wanted) {
         if (!(k in after)) continue;
         if (after[k] !== wanted[k]) adjusted.push(k);
+    }
+    for (const k in after) {
         if (after[k] !== before[k]) changed = true;
     }
     return { changed: changed, adjusted: adjusted };

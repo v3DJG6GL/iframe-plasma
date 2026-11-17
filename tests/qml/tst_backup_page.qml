@@ -54,6 +54,18 @@ TestCase {
         compare(out.adjusted, []);
     }
 
+    // A first import changed urlsJson and was not applied; a second file
+    // without urlsJson matches the persisted values. The page still differs
+    // from disk (Apply stays enabled), so the banner must not say "nothing
+    // to apply" — OK would then persist the first file's values unseen.
+    function test_earlierUnappliedImport_stillChanged() {
+        const persisted = { urlsJson: "[A]", zoomFactor: 100 };
+        const out = B.importOutcome(persisted, { zoomFactor: 100 },
+                                    { urlsJson: "[B]", zoomFactor: 100 });
+        compare(out.changed, true);
+        compare(out.adjusted, []);
+    }
+
     function test_emptyImport_nothingChanged() {
         const out = B.importOutcome({ zoomFactor: 100 }, {}, { zoomFactor: 100 });
         compare(out.changed, false);
