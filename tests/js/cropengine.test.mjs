@@ -1710,6 +1710,52 @@ test("keyword scan: a display:none matched element's own aria-label does not mat
 });
 
 // ============================================================
+// apply: the first rendered match is isolated
+// ============================================================
+
+// A page whose observers and timers are stubbed, with checkVisibility
+// emulated (or left out, as jsdom has it) before the engine runs.
+function runRenderedApply(html, selector, withCheckVisibility = true) {
+    const dom = new JSDOM(`<!doctype html><html><body>${html}</body></html>`,
+                          { runScripts: "outside-only" });
+    const w = dom.window;
+    w.MutationObserver = class { observe() {} disconnect() {} takeRecords() { return []; } };
+    w.ResizeObserver = class { observe() {} disconnect() {} };
+    w.requestAnimationFrame = (cb) => { cb(); return 0; };
+    w.cancelAnimationFrame = () => {};
+    w.setInterval = () => 0;
+    w.clearInterval = () => {};
+    w.console = { info: () => {}, warn: () => {}, error: () => {} };
+    if (withCheckVisibility) emulateCheckVisibility(w);
+    const result = w.eval(`(${ce.buildApplyJs(selector)})`);
+    return { w, result, $: (id) => w.document.getElementById(id) };
+}
+
+test("apply: a hidden first match gives way to a rendered one", () => {
+    // A responsive duplicate: the mobile copy under a display:none wrapper
+    // comes first in the DOM. Isolating it would blank the crop.
+    const t = runRenderedApply(
+        "<div style='display:none'><div id='m' class='t'>mobile</div></div>" +
+        "<div><div id='d' class='t'>desktop</div></div>", ".t");
+    assert.equal(t.result, "matched-and-observing");
+    assert.equal(t.$("d").getAttribute("data-ifp-target"), "1");
+    assert.equal(t.$("m").hasAttribute("data-ifp-target"), false);
+    // Re-applies keep the rendered one.
+    t.w.__ifpThumbSchedule();
+    assert.equal(t.$("d").getAttribute("data-ifp-target"), "1");
+});
+
+test("apply: with no rendered match the first one is still isolated", () => {
+    for (const cv of [true, false]) {
+        const t = runRenderedApply(
+            "<div style='display:none'><div id='a' class='t'>a</div></div>" +
+            "<div style='display:none'><div id='b' class='t'>b</div></div>", ".t", cv);
+        assert.equal(t.result, "matched-and-observing", String(cv));
+        assert.equal(t.$("a").getAttribute("data-ifp-target"), "1", String(cv));
+    }
+});
+
+// ============================================================
 // Fit mode: no self-retriggering (H2)
 // ============================================================
 

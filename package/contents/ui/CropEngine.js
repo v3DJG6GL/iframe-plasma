@@ -605,6 +605,18 @@ const _APPLY_BODY = `(function(sel, opts){
     return el === document.body || el === document.documentElement
         || !(document.body && document.body.contains(el));
   }
+  // The first match that is rendered: a responsive duplicate under a
+  // display:none wrapper, or an inactive tab pane, may come first in the
+  // DOM, and isolating it would blank the crop while reporting a match.
+  // Falls back to the first match when none is rendered, or without
+  // checkVisibility (jsdom). The common case costs one querySelector.
+  function firstRendered() {
+    const first = document.querySelector(sel);
+    if (!first || !first.checkVisibility || first.checkVisibility()) return first;
+    const all = document.querySelectorAll(sel);
+    for (let i = 1; i < all.length; i++) if (all[i].checkVisibility()) return all[i];
+    return first;
+  }
   function apply() {
     // Picker-armed guard: same as isolateElement(). Short-circuits
     // every code path that could re-set data-ifp-isolate while the
@@ -614,7 +626,7 @@ const _APPLY_BODY = `(function(sel, opts){
     // engine for its keyword scan alone, which then reads <body>.
     if (!sel) { matchedEl = null; return 'wait'; }
     let el;
-    try { el = document.querySelector(sel); }
+    try { el = firstRendered(); }
     catch(e) { matchedEl = null; console.warn('[ifp-thumb] invalid selector "'+sel+'": '+e.message); return 'invalid'; }
     if (!el) {
       matchedEl = null;
@@ -631,7 +643,8 @@ const _APPLY_BODY = `(function(sel, opts){
       // isolating would hide every child of <body> (none is an ancestor of
       // the target) while still reporting a match: a silently blank view.
       // A first match inside <head> ('title', '[href]' on a stylesheet link)
-      // is the same case: it shows nothing, so the page is shown instead.
+      // with no rendered match after it is the same case: it shows nothing,
+      // so the page is shown instead.
       // matchedEl stays null, which makes the keyword scan read <body>.
       // The same selector may have cropped a descendant before (the page
       // put the matching class on <body>): show the whole page now.
