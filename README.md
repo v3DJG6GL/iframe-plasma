@@ -76,26 +76,28 @@ sudo apt install ./iframe-plasma_*_ubuntu26.04_amd64.deb
 Every release is also published to a private pacman repository on the Forgejo
 package registry, so `pacman -Syu` picks up new versions. It needs a Forgejo
 access token with only the **read:package** scope (e.g. named `FJ_PACKAGES_READ`).
-One-time setup (trust the registry's signing key, then add the repository; the
-token goes into a root-only file because `/etc/pacman.conf` is world-readable):
+One-time setup, in any shell (bash, zsh or fish): the command asks for the token,
+trusts the registry's signing key and adds the repository. The token goes into the
+root-only `/etc/pacman.d/forgejo-apps`, because `/etc/pacman.conf` is
+world-readable; running the command again only refreshes the key and the token.
 
-```bash
-TOKEN=<read:package token>
-curl -fsSLo /tmp/forgejo-arch.key -u "v3djg6gl:$TOKEN" \
-    https://forgejo.informethic.ch/api/packages/v3djg6gl/arch/repository.key
-sudo pacman-key --add /tmp/forgejo-arch.key
-sudo pacman-key --lsign-key 'v3djg6gl@noreply.forgejo.informethic.ch'
-
+```sh
+bash -c '
+set -euo pipefail
+read -rsp "Forgejo token (read:package): " TOKEN; echo
+base=https://forgejo.informethic.ch/api/packages/v3djg6gl/arch
+key=$(mktemp)
+curl -fsSL -u "v3djg6gl:$TOKEN" -o "$key" "$base/repository.key"
+sudo pacman-key --add "$key"
+sudo pacman-key --lsign-key "v3djg6gl@noreply.forgejo.informethic.ch"
+rm -f "$key"
 sudo install -m 600 /dev/null /etc/pacman.d/forgejo-apps
-echo "Server = https://v3djg6gl:$TOKEN@forgejo.informethic.ch/api/packages/v3djg6gl/arch/apps/\$arch" \
-    | sudo tee /etc/pacman.d/forgejo-apps >/dev/null
-sudo tee -a /etc/pacman.conf <<'EOF'
-
-[v3djg6gl.apps.forgejo.informethic.ch]
-SigLevel = Required
-Include = /etc/pacman.d/forgejo-apps
-EOF
-
+printf "Server = https://v3djg6gl:%s@forgejo.informethic.ch/api/packages/v3djg6gl/arch/apps/%sarch\n" "$TOKEN" "$" \
+  | sudo tee /etc/pacman.d/forgejo-apps >/dev/null
+grep -qF "[v3djg6gl.apps.forgejo.informethic.ch]" /etc/pacman.conf \
+  || printf "\n[v3djg6gl.apps.forgejo.informethic.ch]\nSigLevel = Required\nInclude = /etc/pacman.d/forgejo-apps\n" \
+  | sudo tee -a /etc/pacman.conf >/dev/null
+'
 sudo pacman -Syu iframe-plasma
 ```
 
