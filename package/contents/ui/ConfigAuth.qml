@@ -558,12 +558,14 @@ KCM.SimpleKCM {
     // secret written for a profile the user then discards would be left in
     // the wallet under an id nothing references. setMap replaces the whole
     // entry, so the latest map per profile wins. Reassigned, not mutated, so
-    // hasStoredSecret re-evaluates.
-    property var _pendingSecretWrites: ({})
+    // hasStoredSecret re-evaluates. Null-prototype map, like UrlUtils'
+    // authProfileBodies: an imported id such as "__proto__" or "toString"
+    // must be an own key, not replace or hit an Object.prototype member.
+    property var _pendingSecretWrites: Object.create(null)
     // setMap failures of the last saveConfig(), shown in the header.
     property int _secretWriteFailures: 0
     function stageSecretWrite(profileId, map) {
-        const next = Object.assign({}, _pendingSecretWrites);
+        const next = Object.assign(Object.create(null), _pendingSecretWrites);
         next[profileId] = map;
         _pendingSecretWrites = next;
         // Dirties the page; once applied, the widget re-primes its profiles
@@ -575,7 +577,7 @@ KCM.SimpleKCM {
         const ids = _pendingSecretRemovals;
         _pendingSecretRemovals = [];
         if (!authSupport) {
-            _pendingSecretWrites = ({});
+            _pendingSecretWrites = Object.create(null);
             return;
         }
         // Writes first, then removals; a profile deleted after its secret was
@@ -591,7 +593,7 @@ KCM.SimpleKCM {
         _secretWriteFailures = failed;
         // Cleared only after the writes: this reassignment is what re-runs
         // each card's hasStoredSecret, which must then see the new entries.
-        _pendingSecretWrites = ({});
+        _pendingSecretWrites = Object.create(null);
         for (const id of ids) {
             const key = authSupport.profileKey(id);
             if (authSupport.removeKey(key)) continue;
