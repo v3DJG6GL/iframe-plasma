@@ -51,6 +51,7 @@ Item {
             toolbar.latencyMs = 0;
             toolbar.fullRepVisible = false;
             toolbar.pickerActive = false;
+            toolbar.visible = true;
         }
 
         // ============================================================
@@ -275,6 +276,29 @@ Item {
             menu.popup();
             tryCompare(menu, "opened", true);
             toolbar.fullRepVisible = false;
+            tryCompare(menu, "visible", false);
+        }
+
+        // main.qml hides the toolbar when the last tab goes away while the
+        // full rep stays up (desktop widget, pinned popup); the menus are
+        // overlay Popups and must not stay open past their buttons.
+        function test_toolbarHidden_whileReloadMenuOpen_closesMenu() {
+            const menu = findChild(toolbar, "reloadMenu");
+            verify(menu !== null);
+            toolbar.fullRepVisible = true;
+            menu.popup();
+            tryCompare(menu, "opened", true);
+            toolbar.visible = false;
+            tryCompare(menu, "visible", false);
+        }
+
+        function test_toolbarHidden_whileMoreMenuOpen_closesMenu() {
+            const menu = findChild(toolbar, "moreMenu");
+            verify(menu !== null);
+            toolbar.fullRepVisible = true;
+            menu.popup();
+            tryCompare(menu, "opened", true);
+            toolbar.visible = false;
             tryCompare(menu, "visible", false);
         }
 

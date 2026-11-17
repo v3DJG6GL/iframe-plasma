@@ -70,6 +70,14 @@ Rectangle {
         reloadMenu.close();
         moreMenu.close();
     }
+    // Nor do they follow the toolbar's own visibility: main.qml hides it
+    // when the last tab goes away (from the settings window, so no press
+    // reaches them), which would leave them open, anchored to a button
+    // that is gone, and still emitting. CyberChipDropdown's onVisibleChanged.
+    onVisibleChanged: if (!visible) {
+        reloadMenu.close();
+        moreMenu.close();
+    }
 
     signal reloadClicked()
     signal hardReloadClicked()
