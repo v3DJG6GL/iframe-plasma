@@ -156,7 +156,12 @@ private Q_SLOTS:
         page.setVisible(false);
         page.setLifecycleState(QWebEnginePage::LifecycleState::Frozen);
         QTest::qWait(800);
-        const int beforeResume = heartbeats(fixture.port());
+        // Read the baseline directly: an unreachable /_report gives 0, and
+        // the cumulative pre-freeze beats would then pass the delta check
+        // even if resuming never restarted the timers.
+        const QJsonObject frozenRep = fetchReport(fixture.port());
+        QVERIFY2(frozenRep.contains(u"heartbeats"_s), "fixture /_report unreachable");
+        const int beforeResume = frozenRep.value(u"heartbeats"_s).toInt();
 
         page.setVisible(true);
         page.setLifecycleState(QWebEnginePage::LifecycleState::Active);
