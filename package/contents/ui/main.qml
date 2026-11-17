@@ -2037,6 +2037,8 @@ PlasmoidItem {
                             + miniView.ownIndex);
                         miniView.loadStatus = "err";
                         root.setThumbError(miniView.ownIndex, "Renderer crashed");
+                        // Giving up: see the note in thumbRetryTimer.arm().
+                        root.setRuntimeExcluded(miniView.ownIndex, false);
                         return;
                     }
                     miniView._lastRenderRetryMs = now;
@@ -2155,6 +2157,13 @@ PlasmoidItem {
                         if (ms < 0) {
                             console.warn(Log.load, "iframe-plasma[mini-retry] backoff exhausted idx="
                                 + miniView.ownIndex);
+                            // A failed load cannot vouch for a keyword hit, and
+                            // with no document loaded CropEngine never reports
+                            // hit=false. Put the tab back in the rotation so its
+                            // per-landing retry can heal it; otherwise it would
+                            // be skipped for good.
+                            if (miniView.loadStatus === "err")
+                                root.setRuntimeExcluded(miniView.ownIndex, false);
                             return;
                         }
                         interval = ms;
