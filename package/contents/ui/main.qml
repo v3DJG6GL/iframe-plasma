@@ -2028,6 +2028,9 @@ PlasmoidItem {
                         root.setThumbError(miniView.ownIndex, "Renderer crashed");
                         // Giving up: see the note in thumbRetryTimer.arm().
                         root.setRuntimeExcluded(miniView.ownIndex, false);
+                        // Only the slow retry: a slot that never gets a landing
+                        // would otherwise show the placeholder for good.
+                        thumbRetryTimer.armSlow();
                         return;
                     }
                     miniView._lastRenderRetryMs = now;
@@ -2157,20 +2160,24 @@ PlasmoidItem {
                             // be skipped for good.
                             if (miniView.loadStatus === "err")
                                 root.setRuntimeExcluded(miniView.ownIndex, false);
-                            // A slot that never gets a landing still heals once
-                            // the outage ends.
-                            const slowMs = ThumbRetryPolicy.slowRetryMs(miniView.loadStatus);
-                            if (slowMs > 0) {
-                                slow = true;
-                                interval = slowMs;
-                                restart();
-                            }
+                            armSlow();
                             return;
                         }
                         slow = false;
                         interval = ms;
                         miniView._retryAttempt++;
                         restart();
+                    }
+                    // A slot that never gets a landing still heals once the
+                    // outage ends. Also the renderer-crash give-up's only way
+                    // back, without rerunning the fast schedule it backed off from.
+                    function armSlow() {
+                        const slowMs = ThumbRetryPolicy.slowRetryMs(miniView.loadStatus);
+                        if (slowMs > 0) {
+                            slow = true;
+                            interval = slowMs;
+                            restart();
+                        }
                     }
                     onTriggered: {
                         if (slow) {
