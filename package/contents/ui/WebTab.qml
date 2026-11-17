@@ -30,8 +30,9 @@ Item {
     // Name used in lifecycle log lines, e.g. "popup[2]".
     property string lifecycleLabel: ""
     // Qt 6.10 GC workaround interval (PageScripts.gcWorkaroundSource);
-    // 0 = off. Read once when the view is created.
+    // 0 = off. A change applies from the view's next page load.
     property int gcIntervalSec: 0
+    onGcIntervalSecChanged: if (tab.webView) tab._installGcScript(tab.webView, tab.gcIntervalSec)
 
     // True once the user clicked "Log in here" — suppresses the overlay for
     // subsequent Authelia subpages (TOTP, WebAuthn) until we land off-host.
@@ -473,6 +474,25 @@ Item {
         view.userScripts.insert(s);
     }
 
+    // (Re)installs the Qt 6.10 GC workaround script (a no-op unless
+    // plasmashell runs with --js-flags=--expose-gc; see PageScripts.js).
+    // Replaced by name so a changed interval, or 0, reaches the next load
+    // instead of the one baked in when the view was created.
+    function _installGcScript(view, sec) {
+        const name = "iframe-plasma-gc";
+        const old = view.userScripts.find(name);
+        for (let i = 0; i < old.length; ++i) view.userScripts.remove(old[i]);
+        const src = PageScripts.gcWorkaroundSource(sec);
+        if (src.length === 0) return;
+        const s = WebEngine.script();
+        s.name = name;
+        s.injectionPoint = WebEngineScript.DocumentCreation;
+        s.worldId = WebEngineScript.MainWorld;
+        s.runOnSubFrames = false;
+        s.sourceCode = src;
+        view.userScripts.insert(s);
+    }
+
     function onAutheliaHost(currentUrl) {
         return QueryUtils.isAutheliaHost(currentUrl, tab.autheliaHost);
     }
@@ -629,16 +649,7 @@ Item {
 
                     // Qt 6.10 GC workaround — a no-op unless plasmashell runs
                     // with --js-flags=--expose-gc. See PageScripts.js.
-                    const gcSrc = PageScripts.gcWorkaroundSource(tab.gcIntervalSec);
-                    if (gcSrc.length > 0) {
-                        const gs = WebEngine.script();
-                        gs.name = "iframe-plasma-gc";
-                        gs.injectionPoint = WebEngineScript.DocumentCreation;
-                        gs.worldId = WebEngineScript.MainWorld;
-                        gs.runOnSubFrames = false;
-                        gs.sourceCode = gcSrc;
-                        webview.userScripts.insert(gs);
-                    }
+                    tab._installGcScript(webview, tab.gcIntervalSec);
                 }
 
                 onLoadingChanged: function(info) {

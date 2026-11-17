@@ -1776,18 +1776,28 @@ PlasmoidItem {
                 // Qt 6.10 GC workaround — a no-op unless plasmashell runs
                 // with --js-flags=--expose-gc. See PageScripts.js. Unlike
                 // the popup's WebTab, thumbnails get no other user scripts.
-                Component.onCompleted: {
+                // Reinstalled by name when the interval changes, so the next
+                // load runs the new value (or none) rather than the one baked
+                // in at creation (mirrors WebTab._installGcScript).
+                function _installGcScript() {
+                    const name = "iframe-plasma-gc";
+                    const old = miniView.userScripts.find(name);
+                    for (let i = 0; i < old.length; ++i) miniView.userScripts.remove(old[i]);
                     const gcSrc = PageScripts.gcWorkaroundSource(
                         Plasmoid.configuration.gcIntervalSec);
-                    if (gcSrc.length > 0) {
-                        const gs = WebEngine.script();
-                        gs.name = "iframe-plasma-gc";
-                        gs.injectionPoint = WebEngineScript.DocumentCreation;
-                        gs.worldId = WebEngineScript.MainWorld;
-                        gs.runOnSubFrames = false;
-                        gs.sourceCode = gcSrc;
-                        miniView.userScripts.insert(gs);
-                    }
+                    if (gcSrc.length === 0) return;
+                    const gs = WebEngine.script();
+                    gs.name = name;
+                    gs.injectionPoint = WebEngineScript.DocumentCreation;
+                    gs.worldId = WebEngineScript.MainWorld;
+                    gs.runOnSubFrames = false;
+                    gs.sourceCode = gcSrc;
+                    miniView.userScripts.insert(gs);
+                }
+                Component.onCompleted: miniView._installGcScript()
+                Connections {
+                    target: Plasmoid.configuration
+                    function onGcIntervalSecChanged() { miniView._installGcScript(); }
                 }
 
                 readonly property var ownTab: parent.ownTab
