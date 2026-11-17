@@ -1,0 +1,79 @@
+/*
+ * SPDX-FileCopyrightText: 2026 v3DJG6GL <72495210+v3DJG6GL@users.noreply.github.com>
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+import QtQuick
+import QtTest
+import "../../package/contents/ui" as Ui
+
+// Load-time behaviour of the URLs and Authentication config pages, created
+// the way AppletConfiguration creates them: with every cfg_* as an initial
+// property.
+Item {
+    id: root
+    width: 800
+    height: 600
+
+    // The pages call KLocalizedContext's i18n family, which a bare test
+    // engine does not provide; they find these through the scope of the
+    // document that instantiates them.
+    function i18n(text) { return text; }
+    function i18nc(context, text) { return text; }
+    function i18np(singular, plural, n) { return n === 1 ? singular : plural; }
+    function i18ncp(context, singular, plural, n) { return n === 1 ? singular : plural; }
+
+    Component { id: urlsPage; Ui.ConfigUrls {} }
+    Component { id: authPage; Ui.ConfigAuth {} }
+
+    SignalSpy { id: changedSpy; signalName: "configurationChanged" }
+
+    TestCase {
+        name: "ConfigLoad"
+        when: windowShown
+
+        readonly property string cleanUrlRow: JSON.stringify([{
+            label: "", url: "https://x", enabled: true, authProfileId: "",
+            thumbMode: "chartOnly", thumbSelector: "", thumbText: "",
+            thumbIconName: "", thumbTimeRange: "", thumbScaleMode: "fit",
+            thumbExcludeKeywords: [], thumbShowLabel: false,
+            excludeFromRotation: false, popupMode: "fullPanel", popupSelector: ""
+        }])
+
+        function _open(comp, props) {
+            const page = createTemporaryObject(comp, root, props);
+            verify(page !== null);
+            changedSpy.clear();
+            changedSpy.target = page;
+            return page;
+        }
+
+        // A load that re-persists a normalised row must mark the page
+        // changed: the dialog greys Apply out after creating the page, so
+        // Cancel or Close dropped the rewrite without a prompt.
+        function test_urls_normalisingLoad_marksPageChanged() {
+            const page = _open(urlsPage, {
+                cfg_urlsJson: '[{"url":"https://x","thumbMode":"excluded"}]' });
+            verify(page.cfg_urlsJson.indexOf('"thumbMode":"fullPanel"') !== -1);
+            tryCompare(changedSpy, "count", 1);
+        }
+        function test_urls_cleanLoad_staysUnchanged() {
+            const page = _open(urlsPage, { cfg_urlsJson: cleanUrlRow });
+            compare(page.cfg_urlsJson, cleanUrlRow);
+            wait(50);
+            compare(changedSpy.count, 0);
+        }
+        function test_auth_normalisingLoad_marksPageChanged() {
+            const page = _open(authPage, {
+                cfg_authProfilesJson: '[{"id":"p","authType":"basic","username":1234}]' });
+            verify(page.cfg_authProfilesJson.indexOf('"username":""') !== -1);
+            tryCompare(changedSpy, "count", 1);
+        }
+        function test_auth_cleanLoad_staysUnchanged() {
+            const clean = JSON.stringify([{ id: "p", name: "N", authType: "basic",
+                username: "u", autheliaHost: "", preempt: false }]);
+            const page = _open(authPage, { cfg_authProfilesJson: clean });
+            wait(50);
+            compare(changedSpy.count, 0);
+        }
+    }
+}

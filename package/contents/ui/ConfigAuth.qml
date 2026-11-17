@@ -43,6 +43,10 @@ KCM.SimpleKCM {
     // and silently lose any uncommitted text in sibling TextFields.
     property bool _reloading: false
 
+    // AppletConfiguration's "this page has unsaved changes" signal; see the
+    // matching declaration in ConfigUrls.qml.
+    signal configurationChanged()
+
     QtObject {
         id: store
         property string json: "[]"
@@ -125,6 +129,7 @@ KCM.SimpleKCM {
                 _reloading = false;
                 store.serialize();
                 _reloading = true;
+                Qt.callLater(page.configurationChanged);
             }
         } catch (e) {
             console.warn(Log.auth, "ConfigAuth: parse error", e.message);

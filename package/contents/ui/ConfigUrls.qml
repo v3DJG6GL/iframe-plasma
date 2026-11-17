@@ -129,6 +129,12 @@ KCM.SimpleKCM {
     // can't strand the gate at true and silence the page permanently.
     property bool _reloading: false
 
+    // AppletConfiguration's "this page has unsaved changes" signal. A load
+    // that re-persists normalised rows changes cfg_urlsJson before the
+    // dialog hooks the cfg_*Changed signals, and open() then greys Apply
+    // out, so Cancel / Close / a page switch would drop the rewrite silently.
+    signal configurationChanged()
+
     // Rebuild listModel from store.json. Used both at startup (in
     // Component.onCompleted) and when store.json changes underneath us —
     // the Backup KCM page writes cfg_urlsJson directly (via a different
@@ -173,6 +179,9 @@ KCM.SimpleKCM {
                 _reloading = false;
                 store.serialize();
                 _reloading = true;
+                // Deferred: on first load the dialog connects to this
+                // signal only after the page is created.
+                Qt.callLater(page.configurationChanged);
             }
         } catch (e) {
             console.warn(Log.config, "ConfigUrls: parse error", e.message);
