@@ -177,6 +177,15 @@ TestCase {
         compare(Schema.normaliseTabRow({ thumbIconName: "org.kde.plasma.foo" }).thumbIconName,
                 "org.kde.plasma.foo");
     }
+    function test_iconName_themeNameWithPlusKept() {
+        // Mimetype icons the KIconThemes picker lists carry `+`; dropping
+        // them threw the user's pick away on save.
+        compare(Schema.normaliseTabRow({ thumbIconName: "application-rss+xml" }).thumbIconName,
+                "application-rss+xml");
+        compare(Schema.serialiseTabRow({ thumbIconName: "text-x-c++src" }).thumbIconName,
+                "text-x-c++src");
+        compare(Schema.sanitizeIconName("+leading"), "");
+    }
     function test_iconName_bundledKept() {
         compare(Schema.normaliseTabRow({ thumbIconName: "bundled:bell-ringing" }).thumbIconName,
                 "bundled:bell-ringing");

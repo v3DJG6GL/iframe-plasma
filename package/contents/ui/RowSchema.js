@@ -40,9 +40,11 @@ function sanitizeIconName(name) {
     // and `<`/`>` so the name can't carry markup into a text sink (a real
     // pick arrives with both percent-encoded).
     if (/^file:\/\/\//.test(s) && !/[\x00-\x1f\x7f<>]/.test(s)) return s;
-    // FreeDesktop icon-naming spec: letters/digits/dot/dash/underscore.
-    // Leading char must be alnum so a stray "://" can't slip through.
-    if (/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(s)) return s;
+    // FreeDesktop icon-naming spec: letters/digits/dot/dash/underscore,
+    // plus `+` that real mimetype icons carry (application-rss+xml,
+    // text-x-c++src). Leading char must be alnum so a stray "://" can't
+    // slip through; no `:` or `/` anywhere, so no URL scheme can form.
+    if (/^[A-Za-z0-9][A-Za-z0-9._+-]*$/.test(s)) return s;
     return "";
 }
 
