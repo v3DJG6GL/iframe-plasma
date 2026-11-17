@@ -1893,14 +1893,18 @@ PlasmoidItem {
                         const newRange = root.activeTabSessionRange;
                         const currentIdx = root.currentTabIndex;
                         // Propagate ONLY if THIS delegate is the popup's
-                        // active tab AND its tab opted into auto-follow
-                        // ("" or "auto" thumbTimeRange).
+                        // active tab.
                         if (miniView.ownIndex !== currentIdx) return;
                         // Read through root._liveRow — ownTab is a Repeater
-                        // snapshot; thumbTimeRange may have been mutated by
-                        // KCM Apply since this delegate was created.
+                        // snapshot; the row may have been mutated by KCM
+                        // Apply since this delegate was created.
                         const t = root._liveRow(miniView.ownIndex, miniView.ownTab);
-                        if (!t || (t.thumbTimeRange || "auto") !== "auto") return;
+                        // Track the popup even while the tab has a fixed
+                        // thumbTimeRange: thumbRangeFor lets the fixed range
+                        // win (ownUrl is unchanged, no reload), and an
+                        // in-place switch back to "auto" then follows the
+                        // popup's current range, not one from before.
+                        if (!t) return;
                         // 'custom' is the sentinel WebTab.currentTimeRange
                         // returns when the popup URL's from/to don't match
                         // now-Nu/now (user picked absolute timestamps in
