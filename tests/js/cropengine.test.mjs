@@ -1303,6 +1303,17 @@ test("hidden page: interval scans keywords without rAF", () => {
     assert.equal(t.rafCalls(), 0, "hidden page must not queue animation frames");
 });
 
+test("hidden page: without keywords the tick does not re-apply the crop", () => {
+    // Nothing reads a hidden page's crop; the visible path re-applies on its
+    // first tick, so the hidden one must not redo the isolation work.
+    const hidden = { value: true };
+    const t = runKeywordApply(hidden, "<div id='t'>x</div>", "#t", []);
+    t.w.document.body.innerHTML = "<div id='t'>y</div>";
+    t.tickInterval();
+    assert.equal(t.w.document.getElementById("t").getAttribute("data-ifp-target"), null);
+    assert.deepEqual(t.kw(), ["[ifp-keyword] hit=false"]);
+});
+
 test("hidden page: a re-mounted target is scanned instead of the detached node", () => {
     // An SPA usually ends an "offline" state by replacing the node, not by
     // editing its text; the scan must not keep reading the old one.

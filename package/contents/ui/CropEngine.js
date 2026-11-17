@@ -777,7 +777,10 @@ const _APPLY_BODY = `(function(sel, opts){
         // (or all of <body>) from innerText. apply() queues no animation
         // frame, so it runs on a hidden page; it isolates the new match, or
         // drops the crop and scans <body> (miss, whole page, pending canvas).
-        apply();
+        // Without keywords nothing reads the result, and the visible path
+        // re-applies on its first tick, so skip the layout work. The scan
+        // still runs to report the empty list's hit=false once.
+        if (compiledKeywords.length > 0) apply();
         runKeywordScan();
       }
       return;
