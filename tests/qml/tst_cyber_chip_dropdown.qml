@@ -35,6 +35,11 @@ Item {
         ]
     }
 
+    Transition {
+        id: chipMenuEnterFade
+        NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 300 }
+    }
+
     // The production style (org.kde.desktop) fades a Popup in on open and
     // out on close; the Basic style the tests run under has neither
     // transition, so this one supplies them.
@@ -65,6 +70,7 @@ Item {
             chip.visible = true;
             chip.pulseEnabled = false;
             chip.fullRepVisible = false;
+            dropdown.enter = null;
             dropdown.close();
             tryCompare(dropdown, "visible", false);
         }
@@ -75,6 +81,17 @@ Item {
         function test_chipClick_whileOpen_closesMenu() {
             mouseClick(chip);
             tryCompare(dropdown, "opened", true);
+            mouseClick(chip);
+            tryCompare(dropdown, "visible", false);
+        }
+
+        // `opened` is false during the enter fade, so a toggle on it
+        // re-opened the showing menu instead of closing it.
+        function test_chipClick_duringEnterFade_closesMenu() {
+            dropdown.enter = chipMenuEnterFade;
+            mouseClick(chip);
+            verify(dropdown.visible);
+            verify(!dropdown.opened);
             mouseClick(chip);
             tryCompare(dropdown, "visible", false);
         }

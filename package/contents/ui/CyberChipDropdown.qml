@@ -35,6 +35,10 @@ Rectangle {
     // fullRepVisible is the only correct source). Forwarded from
     // CyberToolbar.fullRepVisible.
     property bool fullRepVisible: false
+    // Shown from open() until close(). Not `opened`: that stays false
+    // through the enter fade, so a quick second click would re-open the
+    // showing menu (a no-op) instead of closing it.
+    readonly property bool _menuShown: menu !== null && menu.visible && !menu._closing
 
     Layout.preferredHeight: Theme.chipHeight + 2
     Layout.alignment: Qt.AlignVCenter
@@ -43,8 +47,8 @@ Rectangle {
     // centered Row would overflow / overlap its neighbours.
     Layout.minimumWidth: implicitWidth
     implicitWidth: row.implicitWidth + Theme.chipPadding * 2
-    color: ma.containsMouse || (menu && menu.opened) ? Theme.surfaceHi : Theme.surface
-    border.color: ma.containsMouse || (menu && menu.opened) ? Theme.accent : Theme.fgMute
+    color: ma.containsMouse || _menuShown ? Theme.surfaceHi : Theme.surface
+    border.color: ma.containsMouse || _menuShown ? Theme.accent : Theme.fgMute
     border.width: 1
     radius: 2
     Behavior on color       { ColorAnimation { duration: 100 } }
@@ -108,13 +112,13 @@ Rectangle {
         cursorShape: Qt.PointingHandCursor
         onClicked: {
             if (!chip.menu) return;
-            if (chip.menu.opened) chip.menu.close();
+            if (chip._menuShown) chip.menu.close();
             else chip.menu.open();
         }
     }
 
     QQC.ToolTip {
-        visible: ma.containsMouse && chip.menu && !chip.menu.opened
+        visible: ma.containsMouse && chip.menu !== null && !chip._menuShown
         delay: 600
         text: chip.tooltipText
     }
