@@ -160,9 +160,14 @@ Kirigami.Dialog {
     // Wrapped KDE picker — instantiated inside the dialog so its signal
     // can be forwarded as our own iconNameChanged. Stores the bare theme
     // name with no prefix, or a file URL for a file picked via its Browse….
+    // Forwarded on accepted, not iconNameChanged: the wrapper only notifies
+    // when the name differs from its previous pick, so re-picking that icon
+    // (after switching the row to a bundled/file icon) was dropped.
+    // KIconDialog updates iconName before it accepts.
     KIconThemes.IconDialog {
         id: themePicker
-        onIconNameChanged: (picked) => {
+        onAccepted: {
+            const picked = themePicker.iconName;
             if (picked && picked.length > 0)
                 dialog._emit(RowSchema.iconNameFromThemePick(picked));
         }
