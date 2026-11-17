@@ -74,17 +74,25 @@ sudo apt install ./iframe-plasma_*_ubuntu26.04_amd64.deb
 ### Arch Linux
 
 Every release is also published to a private pacman repository on the Forgejo
-package registry, so `pacman -Syu` picks up new versions. It needs a Forgejo
-access token with only the **read:package** scope (e.g. named `FJ_PACKAGES_READ`).
-One-time setup, in any shell (bash, zsh or fish): the command asks for the token,
-trusts the registry's signing key and adds the repository. The token goes into the
-root-only `/etc/pacman.d/forgejo-apps`, because `/etc/pacman.conf` is
-world-readable; running the command again only refreshes the key and the token.
+package registry, so `pacman -Syu` picks up new versions. One-time setup:
+
+1. **Create a token.** On <https://forgejo.informethic.ch/user/settings/applications>,
+   under *Access tokens*, generate a token with only the permission
+   **package: Read** (e.g. named `FJ_PACKAGES_READ`) and copy it; Forgejo shows
+   it only once.
+2. **Run the command below** in a terminal (bash, zsh or fish all work). It
+   asks `Paste your Forgejo token (package: Read), then press Enter:`; paste
+   the token there. The input stays hidden, nothing appears while you paste.
+   `sudo` may then ask for your password.
+
+The command trusts the registry's signing key and adds the repository. The token
+is stored only in the root-only `/etc/pacman.d/forgejo-apps` (`/etc/pacman.conf`
+is world-readable); running the command again just replaces key and token.
 
 ```sh
 bash -c '
 set -euo pipefail
-read -rsp "Forgejo token (read:package): " TOKEN; echo
+read -rsp "Paste your Forgejo token (package: Read), then press Enter: " TOKEN; echo
 base=https://forgejo.informethic.ch/api/packages/v3djg6gl/arch
 key=$(mktemp)
 curl -fsSL -u "v3djg6gl:$TOKEN" -o "$key" "$base/repository.key"
