@@ -1107,6 +1107,20 @@ KCM.SimpleKCM {
                                         }
                                         event.accepted = true;
                                     }
+                                    // Leaving the field commits too, like
+                                    // every other editor on the page: a
+                                    // chip loaded here by _editKeyword is
+                                    // already gone from the saved list, so
+                                    // OK/Apply without Enter would drop it.
+                                    // Clearing the text makes a following
+                                    // Add click / Enter a no-op, not a
+                                    // second add.
+                                    onEditingFinished: {
+                                        if (text.trim().length > 0) {
+                                            page._addKeyword(urlRow.index, text);
+                                            text = "";
+                                        }
+                                    }
                                 }
                                 QQC.ToolButton {
                                     text: i18n("Add")
