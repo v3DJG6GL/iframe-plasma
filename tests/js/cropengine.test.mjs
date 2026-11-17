@@ -366,6 +366,40 @@ test("isolate: a kept ancestor's opacity and visibility do not hide the target",
     }
 });
 
+test("isolate: a match inside an <svg> isolates the outer <svg>", () => {
+    // The picker hands back the deepest shape of an SVG chart. position:fixed
+    // does not apply to SVG children, and tagging the <g> chain as kept would
+    // strip each group's transform, so the outer <svg> is what gets lifted.
+    for (const scaleMode of ["stretch", "fit", "original"]) {
+        const dom = new JSDOM(
+            "<!doctype html><html><body><div id='wrap'><p>legend</p>" +
+            "<svg id='s' width='400' height='300'><g id='g' transform='translate(150,100)'>" +
+            "<rect id='other' width='10' height='10'/><rect id='t' x='30' width='50' height='40'/>" +
+            "</g></svg></div><p id='rest'>rest</p></body></html>",
+            { runScripts: "outside-only" });
+        const w = dom.window;
+        w.MutationObserver = class { observe() {} disconnect() {} takeRecords() { return []; } };
+        w.ResizeObserver = class { observe() {} disconnect() {} };
+        w.requestAnimationFrame = (cb) => { cb(); return 0; };
+        w.cancelAnimationFrame = () => {};
+        w.setInterval = () => 0;
+        w.clearInterval = () => {};
+        w.console = { info: () => {}, warn: () => {}, error: () => {} };
+        const svg = w.document.getElementById("s");
+        const g = w.document.getElementById("g");
+        const rect = w.document.getElementById("t");
+
+        const r = w.eval(`(${ce.buildApplyJs("#t", { scaleMode })})`);
+        assert.equal(r, "matched-and-observing", scaleMode);
+        assert.equal(svg.getAttribute("data-ifp-target"), "1", scaleMode);
+        assert.equal(rect.hasAttribute("data-ifp-target"), false, scaleMode);
+        assert.equal(g.hasAttribute("data-ifp-keep"), false, scaleMode);
+        assert.equal(w.document.getElementById("wrap").getAttribute("data-ifp-keep"), "1", scaleMode);
+        assert.equal(w.getComputedStyle(svg).position, "fixed", scaleMode);
+        assert.equal(w.getComputedStyle(w.document.getElementById("rest")).display, "none", scaleMode);
+    }
+});
+
 test("isolate: the target's own transform does not shift it off the viewport", () => {
     // translate(-50%,-50%) centering, or a grid item placed by translate.
     for (const scaleMode of ["stretch", "fit", "original"]) {

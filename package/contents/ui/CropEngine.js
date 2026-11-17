@@ -637,11 +637,18 @@ const _APPLY_BODY = `(function(sel, opts){
       document.documentElement.removeAttribute('data-ifp-thumb');
       dropOverlay();
       window.__ifpLastCropKey = null;
-      isolateElement(el);
+      // A shape inside an <svg> (a picked chart <path> or <rect>) cannot be
+      // lifted out: position:fixed does not apply to SVG children, and the
+      // kept-ancestor rule would strip the transform off every <g> in its
+      // chain. Isolate the outermost <svg> instead; matchedEl stays the
+      // match, so the keyword scan keeps reading the selected element.
+      let box = el;
+      while (box.ownerSVGElement) box = box.ownerSVGElement;
+      isolateElement(box);
       // Fit-mode scaling runs after isolation so the element is in its
       // post-isolation layout context (siblings hidden, parent kept).
       // No-op for stretch/original modes — those rely on CSS alone.
-      if (scaleMode === 'fit') applyFitTransform(el);
+      if (scaleMode === 'fit') applyFitTransform(box);
     }
     matchedEl = el;
     return 'matched';
