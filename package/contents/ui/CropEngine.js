@@ -717,11 +717,11 @@ const _APPLY_BODY = `(function(sel, opts){
     if (document.hidden) {
       if (!window.__ifpPickerArmed) {
         // apply() does not run here, so matchedEl may be a node the page
-        // has since replaced; its old text would keep the keyword hit (and
-        // the tab's exclusion) alive for good. Look the target up again —
-        // also while none is held, or one tick without it would leave the
-        // scan reading <body> for as long as the page stays hidden.
-        if (sel && (!matchedEl || !matchedEl.isConnected)) {
+        // has since replaced, or one still in the page that the selector no
+        // longer picks first (its class moved to a sibling); its old text
+        // would keep the keyword hit (and the tab's exclusion) alive for
+        // good. Look the target up again on every tick, as apply() would.
+        if (sel) {
           try { matchedEl = document.querySelector(sel); } catch (e) { matchedEl = null; }
           // Same as apply(): a body/html match means "scan the whole page".
           if (matchedEl === document.body || matchedEl === document.documentElement) matchedEl = null;

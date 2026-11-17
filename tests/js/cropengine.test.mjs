@@ -1043,9 +1043,11 @@ test("CROP: clear resets the remembered geometry", () => {
 // Chromium runs no rAF on a hidden page (a keyword-excluded thumbnail is
 // invisible), so the 3 s interval must scan directly while hidden.
 // rAF is stubbed to never fire; the interval callback is captured.
-function runKeywordApply(hidden) {
+function runKeywordApply(hidden,
+                         html = "<div id='t'>No active streams</div>",
+                         selector = "#t", keywords = ["No active streams"]) {
     const dom = new JSDOM(
-        "<!doctype html><html><body><div id='t'>No active streams</div></body></html>",
+        `<!doctype html><html><body>${html}</body></html>`,
         { runScripts: "outside-only" });
     const w = dom.window;
     Object.defineProperty(w.document, "hidden", { configurable: true, get: () => hidden.value });
@@ -1059,7 +1061,7 @@ function runKeywordApply(hidden) {
     w.clearInterval = () => {};
     const logs = [];
     w.console = { info: (m) => logs.push(String(m)), warn: () => {}, error: () => {} };
-    w.eval(`(${ce.buildApplyJs("#t", { keywords: ["No active streams"] })})`);
+    w.eval(`(${ce.buildApplyJs(selector, { keywords })})`);
     return {
         w, logs,
         tickInterval: () => intervalCb(),
@@ -1087,6 +1089,21 @@ test("hidden page: a re-mounted target is scanned instead of the detached node",
     t.tickInterval();
     assert.deepEqual(t.kw(), ["[ifp-keyword] hit=true"]);
     t.w.document.body.innerHTML = "<div id='t'>Streaming now</div>";
+    t.tickInterval();
+    assert.deepEqual(t.kw(), ["[ifp-keyword] hit=true", "[ifp-keyword] hit=false"]);
+    assert.equal(t.rafCalls(), 0, "hidden page must not queue animation frames");
+});
+
+test("hidden page: a match that moves to a still-connected sibling is scanned", () => {
+    // An SPA moves a status class from one node to another; the old node
+    // stays in the page, but the selector now picks the sibling.
+    const hidden = { value: true };
+    const t = runKeywordApply(hidden,
+        "<p id='a' class='alert'>OFFLINE</p><div id='b'>fine</div>", ".alert", ["offline"]);
+    t.tickInterval();
+    assert.deepEqual(t.kw(), ["[ifp-keyword] hit=true"]);
+    t.w.document.getElementById("a").classList.remove("alert");
+    t.w.document.getElementById("b").classList.add("alert");
     t.tickInterval();
     assert.deepEqual(t.kw(), ["[ifp-keyword] hit=true", "[ifp-keyword] hit=false"]);
     assert.equal(t.rafCalls(), 0, "hidden page must not queue animation frames");
