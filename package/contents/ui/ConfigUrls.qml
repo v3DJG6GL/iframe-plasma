@@ -1664,6 +1664,12 @@ KCM.SimpleKCM {
                     addKiosk.checked && GrafanaUrl.kioskIsForeign(row.url));
                 const out = transformUrl(stripped);
                 if (!out) return;
+                // Drop a fixed per-URL thumbnail range: it overrides the
+                // URL's from/to (UrlUtils.thumbRangeFor), and no control
+                // on this page shows or edits it since the inline combo
+                // went, so the range chosen here would never reach the
+                // thumbnail. "" behaves as "auto".
+                listModel.setProperty(editingIndex, "thumbTimeRange", "");
                 page._setRowField(editingIndex, "url", out);
                 return;
             }

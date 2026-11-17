@@ -135,6 +135,23 @@ Item {
             compare(dialog.standardButton(Dialog.Ok).enabled, true);
             dialog.close();
         }
+
+        // A fixed per-URL thumbnail range (set with the inline combo of
+        // 0.4.x/0.5.0) overrides the URL's from/to, and nothing on the page
+        // could clear it: the range picked here never reached the thumbnail.
+        function test_editAccept_clearsFixedThumbRange() {
+            const url = "https://g/d-solo/abc/dash?orgId=1&panelId=5&from=now-1h&to=now";
+            const page = createTemporaryObject(urlsPage, root, {
+                cfg_urlsJson: JSON.stringify([{ url: url, label: "P", thumbTimeRange: "7d" }]) });
+            compare(JSON.parse(page.cfg_urlsJson)[0].thumbTimeRange, "7d");
+            const dialog = _helper(page);
+            dialog.openForEdit(0, url, "P");
+            tryCompare(dialog, "opened", true);
+            dialog.accept();
+            const row = JSON.parse(page.cfg_urlsJson)[0];
+            compare(row.thumbTimeRange, "");
+            verify(row.url.indexOf("/d-solo/abc/") !== -1);
+        }
     }
 
     // The Authentication page's per-profile cards.
