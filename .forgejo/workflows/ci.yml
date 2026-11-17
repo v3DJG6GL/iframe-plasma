@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 v3DJG6GL <72495210+v3DJG6GL@users.noreply.github.com>
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
-# Forgejo Actions CI (forgejo.informethic.ch). GitHub is a push mirror only:
+# Forgejo Actions CI (private Forgejo instance). GitHub is a push mirror only:
 # no workflows run there.
 #
 # Instance conventions (same as the other repos on this instance):

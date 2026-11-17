@@ -24,7 +24,7 @@ pkgver=0.0.0
 pkgrel=1
 pkgdesc="Plasma 6 widget that embeds web pages with live panel thumbnails"
 arch=('x86_64')
-url="https://forgejo.informethic.ch/v3djg6gl/iframe-plasma"
+url="https://github.com/v3DJG6GL/iframe-plasma"
 license=('AGPL-3.0-or-later')
 depends=(
   # Linked by the C++ QML plugin (src/CMakeLists.txt).

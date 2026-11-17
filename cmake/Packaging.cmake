@@ -13,7 +13,7 @@ set(CPACK_PACKAGE_VENDOR "v3DJG6GL")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY
     "Plasma 6 widget that embeds web pages with live panel thumbnails")
 set(CPACK_PACKAGE_HOMEPAGE_URL
-    "https://forgejo.informethic.ch/v3djg6gl/iframe-plasma")
+    "https://github.com/v3DJG6GL/iframe-plasma")
 set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
 set(CPACK_GENERATOR "DEB;TGZ")
 set(CPACK_SET_DESTDIR ON)
