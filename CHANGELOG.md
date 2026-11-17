@@ -6,6 +6,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.5.2] — 2026-11-17
+
 ### Added
 - **Arch Linux package.** Each release now also ships `iframe-plasma-<version>-1-x86_64.pkg.tar.zst`, built with makepkg against Arch's own Qt / KF6 (`packaging/arch/PKGBUILD`), and publishes it to a signed pacman repository on the Forgejo package registry, so Arch installs update with `pacman -Syu` (README → Install → Arch Linux).
 

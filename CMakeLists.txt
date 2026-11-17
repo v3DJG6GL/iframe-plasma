@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 cmake_minimum_required(VERSION 3.20)
-project(iframe-plasma VERSION 0.5.1 LANGUAGES CXX)
+project(iframe-plasma VERSION 0.5.2 LANGUAGES CXX)
 
 # 6.9: main.qml creates profiles with WebEngineProfilePrototype (QtWebEngine 6.9+).
 set(QT_MIN_VERSION "6.9.0")
