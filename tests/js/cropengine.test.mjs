@@ -249,6 +249,42 @@ test("isolate: a transformed kept ancestor does not become the target's containi
     }
 });
 
+test("isolate: a kept ancestor's individual transform, preserve-3d and content-visibility are released too", () => {
+    // Tailwind v4's translate-*/rotate-*/scale-* utilities write these
+    // properties rather than `transform`; each one, like preserve-3d and
+    // content-visibility:auto, makes the ancestor the fixed target's
+    // containing block.
+    for (const scaleMode of ["stretch", "fit", "original"]) {
+        const dom = new JSDOM(
+            "<!doctype html><html><head><style>" +
+            ".card{position:absolute;translate:200px 150px;rotate:1deg;scale:1.1;" +
+            "transform-style:preserve-3d;content-visibility:auto;overflow:hidden}" +
+            "</style></head><body><div id='card' class='card'><div id='t'>x</div></div></body></html>",
+            { runScripts: "outside-only" });
+        const w = dom.window;
+        w.MutationObserver = class { observe() {} disconnect() {} takeRecords() { return []; } };
+        w.ResizeObserver = class { observe() {} disconnect() {} };
+        w.requestAnimationFrame = (cb) => { cb(); return 0; };
+        w.cancelAnimationFrame = () => {};
+        w.setInterval = () => 0;
+        w.clearInterval = () => {};
+        w.console = { info: () => {}, warn: () => {}, error: () => {} };
+        const card = w.document.getElementById("card");
+
+        w.eval(`(${ce.buildApplyJs("#t", { scaleMode })})`);
+        assert.equal(card.getAttribute("data-ifp-keep"), "1", scaleMode);
+        const cs = w.getComputedStyle(card);
+        assert.equal(cs.translate, "none", scaleMode);
+        assert.equal(cs.rotate, "none", scaleMode);
+        assert.equal(cs.scale, "none", scaleMode);
+        assert.equal(cs.transformStyle, "flat", scaleMode);
+        assert.equal(cs.contentVisibility, "visible", scaleMode);
+
+        w.eval(ce.buildClearJs());
+        assert.notEqual(w.getComputedStyle(card).translate, "none", scaleMode);
+    }
+});
+
 test("apply: re-injection clears previous data-ifp-keep markers", () => {
     const dom = new JSDOM(
         "<!doctype html><html><body><section id='a'><div id='t1'/></section><article id='b'><div id='t2'/></article></body></html>",
