@@ -2334,9 +2334,10 @@ PlasmoidItem {
                     // serial bumps. The popup StackLayout already handles
                     // this via webStack.reloadAll(); the compact thumbnail
                     // for the same tab was previously left displaying the
-                    // stale 401/Authelia render until the next nav.
+                    // stale 401/Authelia render until the next nav. Skips a
+                    // Discarded view like on_CompactReloadRequested does.
                     function onReloadAllRequested() {
-                        on_TabReloadRequested(miniView.ownIndex, "soft");
+                        on_CompactReloadRequested(miniView.ownIndex);
                     }
 
                     // Refresh targeted at the compact view only: post-auth
@@ -2780,14 +2781,22 @@ PlasmoidItem {
             currentIndex: root.currentTabIndex
 
             function reloadAll() {
-                // Go through the WebTab wrapper (NOT the raw webView) so the
-                // Discarded/Frozen-promotion path in WebTab.reload() runs —
-                // calling reload() directly on a Discarded WebEngineView is
-                // silently dropped by Qt and a background tab on a stale
-                // 401/Authelia render would stay stale after a wallet write.
+                // Go through the WebTab wrapper (NOT the raw webView): it
+                // clears loginInProgress, which a broadcast reload mid-login
+                // would otherwise leave stuck. A Discarded view is skipped:
+                // waking it would start a renderer for an invisible tab, and
+                // it reloads (with the profile's new credentials) anyway when
+                // it is next shown. Its login latch is still cleared, as the
+                // reload would have: that reload drops the login form too.
                 for (let i = 0; i < repeater.count; i++) {
                     const tab = repeater.itemAt(i);
-                    if (tab) tab.reload();
+                    if (!tab) continue;
+                    if (tab.webView && tab.webView.lifecycleState === WebEngineView.LifecycleState.Discarded) {
+                        tab.loginInProgress = false;
+                        console.debug(Log.load, "iframe-plasma[load] reloadAll skipped (discarded) idx=" + i);
+                        continue;
+                    }
+                    tab.reload();
                 }
             }
 
