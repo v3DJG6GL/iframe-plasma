@@ -366,6 +366,39 @@ test("isolate: a kept ancestor's opacity and visibility do not hide the target",
     }
 });
 
+test("isolate: the target is sized by its border box and ignores the page's min size", () => {
+    // A content-box target with padding/border would overflow a 100vw box
+    // (and fit mode's vw/s counter-size), and a page min-width would beat
+    // the rule's max-width; body is overflow:hidden, so the edges get cut.
+    for (const scaleMode of ["stretch", "fit"]) {
+        const dom = new JSDOM(
+            "<!doctype html><html><head><style>" +
+            ".t{box-sizing:content-box;padding:40px;border:10px solid;min-width:2000px;min-height:900px}" +
+            "</style></head><body><div><div id='t' class='t'>x</div></div></body></html>",
+            { runScripts: "outside-only" });
+        const w = dom.window;
+        w.MutationObserver = class { observe() {} disconnect() {} takeRecords() { return []; } };
+        w.ResizeObserver = class { observe() {} disconnect() {} };
+        w.requestAnimationFrame = (cb) => { cb(); return 0; };
+        w.cancelAnimationFrame = () => {};
+        w.setInterval = () => 0;
+        w.clearInterval = () => {};
+        w.console = { info: () => {}, warn: () => {}, error: () => {} };
+        const el = w.document.getElementById("t");
+
+        w.eval(`(${ce.buildApplyJs("#t", { scaleMode })})`);
+        assert.equal(w.getComputedStyle(el).boxSizing, "border-box", scaleMode);
+        if (scaleMode === "stretch") {
+            assert.match(w.getComputedStyle(el).minWidth, /^0(px)?$/, scaleMode);
+            assert.match(w.getComputedStyle(el).minHeight, /^0(px)?$/, scaleMode);
+        }
+
+        w.eval(ce.buildClearJs());
+        assert.equal(w.getComputedStyle(el).boxSizing, "content-box", scaleMode);
+        assert.equal(w.getComputedStyle(el).minWidth, "2000px", scaleMode);
+    }
+});
+
 test("isolate: a match inside an <svg> isolates the outer <svg>", () => {
     // The picker hands back the deepest shape of an SVG chart. position:fixed
     // does not apply to SVG children, and tagging the <g> chain as kept would

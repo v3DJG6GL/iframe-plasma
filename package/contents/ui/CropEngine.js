@@ -236,8 +236,13 @@ const _APPLY_BODY = `(function(sel, opts){
       // react-grid-layout item) would otherwise be shifted off the viewport.
       // Fit mode leaves 'transform' out of its rule because applyFitTransform
       // owns it inline (an !important sheet value would beat the scale).
-      'html[data-ifp-isolate="1"][data-ifp-scale="stretch"] [data-ifp-target="1"],html[data-ifp-isolate="1"]:not([data-ifp-scale]) [data-ifp-target="1"]{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:100vw!important;max-height:100vh!important;margin:0!important;z-index:2147483647!important;overflow:auto!important;transform:none!important;translate:none!important;rotate:none!important;scale:none!important;}',
-      'html[data-ifp-isolate="1"][data-ifp-scale="fit"] [data-ifp-target="1"]{position:fixed!important;top:0!important;left:0!important;margin:0!important;z-index:2147483647!important;overflow:auto!important;translate:none!important;rotate:none!important;scale:none!important;}',
+      // Stretch and fit size the target by its border box: on a content-box
+      // page, padding and border would push it past the viewport (fit's
+      // vw/s counter-size included), and body's overflow:hidden cuts that
+      // off. Stretch also drops the page's min-width/min-height, which would
+      // beat max-width:100vw. Original keeps the page's own box model.
+      'html[data-ifp-isolate="1"][data-ifp-scale="stretch"] [data-ifp-target="1"],html[data-ifp-isolate="1"]:not([data-ifp-scale]) [data-ifp-target="1"]{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:100vw!important;max-height:100vh!important;min-width:0!important;min-height:0!important;box-sizing:border-box!important;margin:0!important;z-index:2147483647!important;overflow:auto!important;transform:none!important;translate:none!important;rotate:none!important;scale:none!important;}',
+      'html[data-ifp-isolate="1"][data-ifp-scale="fit"] [data-ifp-target="1"]{position:fixed!important;top:0!important;left:0!important;margin:0!important;box-sizing:border-box!important;z-index:2147483647!important;overflow:auto!important;translate:none!important;rotate:none!important;scale:none!important;}',
       'html[data-ifp-isolate="1"][data-ifp-scale="original"] [data-ifp-target="1"]{position:fixed!important;top:0!important;left:0!important;margin:0!important;z-index:2147483647!important;overflow:auto!important;transform:none!important;translate:none!important;rotate:none!important;scale:none!important;}'
     ].join('');
     if (!document.getElementById('ifp-thumb-style')) {
