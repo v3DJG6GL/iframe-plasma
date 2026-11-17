@@ -2574,9 +2574,7 @@ PlasmoidItem {
         function restorePopupSelectorAt(tabIdx) {
             const wt = repeater.itemAt(tabIdx);
             if (!wt || typeof wt.applyImmediately !== "function") return false;
-            const t = root.tabs[tabIdx];
-            const sel = (t && t.popupMode === "custom") ? (t.popupSelector || "") : "";
-            wt.applyImmediately(sel);
+            wt.applyImmediately(UrlUtils.effectivePopupSelector(root.tabs[tabIdx]));
             return true;
         }
 
@@ -2804,10 +2802,8 @@ PlasmoidItem {
                         // in-place mutations from KCM Apply / picker save.
                         // See the _liveRow docblock.
                         const _tick = root._tabsMetadataSerial;
-                        const t = root._liveRow(index, modelData);
-                        return (t && t.popupMode === "custom")
-                               ? (t.popupSelector || "")
-                               : "";
+                        // Same derivation savePickedSelector predicts with.
+                        return UrlUtils.effectivePopupSelector(root._liveRow(index, modelData));
                     }
                     debugPort: Plasmoid.configuration.remoteDebuggingPort
                     // Live only for the tab actually on screen; the rest are
