@@ -481,8 +481,14 @@ const _APPLY_BODY = `(function(sel, opts){
     var bcs = getComputedStyle(el);
     var cw = el.scrollWidth + (parseFloat(bcs.borderLeftWidth) || 0) + (parseFloat(bcs.borderRightWidth) || 0);
     var ch = el.scrollHeight + (parseFloat(bcs.borderTopWidth) || 0) + (parseFloat(bcs.borderBottomWidth) || 0);
-    var vw = window.innerWidth;
-    var vh = window.innerHeight;
+    // The viewport without its scrollbar: isolation hides overflow on body
+    // only, so a page with html{overflow-y:scroll} keeps one, and innerWidth
+    // would put the scaled target's right edge under it. The scrolling
+    // element's clientWidth is that size in standards and quirks mode alike
+    // (and, unlike visualViewport, is not shrunk by a pinch zoom).
+    var vpe = document.scrollingElement || document.documentElement;
+    var vw = vpe.clientWidth || window.innerWidth;
+    var vh = vpe.clientHeight || window.innerHeight;
     if (cw <= 0 || ch <= 0 || vw <= 0 || vh <= 0) { noteFitWrites(el); forgetOwnMutations(); return; }
     var s = Math.min(vw / cw, vh / ch);
     var key = (s <= 1.0001) ? 'natural' : (s + '|' + vw + '|' + vh);

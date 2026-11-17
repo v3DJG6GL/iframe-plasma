@@ -1984,6 +1984,18 @@ test("fit: the target is measured by its border box", () => {
     assert.equal(t.el.style.height, `${300 / s}px`);
 });
 
+test("fit: the viewport's own scrollbar is left out of the fit", () => {
+    // html{overflow-y:scroll} keeps a 15 px scrollbar while isolated (only
+    // body is overflow:hidden); innerWidth counts it, clientWidth does not.
+    const t = runFitApply();
+    Object.defineProperty(t.w.document.documentElement, "clientWidth", { configurable: true, get: () => 385 });
+    t.tick();
+    const s = 385 / 100;
+    assert.equal(t.el.style.transform, `scale(${s})`);
+    assert.equal(t.el.style.width, `${385 / s}px`);
+    assert.equal(t.el.style.height, `${300 / s}px`);
+});
+
 test("fit: a viewport change re-scales and dispatches resize once", () => {
     const t = runFitApply();
     t.tick();
