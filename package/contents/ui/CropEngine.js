@@ -155,7 +155,9 @@ const _APPLY_BODY = `(function(sel, opts){
     for (var i = 0; i < src.length; i++) {
       var raw = String(src[i] || '').trim();
       if (!raw) continue;
-      var m = raw.match(/^\\/(.+)\\/([gimsuy]*)$/);
+      // Every flag Chromium 122 accepts, d (indices) and v (unicodeSets)
+      // included; an invalid mix such as "uv" throws below and warns.
+      var m = raw.match(/^\\/(.+)\\/([dgimsuvy]*)$/);
       if (m) {
         // Strip g/y: the scan only ever calls .test() for membership, and a
         // stateful (global/sticky) RegExp advances lastIndex between calls, so

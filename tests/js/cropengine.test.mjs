@@ -657,6 +657,29 @@ test("keyword scan: regex form /pattern/flags matches", () => {
         `expected regex hit=true, got: ${kwLogs.join(" | ")}`);
 });
 
+test("keyword scan: regex with the d or v flag is compiled as a regex", () => {
+    // Chromium accepts d (indices) and v (unicodeSets); such an entry must
+    // not degrade to the literal substring "/offline/v", which never matches.
+    for (const kw of ["/offline/v", "/Offline/di"]) {
+        const dom = new JSDOM(
+            "<!doctype html><html><body><div id='t'>Stream offline</div></body></html>",
+            { runScripts: "outside-only" });
+        const w = dom.window;
+        w.MutationObserver = class { observe() {} disconnect() {} };
+        w.ResizeObserver = class { observe() {} disconnect() {} };
+        w.requestAnimationFrame = (cb) => { cb(); return 0; };
+        w.cancelAnimationFrame = () => {};
+        w.setInterval = () => 0;
+        w.clearInterval = () => {};
+        const logs = [];
+        w.console = { info: (m) => logs.push(String(m)), warn: () => {}, error: () => {} };
+        w.eval(`(${ce.buildApplyJs("#t", { keywords: [kw] })})`);
+        w.__ifpThumbSchedule();
+        const kwLogs = logs.filter(l => l.indexOf("[ifp-keyword]") !== -1);
+        assert.deepEqual(kwLogs, ["[ifp-keyword] hit=true"], kw);
+    }
+});
+
 test("keyword scan: malformed regex falls through to literal substring", () => {
     // The literal "/[unclosed" substring should match itself in the page
     // text even though the regex parse fails — graceful degradation.
