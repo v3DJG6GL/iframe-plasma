@@ -244,9 +244,13 @@ const _APPLY_BODY = `(function(sel, opts){
       // Opacity and visibility are reset on the target as on its kept
       // ancestors: an inactive carousel slide or a faded-out card often
       // carries them itself.
+      // Fit and original release the page's right/bottom: a target it
+      // anchors with them (or inset:0, a "fill the card" layer) would be
+      // stretched against the viewport, so fit measures ~viewport size and
+      // barely scales, and original no longer shows the natural size.
       'html[data-ifp-isolate="1"][data-ifp-scale="stretch"] [data-ifp-target="1"],html[data-ifp-isolate="1"]:not([data-ifp-scale]) [data-ifp-target="1"]{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:100vw!important;max-height:100vh!important;min-width:0!important;min-height:0!important;box-sizing:border-box!important;margin:0!important;z-index:2147483647!important;overflow:auto!important;opacity:1!important;visibility:visible!important;transform:none!important;translate:none!important;rotate:none!important;scale:none!important;}',
-      'html[data-ifp-isolate="1"][data-ifp-scale="fit"] [data-ifp-target="1"]{position:fixed!important;top:0!important;left:0!important;margin:0!important;box-sizing:border-box!important;z-index:2147483647!important;overflow:auto!important;opacity:1!important;visibility:visible!important;translate:none!important;rotate:none!important;scale:none!important;}',
-      'html[data-ifp-isolate="1"][data-ifp-scale="original"] [data-ifp-target="1"]{position:fixed!important;top:0!important;left:0!important;margin:0!important;z-index:2147483647!important;overflow:auto!important;opacity:1!important;visibility:visible!important;transform:none!important;translate:none!important;rotate:none!important;scale:none!important;}'
+      'html[data-ifp-isolate="1"][data-ifp-scale="fit"] [data-ifp-target="1"]{position:fixed!important;top:0!important;left:0!important;right:auto!important;bottom:auto!important;margin:0!important;box-sizing:border-box!important;z-index:2147483647!important;overflow:auto!important;opacity:1!important;visibility:visible!important;translate:none!important;rotate:none!important;scale:none!important;}',
+      'html[data-ifp-isolate="1"][data-ifp-scale="original"] [data-ifp-target="1"]{position:fixed!important;top:0!important;left:0!important;right:auto!important;bottom:auto!important;margin:0!important;z-index:2147483647!important;overflow:auto!important;opacity:1!important;visibility:visible!important;transform:none!important;translate:none!important;rotate:none!important;scale:none!important;}'
     ].join('');
     if (!document.getElementById('ifp-thumb-style')) {
       const s = document.createElement('style');

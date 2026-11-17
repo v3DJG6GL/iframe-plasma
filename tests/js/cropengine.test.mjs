@@ -428,6 +428,38 @@ test("isolate: a target that hides itself is shown", () => {
     }
 });
 
+test("isolate: fit and original release the page's right and bottom anchors", () => {
+    // A target the page anchors with inset:0 (a "fill the card" layer) would
+    // stay stretched against the viewport edges once fixed: fit would measure
+    // a viewport-sized box and barely scale, original would not show the
+    // natural size.
+    for (const scaleMode of ["fit", "original"]) {
+        const dom = new JSDOM(
+            "<!doctype html><html><head><style>" +
+            ".layer{position:absolute;inset:0;right:20px;bottom:20px}" +
+            "</style></head><body><div><div id='t' class='layer'>x</div></div></body></html>",
+            { runScripts: "outside-only" });
+        const w = dom.window;
+        w.MutationObserver = class { observe() {} disconnect() {} takeRecords() { return []; } };
+        w.ResizeObserver = class { observe() {} disconnect() {} };
+        w.requestAnimationFrame = (cb) => { cb(); return 0; };
+        w.cancelAnimationFrame = () => {};
+        w.setInterval = () => 0;
+        w.clearInterval = () => {};
+        w.console = { info: () => {}, warn: () => {}, error: () => {} };
+        const el = w.document.getElementById("t");
+
+        w.eval(`(${ce.buildApplyJs("#t", { scaleMode })})`);
+        assert.equal(w.getComputedStyle(el).position, "fixed", scaleMode);
+        assert.equal(w.getComputedStyle(el).right, "auto", scaleMode);
+        assert.equal(w.getComputedStyle(el).bottom, "auto", scaleMode);
+
+        w.eval(ce.buildClearJs());
+        assert.equal(w.getComputedStyle(el).right, "20px", scaleMode);
+        assert.equal(w.getComputedStyle(el).bottom, "20px", scaleMode);
+    }
+});
+
 test("isolate: a match inside an <svg> isolates the outer <svg>", () => {
     // The picker hands back the deepest shape of an SVG chart. position:fixed
     // does not apply to SVG children, and tagging the <g> chain as kept would
