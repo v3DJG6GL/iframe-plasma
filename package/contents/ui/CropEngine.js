@@ -751,7 +751,7 @@ ${_TEARDOWN_BODY}
 // Element picker. Highlights hovered elements with an outline and a small
 // instruction banner, then on click computes a robust CSS selector and
 // stashes it on `window.__ifpPicked`. QML polls that property via
-// buildPickerPollJs(). Esc cancels (sets __ifpPicked = "").
+// buildPickerClearJs(), which reads and resets it. Esc cancels (sets __ifpPicked = "").
 //
 // Selector preference: unique #id → unique [data-testid|data-test|data-cy|
 // data-qa] → unique [aria-label] → unique stable class chain (filters out
@@ -993,7 +993,6 @@ ${_TEARDOWN_BODY}
   return 'started';
 })()`;
 
-const _PICKER_POLL_BODY = "(window.__ifpPicked === undefined ? null : window.__ifpPicked)";
 const _PICKER_CLEAR_BODY = "(function(){ const v = window.__ifpPicked; window.__ifpPicked = null; return v; })()";
 
 // buildApplyJs(selector)             — legacy single-arg call shape.
@@ -1041,10 +1040,6 @@ function buildClearJs() {
 
 function buildPickerStartJs() {
     return _PICKER_START_BODY;
-}
-
-function buildPickerPollJs() {
-    return _PICKER_POLL_BODY;
 }
 
 function buildPickerClearJs() {

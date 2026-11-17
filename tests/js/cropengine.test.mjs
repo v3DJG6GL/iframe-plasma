@@ -29,7 +29,7 @@ function loadCropEngine() {
     const footer = `
         module.exports = {
             buildApplyJs, buildClearJs, buildPickerStartJs,
-            buildPickerPollJs, buildPickerClearJs
+            buildPickerClearJs
         };
     `;
     const sandbox = { module: { exports: {} }, console };
@@ -86,11 +86,6 @@ test("buildPickerStartJs returns IIFE that installs window-level listeners", () 
     assert.ok(js.includes("addEventListener"));
     assert.ok(js.includes("__ifpPicked") || js.includes("__ifpPicker"),
         "picker must seed a __ifp* global for QML to poll");
-});
-
-test("buildPickerPollJs returns a window.__ifpPicked read expression", () => {
-    const js = ce.buildPickerPollJs();
-    assert.ok(js.includes("__ifpPicked"));
 });
 
 test("buildPickerClearJs reads and resets __ifpPicked atomically", () => {
@@ -354,22 +349,6 @@ test("picker: start sets window.__ifpPickerArmed", () => {
 
     dom.window.eval(ce.buildPickerStartJs());
     assert.equal(dom.window.__ifpPickerArmed, true);
-});
-
-test("picker: poll returns null when nothing picked yet", () => {
-    const dom = new JSDOM("<!doctype html><html><body/></html>",
-        { runScripts: "outside-only" });
-    dom.window.MutationObserver = class { observe() {} disconnect() {} };
-    dom.window.ResizeObserver = class { observe() {} disconnect() {} };
-    dom.window.requestAnimationFrame = (cb) => 0;
-    dom.window.cancelAnimationFrame = () => {};
-    // The IIFE installs a setInterval poll; stub so it doesn't keep Node alive.
-    dom.window.setInterval = () => 0;
-    dom.window.clearInterval = () => {};
-
-    dom.window.eval(ce.buildPickerStartJs());
-    const polled = dom.window.eval(ce.buildPickerPollJs());
-    assert.equal(polled, null);
 });
 
 // ============================================================
