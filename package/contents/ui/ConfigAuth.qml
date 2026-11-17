@@ -464,9 +464,14 @@ KCM.SimpleKCM {
                             Layout.fillWidth: true
                             text: i18n("Send credentials with the first request")
                             checked: card.preempt
+                            // bearer/raw lock once on. An imported or hand-
+                            // edited preempt:false is kept by effectivePreempt,
+                            // so leave the switch usable until it is turned on;
+                            // otherwise the token is never sent and nothing
+                            // here can fix it.
                             enabled: page.kwalletAvailable
-                                  && card.authType !== "bearer"
-                                  && card.authType !== "raw"
+                                  && (!(card.authType === "bearer" || card.authType === "raw")
+                                      || !card.preempt)
                             onToggled: page.setField(card.index, "preempt", checked)
                             QQC.ToolTip.visible: hovered
                             QQC.ToolTip.delay: 600
