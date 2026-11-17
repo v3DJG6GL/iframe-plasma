@@ -20,7 +20,7 @@ KCM.SimpleKCM {
     // opened in this session, so its own `onAuthProfilesChanged` scrub
     // never fires.
     property string cfg_urlsJson: "[]"
-    // Bumped on every successful secret write/remove so the widget
+    // Bumped on every staged secret write/remove so the widget
     // (running in a different QML engine than this dialog) re-runs
     // primeAuthProfiles + reloadAll via the KConfig change-notification
     // path. See main.xml comment on the entry.
@@ -265,17 +265,21 @@ KCM.SimpleKCM {
 
                 width: ListView.view.width
 
-                // Secret value loaded lazily from KWallet (or set inline before save).
-                // We never display the secret — only "(stored)" / "(not set)" hint.
-                // Asks for the field the CURRENT auth type reads at runtime: an
-                // entry left over from another type (basic → bearer switch)
-                // injects nothing, so it must not show as stored.
-                // `_secretRev` re-runs the check after a successful write.
+                // Secret value loaded lazily from KWallet (or staged on this
+                // page until Apply). We never display the secret — only
+                // "(stored)" / "(not set)" hint. Asks for the field the
+                // CURRENT auth type reads at runtime: an entry left over from
+                // another type (basic → bearer switch) injects nothing, so it
+                // must not show as stored. A staged map replaces the whole
+                // wallet entry on Apply, so it alone decides while pending.
+                // `_secretRev` re-runs the check after a write.
                 property int _secretRev: 0
                 readonly property bool hasStoredSecret: {
                     const _tick = card._secretRev;
                     const field = page.authSpec(card.authType).fieldName;
                     if (!page.authSupport || field.length === 0) return false;
+                    const staged = page._pendingSecretWrites[card.id];
+                    if (staged) return !!staged[field];
                     return page.authSupport.hasField(page.authSupport.profileKey(card.id), field);
                 }
 
@@ -368,32 +372,19 @@ KCM.SimpleKCM {
                                 if (!page.authSupport) return;
                                 const map = {};
                                 map[page.authSpec(card.authType).fieldName] = text;
-                                if (page.authSupport.setMap(page.authSupport.profileKey(card.id), map)) {
-                                    card._secretRev = card._secretRev + 1;
-                                    savedHint.show();
-                                    // Tell main.qml (different QML engine — direct
-                                    // QML signals won't cross) that secrets changed,
-                                    // via the KConfig change-notification path.
-                                    page.cfg_authProfilesSecretsSerial = page.cfg_authProfilesSecretsSerial + 1;
-                                    // Clear the buffer so the showSecret toggle
-                                    // can't reveal a just-saved password to a
-                                    // bystander; the "(stored — type to replace)"
-                                    // placeholder + Saved pill signal capture.
-                                    showSecret.checked = false;
-                                    text = "";
-                                } else {
-                                    // Wallet write failed (locked / unlock
-                                    // denied). Surface a red "Wallet write
-                                    // failed" pill so the user isn't misled by
-                                    // the cleared field into thinking the
-                                    // secret was saved. Reset showSecret so
-                                    // the next retype isn't cleartext to a
-                                    // bystander — symmetry with the success
-                                    // branch's eye-toggle reset.
-                                    showSecret.checked = false;
-                                    text = "";
-                                    failedHint.show();
-                                }
+                                // Staged, not written: the wallet write waits
+                                // for Apply/OK (see saveConfig), so Discard
+                                // neither overwrites the old secret nor
+                                // leaves one under an unsaved profile's id.
+                                page.stageSecretWrite(card.id, map);
+                                card._secretRev = card._secretRev + 1;
+                                savedHint.show();
+                                // Clear the buffer so the showSecret toggle
+                                // can't reveal a just-captured password to a
+                                // bystander; the "(stored — type to replace)"
+                                // placeholder + Saved pill signal capture.
+                                showSecret.checked = false;
+                                text = "";
                             }
                         }
                         QQC.ToolButton {
@@ -401,23 +392,13 @@ KCM.SimpleKCM {
                             icon.name: checked ? "password-show-on" : "password-show-off"
                             checkable: true
                         }
-                        // Transient capture-confirmation pill (success path)
-                        // and its red mirror for setMap()==false (failure
-                        // path) — without the latter, a wallet write failure
-                        // would be silent (field clears identically on success
-                        // and failure).
+                        // Transient capture-confirmation pill. A wallet
+                        // write that fails on Apply is logged by saveConfig.
                         HintPill {
                             id: savedHint
                             iconSource: "emblem-success"
                             tint: Kirigami.Theme.positiveTextColor
                             text: i18n("Saved")
-                        }
-                        HintPill {
-                            id: failedHint
-                            iconSource: "dialog-error"
-                            tint: Kirigami.Theme.negativeTextColor
-                            text: i18n("Wallet write failed")
-                            holdMs: 4000
                         }
                     }
 
@@ -513,10 +494,35 @@ KCM.SimpleKCM {
         // Dirties the page; once applied, the widget re-primes its profiles.
         cfg_authProfilesSecretsSerial = cfg_authProfilesSecretsSerial + 1;
     }
+    // Secrets typed on this page, {profileId: fieldMap}, written on Apply/OK
+    // for the same reason: an overwrite cannot be undone either, and a
+    // secret written for a profile the user then discards would be left in
+    // the wallet under an id nothing references. setMap replaces the whole
+    // entry, so the latest map per profile wins. Reassigned, not mutated, so
+    // hasStoredSecret re-evaluates.
+    property var _pendingSecretWrites: ({})
+    function stageSecretWrite(profileId, map) {
+        const next = Object.assign({}, _pendingSecretWrites);
+        next[profileId] = map;
+        _pendingSecretWrites = next;
+        // Dirties the page; once applied, the widget re-primes its profiles
+        // (it runs in another QML engine, so only the KConfig change crosses).
+        cfg_authProfilesSecretsSerial = cfg_authProfilesSecretsSerial + 1;
+    }
     function saveConfig() {
+        const writes = _pendingSecretWrites;
+        _pendingSecretWrites = ({});
         const ids = _pendingSecretRemovals;
         _pendingSecretRemovals = [];
         if (!authSupport) return;
+        // Writes first, then removals; a profile deleted after its secret was
+        // typed is skipped here, the removal below covers it.
+        for (const id of Object.keys(writes)) {
+            if (ids.indexOf(id) >= 0) continue;
+            if (!authSupport.setMap(authSupport.profileKey(id), writes[id])) {
+                console.warn(Log.auth, "iframe-plasma[auth] could not write the wallet entry of profile", id);
+            }
+        }
         for (const id of ids) {
             const key = authSupport.profileKey(id);
             if (authSupport.removeKey(key)) continue;

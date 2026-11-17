@@ -322,7 +322,8 @@ PlasmoidItem {
                 root._profiles[key].httpUserAgent = ua;
             }
         }
-        // Bumped by ConfigAuth on every successful setMap/removeKey.
+        // Bumped by ConfigAuth for every staged secret write/removal; it
+        // reaches here on Apply, after saveConfig() has flushed them.
         // The C++ secretsChanged QML signal can't cross from the
         // config-dialog engine to the widget engine, so we route the
         // notification via KConfig instead. On bump, re-prime + reload
