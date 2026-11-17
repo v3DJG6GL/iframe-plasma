@@ -101,7 +101,7 @@ Item {
     // swallowed (else each parked sibling re-broadcasts that reload).
     // Survives intermediate loads on the Authelia host; consumed by the next
     // successful load elsewhere or by a failed load. A Login click (the
-    // user logging in here after all) overrides it.
+    // user logging in here after all) disarms it.
     property bool _quietNextAuthReturn: false
 
     // "" → no override (chip follows URL); "off"; or an interval like "30s".
@@ -964,7 +964,13 @@ Item {
         // and promotes a Discarded view (see reload() above).
         onReloadClicked: tab.reload()
         onOpenExternalClicked: openExternal()
-        onLoginClicked: tab.loginInProgress = true
+        // The click itself disarms the sibling-login quiet return: the user
+        // is logging in here, and loginInProgress may be cleared (Frozen
+        // resume) before the return to the target is checked.
+        onLoginClicked: {
+            tab.loginInProgress = true;
+            tab._quietNextAuthReturn = false;
+        }
     }
 
     // Freezes/discards `webview` when this tab isn't the one on screen.
