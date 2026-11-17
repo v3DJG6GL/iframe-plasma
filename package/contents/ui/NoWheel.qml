@@ -44,7 +44,10 @@ MouseArea {
                  : wheel.angleDelta.y / 8
         const t = root.scrollTarget || root._findOverflowingFlickable(root.parent)
         if (t) {
-            t.contentY = Math.max(0, Math.min(t.contentHeight - t.height,
+            // Origin-relative extent, as in ScrollForwardingWheelHandler:
+            // a ListView's originY leaves 0 once delegate heights vary.
+            const o = t.originY !== undefined ? t.originY : 0
+            t.contentY = Math.max(o, Math.min(o + t.contentHeight - t.height,
                                               t.contentY - dy))
         }
         wheel.accepted = true

@@ -24,8 +24,13 @@ WheelHandler {
                 && p.contentHeight !== undefined
                 && p.height !== undefined
                 && p.contentHeight > p.height) {
-                p.contentY = Math.max(0,
-                    Math.min(p.contentHeight - p.height,
+                // Clamp to the origin-relative extent: a ListView with
+                // mixed-height delegates moves originY off 0, and a
+                // [0, contentHeight - height] clamp then cuts off its
+                // first or last cards. NoWheel.qml does the same.
+                const o = p.originY !== undefined ? p.originY : 0
+                p.contentY = Math.max(o,
+                    Math.min(o + p.contentHeight - p.height,
                              p.contentY - dy))
                 break
             }
