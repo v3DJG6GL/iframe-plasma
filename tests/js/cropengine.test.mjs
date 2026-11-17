@@ -767,6 +767,31 @@ test("picker: the rest of the picking gesture does not reach the page", () => {
     assert.deepEqual(seen, ["pointerup", "mouseup", "click"]);
 });
 
+test("picker: a middle or right picking press does not reach the page either", () => {
+    // A middle press ends in auxclick (Chromium opens a link in a new window
+    // on it), a right press also fires contextmenu; neither ever fires click.
+    const gestures = {
+        middle: ["pointerdown", "mousedown", "pointerup", "mouseup", "auxclick"],
+        right: ["pointerdown", "mousedown", "contextmenu", "pointerup", "mouseup", "auxclick"],
+    };
+    for (const [name, gesture] of Object.entries(gestures)) {
+        const p = runPicker("<!doctype html><html><body><a id='lnk' href='#x'>go</a></body></html>");
+        const link = p.doc.getElementById("lnk");
+        const seen = [];
+        for (const type of ["pointerup", "mouseup", "auxclick", "contextmenu"]) {
+            link.addEventListener(type, () => seen.push(type));
+        }
+        p.pointAt(link);
+        for (const type of gesture) p.fire(link, type);
+        assert.equal(p.w.__ifpPicked, "#lnk", name);
+        assert.deepEqual(seen, [], name);
+
+        // The swallow ended with the gesture: the next one reaches the page.
+        p.fire(link, "auxclick");
+        assert.deepEqual(seen, ["auxclick"], name);
+    }
+});
+
 test("picker: a pick whose click never comes does not eat a later click", () => {
     const p = runPicker("<!doctype html><html><body><button id='go'>go</button></body></html>");
     const button = p.doc.getElementById("go");

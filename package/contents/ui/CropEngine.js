@@ -924,16 +924,19 @@ ${_TEARDOWN_BODY}
   // The pick is taken on the first event of the gesture (pointerdown) and
   // finish() detaches every picker listener, so the gesture's mouseup and
   // click would reach the page and activate what was just picked: a link
-  // navigates, a button fires. Swallow them until the click has passed. A
-  // new press ends the swallow, as does the timer when no click ever comes
-  // (button released outside the view), so no later gesture is eaten.
+  // navigates, a button fires. Swallow them until the click has passed. Any
+  // button picks, and a non-primary press ends in auxclick instead of click
+  // (Chromium opens a middle-clicked link in a new window on it) and a right
+  // press also fires contextmenu, which page scripts handle. A new press
+  // ends the swallow, as does the timer when no click ever comes (button
+  // released outside the view), so no later gesture is eaten.
   function swallowGestureTail() {
-    const tail = ['mousedown', 'pointerup', 'mouseup', 'click'];
+    const tail = ['mousedown', 'pointerup', 'mouseup', 'click', 'auxclick', 'contextmenu'];
     let timer = 0;
     function swallow(ev) {
       ev.preventDefault();
       ev.stopImmediatePropagation();
-      if (ev.type === 'click') off();
+      if (ev.type === 'click' || ev.type === 'auxclick') off();
     }
     function off() {
       clearTimeout(timer);
