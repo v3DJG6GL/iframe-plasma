@@ -1,6 +1,5 @@
 # iframe-plasma
 
-[![CI](https://forgejo.informethic.ch/v3djg6gl/iframe-plasma/actions/workflows/ci.yml/badge.svg?branch=master)](https://forgejo.informethic.ch/v3djg6gl/iframe-plasma/actions?workflow=ci.yml)
 [![REUSE status](https://api.reuse.software/badge/github.com/v3DJG6GL/iframe-plasma)](https://api.reuse.software/info/github.com/v3DJG6GL/iframe-plasma)
 
 A KDE Plasma 6 widget that embeds authenticated web pages — primarily designed
@@ -57,12 +56,13 @@ support for **Authelia SSO** and **HTTP Basic Auth** behind a reverse proxy.
 
 ## Install
 
-Development happens on [Forgejo](https://forgejo.informethic.ch/v3djg6gl/iframe-plasma);
-[GitHub](https://github.com/v3DJG6GL/iframe-plasma) is a read-only mirror.
+Development happens on a private Forgejo instance;
+[GitHub](https://github.com/v3DJG6GL/iframe-plasma) is a read-only mirror,
+releases included.
 
 ### Prebuilt package (Ubuntu 26.04)
 
-Each [release](https://forgejo.informethic.ch/v3djg6gl/iframe-plasma/releases)
+Each [release](https://github.com/v3DJG6GL/iframe-plasma/releases)
 ships a `.deb` (and a `.tar.gz` of the same `/usr` tree) built against Ubuntu
 26.04's Qt / KF6, with a `.sha256` next to each file:
 
@@ -76,13 +76,13 @@ sudo apt install ./iframe-plasma_*_ubuntu26.04_amd64.deb
 Every release is also published to a private pacman repository on the Forgejo
 package registry, so `pacman -Syu` picks up new versions. One-time setup:
 
-1. **Create a token.** On <https://forgejo.informethic.ch/user/settings/applications>,
-   under *Access tokens*, generate a token with only the permission
-   **package: Read** (e.g. named `FJ_PACKAGES_READ`) and copy it; Forgejo shows
-   it only once.
+1. **Create a token.** On the Forgejo instance, under *Settings → Applications →
+   Access tokens*, generate a token with only the permission **package: Read**
+   (e.g. named `FJ_PACKAGES_READ`) and copy it; Forgejo shows it only once.
 2. **Run the command below** in a terminal (bash, zsh or fish all work). It
-   asks `Paste your Forgejo token (package: Read), then press Enter:`; paste
-   the token there. The input stays hidden, nothing appears while you paste.
+   first asks for the Forgejo address (the host name only), then
+   `Paste your Forgejo token (package: Read), then press Enter:`; paste the
+   token there. The input stays hidden, nothing appears while you paste.
    `sudo` may then ask for your password.
 
 The command trusts the registry's signing key and adds the repository. The token
@@ -94,25 +94,27 @@ is world-readable); running the command again just replaces key and token.
 bash -c '
 set -euo pipefail   # stop at the first error
 
-# 1. Ask for the token (input hidden; paste it and press Enter).
+# 1. Ask for the Forgejo address and the token (token input hidden; paste, then Enter).
+read -rp "Forgejo address (host name only, e.g. git.example.org): " HOST
 read -rsp "Paste your Forgejo token (package: Read), then press Enter: " TOKEN; echo
+OWNER=v3djg6gl
+SECTION="$OWNER.apps.$HOST"   # name of the repository in pacman.conf
 
 # 2. Download the signing key of the repository and let pacman trust it.
-base=https://forgejo.informethic.ch/api/packages/v3djg6gl/arch
 key=$(mktemp)
-curl -fsSL -u "v3djg6gl:$TOKEN" -o "$key" "$base/repository.key"
+curl -fsSL -u "$OWNER:$TOKEN" -o "$key" "https://$HOST/api/packages/$OWNER/arch/repository.key"
 sudo pacman-key --add "$key"
-sudo pacman-key --lsign-key "v3djg6gl@noreply.forgejo.informethic.ch"
+sudo pacman-key --lsign-key "$OWNER@noreply.$HOST"
 rm -f "$key"
 
 # 3. Store the download address, token included, in a file only root can read.
 sudo install -m 600 /dev/null /etc/pacman.d/forgejo-apps
-printf "Server = https://v3djg6gl:%s@forgejo.informethic.ch/api/packages/v3djg6gl/arch/apps/%sarch\n" "$TOKEN" "$" \
+printf "Server = https://%s:%s@%s/api/packages/%s/arch/apps/%sarch\n" "$OWNER" "$TOKEN" "$HOST" "$OWNER" "$" \
   | sudo tee /etc/pacman.d/forgejo-apps >/dev/null
 
 # 4. Add the repository to /etc/pacman.conf (skipped if it is already there).
-grep -qF "[v3djg6gl.apps.forgejo.informethic.ch]" /etc/pacman.conf \
-  || printf "\n[v3djg6gl.apps.forgejo.informethic.ch]\nSigLevel = Required\nInclude = /etc/pacman.d/forgejo-apps\n" \
+grep -qF "[$SECTION]" /etc/pacman.conf \
+  || printf "\n[%s]\nSigLevel = Required\nInclude = /etc/pacman.d/forgejo-apps\n" "$SECTION" \
   | sudo tee -a /etc/pacman.conf >/dev/null
 
 echo "Done: the repository is set up."
