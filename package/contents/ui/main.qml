@@ -2160,7 +2160,8 @@ PlasmoidItem {
                         restart();
                     }
                     onTriggered: {
-                        if (!ThumbRetryPolicy.shouldFireRetry(miniView.loadStatus)) return;
+                        if (!ThumbRetryPolicy.shouldFireRetry(miniView.loadStatus,
+                                miniView.ownIsCurrent, root.compactObservable)) return;
                         console.debug(Log.load, "iframe-plasma[mini-retry] attempt=" + miniView._retryAttempt
                             + " idx=" + miniView.ownIndex);
                         miniView.stop();

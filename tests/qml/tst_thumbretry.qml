@@ -39,8 +39,17 @@ TestCase {
     //  shouldFireRetry
     // ============================================================
     function test_fireRetry_failedOrBlankSlot() {
-        verify(R.shouldFireRetry("err"));
-        verify(R.shouldFireRetry("blank"));
+        verify(R.shouldFireRetry("err", true, true));
+        verify(R.shouldFireRetry("blank", true, true));
+    }
+    function test_fireRetry_blankNoLongerOnScreen_skipped() {
+        // Armed while on screen, due after the slot rotated away or the
+        // screen locked: the reload would wake a frozen view for nothing.
+        verify(!R.shouldFireRetry("blank", false, true));
+        verify(!R.shouldFireRetry("blank", true, false));
+    }
+    function test_fireRetry_failedSlotOffScreen_stillFires() {
+        verify(R.shouldFireRetry("err", false, false));
     }
     function test_fireRetry_loadInFlight_skipped() {
         // Landing on a failed tab reloads it at once; the retry armed on

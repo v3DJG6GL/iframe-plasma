@@ -29,9 +29,13 @@ function attemptAfterLoadSucceeded(attempt, needsCrop) {
 
 // Whether a due retry still reloads. It exists for a slot that is failed
 // or blank; once another navigation is under way ("loading") or has
-// landed, reloading would abort that load and start it over.
-function shouldFireRetry(loadStatus) {
-    return loadStatus === "err" || loadStatus === "blank";
+// landed, reloading would abort that load and start it over. A blank slot
+// re-checks the arming rule (shouldArmBlankRetry) at fire time: the timer
+// keeps running after the slot rotates away or the screen locks, and a
+// reload then would wake a frozen view that still cannot paint.
+function shouldFireRetry(loadStatus, isCurrent, observable) {
+    if (loadStatus === "err") return true;
+    return loadStatus === "blank" && shouldArmBlankRetry(isCurrent, observable);
 }
 
 // Whether an applyThumbCrop result confirms a frame on screen, which
