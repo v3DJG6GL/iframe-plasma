@@ -853,6 +853,20 @@ test("CROP: the overlay goes away while the canvas has no frame", () => {
     assert.equal(t.crops().length, 2, t.crops().join(" | "));
 });
 
+test("apply: a canvas that is not uPlot's is isolated, not left pending", () => {
+    // Chart.js / ECharts / map canvases have no .u-over to blit from; the
+    // pixel-blit path can never succeed for them.
+    const { dom, result } = runApply(
+        "<!doctype html><html><body><div class='card'><canvas id='myChart'></canvas></div><p>rest</p></body></html>",
+        "#myChart");
+    const doc = dom.window.document;
+    assert.equal(result, "matched-and-observing");
+    assert.equal(doc.getElementById("myChart").getAttribute("data-ifp-target"), "1");
+    assert.equal(doc.querySelector(".card").getAttribute("data-ifp-keep"), "1");
+    assert.equal(doc.documentElement.getAttribute("data-ifp-isolate"), "1");
+    assert.equal(doc.getElementById("ifp-thumb-display"), null);
+});
+
 test("CROP: clear resets the remembered geometry", () => {
     const t = runCanvasApply();
     assert.ok(t.dom.window.__ifpLastCropKey);

@@ -9,14 +9,14 @@
  * runJavaScript() call. The returned IIFE installs (idempotently)
  * styles, observers and timers that find `selector`, then either
  *
- *   1. uPlot canvas crop — when the matched element is a <canvas>,
- *      pixel-blit the chart area (excluding axis margins) onto a
+ *   1. uPlot canvas crop — when the matched element is a uPlot
+ *      <canvas> (one with a `.u-over` sibling), pixel-blit the chart area (excluding axis margins) onto a
  *      full-viewport overlay canvas. Same logic as the previous
  *      inline implementation in main.qml. Used by Grafana presets
  *      (chartOnly = `.u-wrap > canvas`).
  *
  *   2. Generic element-isolation — when the matched element is any
- *      other tag, walk the ancestor chain to <body> tagging each
+ *      other element (a non-uPlot canvas included), walk the ancestor chain to <body> tagging each
  *      node with data-ifp-keep="1" and the target with
  *      data-ifp-target="1", then set data-ifp-isolate="1" on <html>.
  *      A stylesheet hides every child of a kept node that is not
@@ -207,9 +207,15 @@ const _APPLY_BODY = `(function(sel, opts){
     (document.head||document.documentElement).appendChild(s);
   }
 
+  // A <canvas> drawn by uPlot: its plot-area overlay .u-over is a sibling.
+  function isUplotCanvas(el) {
+    return el.tagName === 'CANVAS' && !!el.parentElement
+        && !!el.parentElement.querySelector(':scope > .u-over');
+  }
+
   // uPlot pixel-blit crop. Source canvas keeps its natural CSS box so
   // bufW/cr.width = devicePixelRatio uniformly and drawImage math is
-  // correct. Used only when the matched element is a <canvas>.
+  // correct. Used only when the matched element is a uPlot <canvas>.
   // Returns true once it has drawn a frame into #ifp-thumb-display, false on
   // any not-yet-ready condition (canvas 0x0, overlay missing, empty buffer).
   // The caller uses this to decide whether to blank the page chrome — see the
@@ -525,7 +531,10 @@ const _APPLY_BODY = `(function(sel, opts){
       return 'matched';
     }
     ensureStyle();
-    if (el.tagName === 'CANVAS') {
+    // Only a uPlot canvas (with its .u-over sibling) can be blitted; any
+    // other canvas (Chart.js, ECharts, a map) would stay 'canvas-pending'
+    // for good, so it is isolated like any other element.
+    if (isUplotCanvas(el)) {
       // Crop FIRST, blank the page chrome only once a frame actually
       // exists. Setting data-ifp-thumb before cropAxes succeeds would hide
       // the whole page while #ifp-thumb-display is still absent (canvas not
