@@ -61,6 +61,15 @@ Rectangle {
     // the full rep is rendered continuously; main.qml's fullRepVisible
     // is the only correct gate, see its docblock).
     property bool fullRepVisible: false
+    // The two menus below are Popups in the window overlay. A collapsed
+    // panel popup hides the window, and the collapsing press lands in
+    // another window, so CloseOnPressOutside never fires — without this
+    // they reappear open (and live) the next time the popup is shown.
+    // Same fix as CyberChipDropdown's onFullRepVisibleChanged.
+    onFullRepVisibleChanged: if (!fullRepVisible) {
+        reloadMenu.close();
+        moreMenu.close();
+    }
 
     signal reloadClicked()
     signal hardReloadClicked()
@@ -167,6 +176,7 @@ Rectangle {
 
         QQC.Menu {
             id: reloadMenu
+            objectName: "reloadMenu"
             QQC.MenuItem {
                 text: i18n("Reload   (Ctrl+R)")
                 icon.name: "view-refresh"
@@ -223,6 +233,7 @@ Rectangle {
 
         QQC.Menu {
             id: moreMenu
+            objectName: "moreMenu"
             QQC.MenuItem {
                 objectName: "pickerMenuItem"
                 text: tb.pickerActive ? i18n("Cancel element picker")

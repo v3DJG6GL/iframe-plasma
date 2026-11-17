@@ -121,6 +121,32 @@ Item {
         }
 
         // ============================================================
+        //  toolbar menus
+        // ============================================================
+        // A collapsed panel popup hides the window, and the collapsing
+        // press lands in another window, so CloseOnPressOutside never
+        // fires: the menus must close on the full rep going away.
+        function test_fullRepHidden_whileReloadMenuOpen_closesMenu() {
+            const menu = findChild(toolbar, "reloadMenu");
+            verify(menu !== null);
+            toolbar.fullRepVisible = true;
+            menu.popup();
+            tryCompare(menu, "opened", true);
+            toolbar.fullRepVisible = false;
+            tryCompare(menu, "visible", false);
+        }
+
+        function test_fullRepHidden_whileMoreMenuOpen_closesMenu() {
+            const menu = findChild(toolbar, "moreMenu");
+            verify(menu !== null);
+            toolbar.fullRepVisible = true;
+            menu.popup();
+            tryCompare(menu, "opened", true);
+            toolbar.fullRepVisible = false;
+            tryCompare(menu, "visible", false);
+        }
+
+        // ============================================================
         //  picker menu item
         // ============================================================
         function test_pickerMenuItem_labelFollowsPickerState() {
