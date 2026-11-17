@@ -180,6 +180,12 @@ const _APPLY_BODY = `(function(sel, opts){
       'html[data-ifp-isolate="1"]{margin:0!important;padding:0!important;background:#181b1f!important;}',
       'html[data-ifp-isolate="1"] body{margin:0!important;padding:0!important;background:#181b1f!important;overflow:hidden!important;}',
       'html[data-ifp-isolate="1"] body > *:not([data-ifp-keep="1"]):not([data-ifp-target="1"]),html[data-ifp-isolate="1"] [data-ifp-keep="1"] > *:not([data-ifp-keep="1"]):not([data-ifp-target="1"]){display:none!important;}',
+      // A kept ancestor with a transform/filter/contain/perspective becomes
+      // the containing block of the fixed target below (react-grid-layout
+      // cards are transform-positioned), which would pin and clip the target
+      // to that card instead of the viewport. The target itself is left
+      // alone: fit mode writes its inline transform.
+      'html[data-ifp-isolate="1"] [data-ifp-keep="1"]{transform:none!important;filter:none!important;backdrop-filter:none!important;contain:none!important;will-change:auto!important;perspective:none!important;}',
       // Target placement: three scale-mode variants. The element is
       // always positioned fixed at the viewport top-left and elevated
       // above the (hidden) sibling DOM via z-index.

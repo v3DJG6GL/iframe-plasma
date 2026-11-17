@@ -214,6 +214,41 @@ test("miss: a former target still in the page is no longer pinned to the viewpor
     }
 });
 
+test("isolate: a transformed kept ancestor does not become the target's containing block", () => {
+    // react-grid-layout positions its cards with transform; a transformed
+    // ancestor would pin the fixed target to the card instead of the viewport.
+    for (const scaleMode of ["stretch", "fit", "original"]) {
+        const dom = new JSDOM(
+            "<!doctype html><html><head><style>" +
+            ".card{position:absolute;transform:translate(200px,150px);filter:blur(1px);" +
+            "contain:paint;will-change:transform;perspective:100px;overflow:hidden}" +
+            "</style></head><body><div id='card' class='card'><div id='t'>x</div></div></body></html>",
+            { runScripts: "outside-only" });
+        const w = dom.window;
+        w.MutationObserver = class { observe() {} disconnect() {} takeRecords() { return []; } };
+        w.ResizeObserver = class { observe() {} disconnect() {} };
+        w.requestAnimationFrame = (cb) => { cb(); return 0; };
+        w.cancelAnimationFrame = () => {};
+        w.setInterval = () => 0;
+        w.clearInterval = () => {};
+        w.console = { info: () => {}, warn: () => {}, error: () => {} };
+        const card = w.document.getElementById("card");
+
+        w.eval(`(${ce.buildApplyJs("#t", { scaleMode })})`);
+        assert.equal(card.getAttribute("data-ifp-keep"), "1", scaleMode);
+        const cs = w.getComputedStyle(card);
+        assert.equal(cs.transform, "none", scaleMode);
+        assert.equal(cs.filter, "none", scaleMode);
+        assert.equal(cs.contain, "none", scaleMode);
+        assert.equal(cs.willChange, "auto", scaleMode);
+        assert.equal(cs.perspective, "none", scaleMode);
+
+        // Without isolation the page's own styles apply again.
+        w.eval(ce.buildClearJs());
+        assert.notEqual(w.getComputedStyle(card).transform, "none", scaleMode);
+    }
+});
+
 test("apply: re-injection clears previous data-ifp-keep markers", () => {
     const dom = new JSDOM(
         "<!doctype html><html><body><section id='a'><div id='t1'/></section><article id='b'><div id='t2'/></article></body></html>",
