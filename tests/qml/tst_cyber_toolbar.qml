@@ -31,6 +31,9 @@ Item {
         function init() {
             toolbar.isGrafana = true;
             toolbar.refreshInterval = "";
+            toolbar.timeRange = "";
+            toolbar.httpStatus = 0;
+            toolbar.latencyMs = 0;
             toolbar.fullRepVisible = false;
             toolbar.pickerActive = false;
         }
@@ -59,6 +62,44 @@ Item {
             tryVerify(function() { return chip.width >= chip.implicitWidth; });
             verify(!label.truncated);
             verify(chip.mapToItem(toolbar, chip.width, 0).x <= toolbar.width);
+        }
+
+        // ============================================================
+        //  HTTP status chip
+        // ============================================================
+        // Content-sized chips ("custom" range, long latency, "ERR") made a
+        // fixed-width threshold show the status chip where the row could
+        // not fit it, pushing the TLS/host chip past the toolbar's edge.
+        function test_statusChip_neverPushesHostChipPastEdge() {
+            toolbar.host = "a-very-long-dashboard-hostname.monitoring.internal.corp.example-company.com";
+            toolbar.timeRange = "custom";
+            toolbar.refreshInterval = "30s";
+            toolbar.httpStatus = 503;
+            toolbar.latencyMs = 12345;
+            const row = findChild(toolbar, "toolbarRow");
+            const chip = findChild(toolbar, "hostChip");
+            const status = findChild(toolbar, "statusChip");
+            verify(row !== null);
+            verify(chip !== null);
+            verify(status !== null);
+            let shownAt = -1;
+            for (let w = 380; w <= 640; ++w) {
+                toolbar.width = w;
+                verify(waitForItemPolished(row));
+                // Inside the row's right margin, not just the toolbar.
+                const right = chip.mapToItem(toolbar, chip.width, 0).x;
+                verify(right <= toolbar.width - Theme.s2 + 0.5,
+                       "host chip right edge " + right + " past toolbar width " + w
+                       + " (status chip visible: " + status.visible + ")");
+                if (status.visible && shownAt < 0)
+                    shownAt = w;
+            }
+            // Not vacuous: the chip does come back once there is room.
+            verify(shownAt > 0);
+            toolbar.width = 900;
+            verify(status.visible);
+            toolbar.httpStatus = 0;
+            verify(!status.visible);
         }
 
         // ============================================================

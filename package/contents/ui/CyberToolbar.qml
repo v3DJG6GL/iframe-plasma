@@ -90,6 +90,7 @@ Rectangle {
     }
 
     RowLayout {
+        objectName: "toolbarRow"
         anchors.fill: parent
         anchors.leftMargin: Theme.s2
         anchors.rightMargin: Theme.s2
@@ -97,6 +98,7 @@ Rectangle {
 
         // --- Reload split button -------------------------------------------
         Row {
+            id: reloadRow
             spacing: 0
             Layout.alignment: Qt.AlignVCenter
             // Primary action — pin its width so a cramped toolbar never
@@ -369,9 +371,30 @@ Rectangle {
 
         // --- HTTP status chip ----------------------------------------------
         Rectangle {
+            id: statusChip
+            objectName: "statusChip"
             // Informational only — the first chip to drop when the popup is
-            // too narrow to also fit the reload control + both dropdowns.
-            visible: tb.httpStatus > 0 && tb.width >= Kirigami.Units.gridUnit * 22
+            // too narrow. A fixed width threshold ignored the content-sized
+            // chips, so just above it the row overflowed and pushed the TLS
+            // chip past the edge. Show it only when the row fits with it:
+            // non-fill items sit at their preferred width, the host chip at
+            // its floor, the spacer at 0. Natural widths only (no binding
+            // loop); keep in step with the RowLayout's items.
+            // Each text-sized term is rounded up on its own: the layout
+            // pixel-aligns every item, so a sum of fractions undercounts.
+            readonly property int fitWidth: {
+                const sp = Theme.s2;
+                let w = Theme.s2 * 2                    // row margins
+                      + Math.ceil(reloadRow.implicitWidth) + sp
+                      + moreBtn.width + sp
+                      + pinBtn.width + sp
+                      + Math.ceil(implicitWidth) + sp;  // this chip, then the spacer
+                if (timeChip.visible)    w += Math.ceil(timeChip.implicitWidth) + sp;
+                if (refreshChip.visible) w += Math.ceil(refreshChip.implicitWidth) + sp;
+                if (hostChip.visible)    w += sp + Math.ceil(hostChip.Layout.minimumWidth);
+                return w;
+            }
+            visible: tb.httpStatus > 0 && tb.width >= fitWidth
             Layout.preferredHeight: Theme.chipHeight
             Layout.minimumWidth: implicitWidth
             Layout.alignment: Qt.AlignVCenter
