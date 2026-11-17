@@ -75,9 +75,9 @@ sudo apt install ./iframe-plasma_*_ubuntu26.04_amd64.deb
 
 Every release is also published to a private pacman repository on the Forgejo
 package registry, so `pacman -Syu` picks up new versions. It needs a Forgejo
-access token with the **read:package** scope. One-time setup (trust the
-registry's signing key, then add the repository; the token goes into a
-root-only file because `/etc/pacman.conf` is world-readable):
+access token with only the **read:package** scope (e.g. named `FJ_PACKAGES_READ`).
+One-time setup (trust the registry's signing key, then add the repository; the
+token goes into a root-only file because `/etc/pacman.conf` is world-readable):
 
 ```bash
 TOKEN=<read:package token>
@@ -99,8 +99,9 @@ EOF
 sudo pacman -Syu iframe-plasma
 ```
 
-The same repository also carries the owner's other Arch packages (e.g.
-`faster-whisper-frontend`).
+This repository (group `apps`) carries all of the owner's Arch packages:
+`iframe-plasma`, `faster-whisper-frontend` and `social-archivarr`; one setup
+covers them all.
 
 The same package (`iframe-plasma-*-x86_64.pkg.tar.zst`, with a `.sha256`) is
 attached to each release for a one-off install with `sudo pacman -U`. It is
