@@ -9,7 +9,9 @@ import "../../package/contents/ui"
 Item {
     id: root
     width: 900
-    height: 60
+    // Tall enough that an open menu's lower items are inside the window
+    // and take the test's clicks.
+    height: 300
 
     // The toolbar calls KLocalizedContext's i18n()/i18nc(), which a bare
     // test engine does not provide; it finds these through the scope of
@@ -23,6 +25,19 @@ Item {
         isGrafana: true
         tlsOk: true
     }
+
+    // The production style (org.kde.desktop) fades a Menu in and out; the
+    // Basic style the tests run under has neither, so tests install these.
+    Transition {
+        id: menuEnterFade
+        NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 300 }
+    }
+    Transition {
+        id: menuExitFade
+        NumberAnimation { property: "opacity"; from: 1; to: 0; duration: 300 }
+    }
+    SignalSpy { id: reloadSpy; target: toolbar; signalName: "reloadClicked" }
+    SignalSpy { id: openExternalSpy; target: toolbar; signalName: "openExternalClicked" }
 
     TestCase {
         name: "CyberToolbar"
@@ -145,6 +160,52 @@ Item {
             tryCompare(menu, "opened", true);
             toolbar.fullRepVisible = false;
             tryCompare(menu, "visible", false);
+        }
+
+        // The second click of a double-click lands while the exit fade
+        // still shows the items; it must not fire the action again.
+        function test_doubleClickReloadItem_duringExitFade_triggersOnce() {
+            const menu = findChild(toolbar, "reloadMenu");
+            verify(menu !== null);
+            menu.exit = menuExitFade;
+            reloadSpy.clear();
+            menu.popup();
+            tryCompare(menu, "opened", true);
+            mouseDoubleClickSequence(menu.itemAt(0));
+            tryCompare(menu, "visible", false);
+            compare(reloadSpy.count, 1);
+            menu.exit = null;
+        }
+
+        function test_doubleClickOpenExternalItem_duringExitFade_triggersOnce() {
+            const menu = findChild(toolbar, "moreMenu");
+            verify(menu !== null);
+            menu.exit = menuExitFade;
+            openExternalSpy.clear();
+            menu.popup();
+            tryCompare(menu, "opened", true);
+            const item = menu.itemAt(3);
+            compare(item.text, "Open in default browser");
+            mouseDoubleClickSequence(item);
+            tryCompare(menu, "visible", false);
+            compare(openExternalSpy.count, 1);
+            menu.exit = null;
+        }
+
+        // `opened` is false during the enter fade too; a click there must
+        // still fire, so the guard can't be `opened`.
+        function test_clickReloadItem_duringEnterFade_triggers() {
+            const menu = findChild(toolbar, "reloadMenu");
+            verify(menu !== null);
+            menu.enter = menuEnterFade;
+            reloadSpy.clear();
+            menu.popup();
+            verify(menu.visible);
+            verify(!menu.opened);
+            mouseClick(menu.itemAt(0));
+            compare(reloadSpy.count, 1);
+            tryCompare(menu, "visible", false);
+            menu.enter = null;
         }
 
         function test_fullRepHidden_whileMoreMenuOpen_closesMenu() {

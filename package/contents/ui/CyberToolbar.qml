@@ -177,15 +177,21 @@ Rectangle {
         QQC.Menu {
             id: reloadMenu
             objectName: "reloadMenu"
+            // The style's exit fade (org.kde.desktop) keeps the items
+            // clickable after close(), so a double-click would fire twice.
+            // Not `opened`: that is false during the enter fade too.
+            property bool _closing: false
+            onAboutToShow: _closing = false
+            onAboutToHide: _closing = true
             QQC.MenuItem {
                 text: i18n("Reload   (Ctrl+R)")
                 icon.name: "view-refresh"
-                onTriggered: tb.reloadClicked()
+                onTriggered: if (!reloadMenu._closing) tb.reloadClicked()
             }
             QQC.MenuItem {
                 text: i18n("Hard reload — bypass cache   (Ctrl+Shift+R)")
                 icon.name: "view-refresh-symbolic"
-                onTriggered: tb.hardReloadClicked()
+                onTriggered: if (!reloadMenu._closing) tb.hardReloadClicked()
             }
             // `Clear HTTP cache && reload` and `Open in default browser`
             // moved to the gear-icon advanced-actions menu (below) — they're
@@ -234,6 +240,11 @@ Rectangle {
         QQC.Menu {
             id: moreMenu
             objectName: "moreMenu"
+            // Same exit-fade double-fire guard as reloadMenu; a second
+            // picker trigger would cancel the picker it just started.
+            property bool _closing: false
+            onAboutToShow: _closing = false
+            onAboutToHide: _closing = true
             QQC.MenuItem {
                 objectName: "pickerMenuItem"
                 text: tb.pickerActive ? i18n("Cancel element picker")
@@ -242,18 +253,18 @@ Rectangle {
                 // Same gate as the previous standalone picker button —
                 // pickerStart on a blank tab has nothing to inject into.
                 enabled: tb.host.length > 0
-                onTriggered: tb.pickElementClicked()
+                onTriggered: if (!moreMenu._closing) tb.pickElementClicked()
             }
             QQC.MenuSeparator {}
             QQC.MenuItem {
                 text: i18n("Clear HTTP cache && reload")
                 icon.name: "edit-clear-history"
-                onTriggered: tb.clearCookiesClicked()
+                onTriggered: if (!moreMenu._closing) tb.clearCookiesClicked()
             }
             QQC.MenuItem {
                 text: i18n("Open in default browser")
                 icon.name: "internet-web-browser"
-                onTriggered: tb.openExternalClicked()
+                onTriggered: if (!moreMenu._closing) tb.openExternalClicked()
             }
         }
 
