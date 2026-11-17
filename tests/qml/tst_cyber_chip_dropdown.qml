@@ -71,6 +71,17 @@ Item {
             tryCompare(dropdown, "visible", false);
         }
 
+        // Panel popup collapsing hides the window but keeps chip.visible
+        // true; fullRepVisible going false is the only signal.
+        function test_fullRepHidden_whileOpen_closesMenu() {
+            chip.fullRepVisible = true;
+            mouseClick(chip);
+            tryCompare(dropdown, "opened", true);
+            chip.fullRepVisible = false;
+            tryCompare(dropdown, "visible", false);
+            verify(chip.visible);
+        }
+
         // ============================================================
         //  icon pulse
         // ============================================================

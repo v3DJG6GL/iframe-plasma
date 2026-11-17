@@ -52,8 +52,12 @@ Rectangle {
 
     // The menu is a Popup in the window overlay, so it does not follow the
     // chip's visibility on its own — it would stay open, anchored to a
-    // chip that is gone, and still emit selections.
+    // chip that is gone, and still emit selections. A collapsed panel popup
+    // hides the window but leaves `visible` true (and the collapsing press
+    // lands in another window, so CloseOnPressOutsideParent never fires) —
+    // close on the full rep going away too, or the menu reappears open.
     onVisibleChanged: if (!visible && menu) menu.close()
+    onFullRepVisibleChanged: if (!fullRepVisible && menu) menu.close()
 
     Row {
         id: row
