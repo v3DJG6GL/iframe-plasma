@@ -399,4 +399,32 @@ TestCase {
         compare(G.parseRefreshSeconds("https://g/x#a?refresh=1m", 5, 3600), -1);
         compare(G.parseRefreshSeconds(null, 5, 3600), -1);
     }
+
+    // ===== parseTimeRange (Edit dialog pre-fill) =====================
+    readonly property var _presets: ["", "5m", "1h", "24h", "7d"]
+    function test_parseTimeRange_presetWithToNow() {
+        compare(G.parseTimeRange("https://g/d-solo/a/b?from=now-24h&to=now", _presets), "24h");
+        compare(G.parseTimeRange("https://g/d-solo/a/b?orgId=1&from=now-7d&to=now&kiosk", _presets), "7d");
+    }
+    function test_parseTimeRange_presetWithoutTo() {
+        compare(G.parseTimeRange("https://g/d-solo/a/b?from=now-1h&kiosk", _presets), "1h");
+    }
+    function test_parseTimeRange_relativeToKeepsUrlRange() {
+        // A window ending before now is not a preset: taking "Last 24
+        // hours" made OK on an unrelated edit rewrite to=now-12h to to=now.
+        compare(G.parseTimeRange("https://g/d-solo/a/b?orgId=1&from=now-24h&to=now-12h", _presets), "");
+        compare(G.parseTimeRange("https://g/d-solo/a/b?from=now-7d&to=now-1d&kiosk", _presets), "");
+        compare(G.parseTimeRange("https://g/d-solo/a/b?from=now-7d&to=1700000000000", _presets), "");
+        compare(G.parseTimeRange("https://g/d-solo/a/b?to=now-1d&from=now-7d", _presets), "");
+    }
+    function test_parseTimeRange_noPresetMatch() {
+        compare(G.parseTimeRange("https://g/x?from=now-2h&to=now", _presets), "");
+        compare(G.parseTimeRange("https://g/x?from=1700000000000&to=now", _presets), "");
+        compare(G.parseTimeRange("https://g/x", _presets), "");
+        compare(G.parseTimeRange(null, _presets), "");
+    }
+    function test_parseTimeRange_fragmentIgnored() {
+        compare(G.parseTimeRange("https://g/x?orgId=1#from=now-24h&to=now", _presets), "");
+        compare(G.parseTimeRange("https://g/x?from=now-24h&to=now#to=now-1d", _presets), "24h");
+    }
 }

@@ -18,6 +18,9 @@
  *   parseRefreshSeconds(u, min, max) — a URL's refresh=<N>s|m|h as
  *                            clamped seconds, -1 when absent/unreadable.
  *
+ *   parseTimeRange(u, presets) — the preset a URL's from/to window is,
+ *                            "" when it is none of them.
+ *
  *   splitFragment(u) → [base, "#frag"] — preserves an anchor through
  *                            subsequent stripParam/appendParam ops.
  *
@@ -171,4 +174,19 @@ function parseRefreshSeconds(url, minSec, maxSec) {
     if (!m) return -1;
     const sec = parseInt(m[1], 10) * { s: 1, m: 60, h: 3600, d: 86400 }[m[2]];
     return Math.max(minSec, Math.min(maxSec, sec));
+}
+
+// Time-range preset (one of `presets`, e.g. "24h") a URL's window is, or ""
+// when it is none — the Edit dialog then shows "(keep URL's range)" and
+// transform() leaves from/to alone. A preset means from=now-<X>&to=now, so
+// a `to` other than `now` (to=now-1d, an absolute time) is a window the
+// presets cannot represent: taking the preset anyway let OK on an
+// unrelated edit rewrite it to to=now.
+function parseTimeRange(url, presets) {
+    const base = splitFragment(String(url || ""))[0];
+    const m = base.match(/[?&]from=now-([0-9]+[smhdwMy])(?:&|$)/);
+    if (!m) return "";
+    const tos = base.match(/[?&]to=[^&]*/g) || [];
+    if (tos.some(function(t) { return t.substring(1) !== "to=now"; })) return "";
+    return presets.indexOf(m[1]) !== -1 ? m[1] : "";
 }

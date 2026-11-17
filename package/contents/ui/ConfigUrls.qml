@@ -1499,18 +1499,11 @@ KCM.SimpleKCM {
             // those params onto the real query. Same bug-class as Run #15
             // GrafanaUrl.transform fragment-split (8ee8bcd).
             const [u, _frag] = splitFragment(String(url || ""));
-            // Time range — match from=now-<X> shape (the form we emit).
-            // Hand-edited URLs with absolute timestamps or now-2h-style
-            // offsets that don't match any preset fall back to "no
-            // override" (combo head row).
-            let tr = "";
-            const fromMatch = u.match(/[?&]from=now-([0-9]+(?:[smhdwMy]))(?:&|$)/);
-            if (fromMatch) {
-                const cand = fromMatch[1];
-                for (const p of grafanaHelper.timeRangePresets) {
-                    if (p.val === cand) { tr = cand; break; }
-                }
-            }
+            // Time range — from=now-<X>&to=now (the form we emit) with X a
+            // preset. Absolute timestamps, a `to` other than now, or offsets
+            // no preset matches fall back to "no override" (combo head row).
+            const tr = GrafanaUrl.parseTimeRange(
+                u, grafanaHelper.timeRangePresets.map(p => p.val));
             // Refresh — the interval in seconds when the URL carries
             // refresh=<N>s (the form transformUrl emits) or Grafana's own
             // <N>m / <N>h / <N>d. Anything else (30, no refresh) → toggle
