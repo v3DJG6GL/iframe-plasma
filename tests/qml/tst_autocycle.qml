@@ -138,4 +138,16 @@ TestCase {
         compare(U.nextCycleTabIndex(0, tabs, new Set()), 1);
         compare(U.nextCycleTabIndex(0, tabs, {}), 1);
     }
+
+    // ===== cycleTimer interval =======================================
+    function test_cycleIntervalMs_floorsAtFiveSeconds() {
+        compare(U.cycleIntervalMs(0), 5000);
+        compare(U.cycleIntervalMs(30), 30000);
+    }
+    function test_cycleIntervalMs_capsBelowIntOverflow() {
+        // A Timer interval is an int: these used to wrap to a negative
+        // (rotation stops) and a 704 ms (sub-second rotation) interval.
+        compare(U.cycleIntervalMs(2147484), 2147483647);
+        compare(U.cycleIntervalMs(4294968), 2147483647);
+    }
 }

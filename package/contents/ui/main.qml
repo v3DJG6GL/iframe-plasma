@@ -1265,7 +1265,7 @@ PlasmoidItem {
     // the popup opens on a tab the user never picked.
     Timer {
         id: cycleTimer
-        interval: Math.max(5, Plasmoid.configuration.autoCycleIntervalSec) * 1000
+        interval: UrlUtils.cycleIntervalMs(Plasmoid.configuration.autoCycleIntervalSec)
         running: Plasmoid.configuration.autoCycleEnabled
                  && Plasmoid.configuration.compactPreviewEnabled
                  && root.tabs.length > 1

@@ -422,6 +422,15 @@ function nextCycleTabIndex(currentIndex, tabs, runtimeExcluded) {
     return -1;
 }
 
+// cycleTimer's interval in ms: at least 5 s, and capped below 2^31 ms
+// because a Timer interval is an int. A hand-edited autoCycleIntervalSec
+// of ~24.9 days or more would otherwise wrap negative (the rotation stops
+// and Qt logs a warning per tick) or to a tiny positive delay (sub-second
+// rotation). Same cap as LifecyclePolicy._timerMs.
+function cycleIntervalMs(sec) {
+    return Math.min(Math.max(5, sec) * 1000, 2147483647);
+}
+
 // Thumbnail mode a row actually renders with. The chart presets crop to
 // Grafana's uPlot DOM, so on any other URL their selector can never match;
 // such a row renders (and is shown on the config page) as full page. The
