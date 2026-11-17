@@ -90,22 +90,35 @@ is stored only in the root-only `/etc/pacman.d/forgejo-apps` (`/etc/pacman.conf`
 is world-readable); running the command again just replaces key and token.
 
 ```sh
+# Runs the whole setup in bash, so it works the same from fish or zsh.
 bash -c '
-set -euo pipefail
+set -euo pipefail   # stop at the first error
+
+# 1. Ask for the token (input hidden; paste it and press Enter).
 read -rsp "Paste your Forgejo token (package: Read), then press Enter: " TOKEN; echo
+
+# 2. Download the signing key of the repository and let pacman trust it.
 base=https://forgejo.informethic.ch/api/packages/v3djg6gl/arch
 key=$(mktemp)
 curl -fsSL -u "v3djg6gl:$TOKEN" -o "$key" "$base/repository.key"
 sudo pacman-key --add "$key"
 sudo pacman-key --lsign-key "v3djg6gl@noreply.forgejo.informethic.ch"
 rm -f "$key"
+
+# 3. Store the download address, token included, in a file only root can read.
 sudo install -m 600 /dev/null /etc/pacman.d/forgejo-apps
 printf "Server = https://v3djg6gl:%s@forgejo.informethic.ch/api/packages/v3djg6gl/arch/apps/%sarch\n" "$TOKEN" "$" \
   | sudo tee /etc/pacman.d/forgejo-apps >/dev/null
+
+# 4. Add the repository to /etc/pacman.conf (skipped if it is already there).
 grep -qF "[v3djg6gl.apps.forgejo.informethic.ch]" /etc/pacman.conf \
   || printf "\n[v3djg6gl.apps.forgejo.informethic.ch]\nSigLevel = Required\nInclude = /etc/pacman.d/forgejo-apps\n" \
   | sudo tee -a /etc/pacman.conf >/dev/null
+
+echo "Done: the repository is set up."
 '
+
+# 5. Install the package (pacman -Syu also keeps it updated from now on).
 sudo pacman -Syu iframe-plasma
 ```
 
