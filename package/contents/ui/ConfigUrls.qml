@@ -21,57 +21,11 @@ KCM.SimpleKCM {
     // has no UI for the active tab. The previous alias was dead code,
     // round-tripping the value through this page for no purpose.
 
-    // Wheel forwarder for open ComboBox popups. By default, a wheel landing
-    // on an expanded dropdown goes to the popup's internal ListView; if the
-    // option list isn't long enough to scroll, the wheel is eaten and the
-    // page beneath refuses to move. This Component is instantiated as a
-    // WheelHandler inside each ComboBox's popup contentItem on first
-    // open: it lets the popup keep scrolling when it actually overflows,
-    // but otherwise closes the popup and forwards the wheel to the URL
-    // list's surrounding scroller.
+    // Wheel forwarder for open ComboBox popups (see PopupWheelForwarder.qml);
+    // _hookComboPopupWheel instantiates it inside each popup on first open.
     Component {
         id: popupWheelForwarder
-        WheelHandler {
-            property QtObject combo
-            property Item scrollTarget
-            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-            onWheel: (event) => {
-                const dy = event.pixelDelta.y !== 0 ? event.pixelDelta.y
-                                                    : event.angleDelta.y / 8
-                const list = parent
-                if (list && list.contentHeight !== undefined
-                         && list.height !== undefined
-                         && list.contentHeight > list.height) {
-                    // Popup itself is scrollable — scroll its ListView
-                    // directly. We cannot rely on `event.accepted = false`
-                    // to propagate to the underlying Flickable: WheelHandler
-                    // runs at the post-delivery handler layer, so the
-                    // sibling/parent Flickable does not re-process the
-                    // event. Move contentY ourselves.
-                    list.contentY = Math.max(0,
-                        Math.min(list.contentHeight - list.height,
-                                 list.contentY - dy))
-                    event.accepted = true
-                    return
-                }
-                if (combo && combo.popup) combo.popup.close()
-                let p = scrollTarget
-                while (p) {
-                    if (typeof p.returnToBounds === "function"
-                        && p.contentY !== undefined
-                        && p.contentHeight !== undefined
-                        && p.height !== undefined
-                        && p.contentHeight > p.height) {
-                        p.contentY = Math.max(0,
-                            Math.min(p.contentHeight - p.height,
-                                     p.contentY - dy))
-                        break
-                    }
-                    p = p.parent
-                }
-                event.accepted = true
-            }
-        }
+        PopupWheelForwarder {}
     }
 
     // Install the popupWheelForwarder on `combo`'s popup the first time it
