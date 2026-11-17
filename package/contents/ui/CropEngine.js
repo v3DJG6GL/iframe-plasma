@@ -1041,17 +1041,20 @@ ${_TEARDOWN_BODY}
       const s = uniq('#' + cssEscape(el.id));
       if (s) return s;
     }
+    // Attribute values go through cssEscape too, not just their quotes: a
+    // bare backslash starts a CSS escape, so a picked \\41 would save a
+    // selector for another element whose value is A.
     const attrs = ['data-testid','data-test','data-cy','data-qa'];
     for (let i = 0; i < attrs.length; i++) {
       const v = el.getAttribute(attrs[i]);
       if (v) {
-        const s = uniq('[' + attrs[i] + '="' + v.replace(/"/g, '\\\\"') + '"]');
+        const s = uniq('[' + attrs[i] + '="' + cssEscape(v) + '"]');
         if (s) return s;
       }
     }
     const aria = el.getAttribute('aria-label');
     if (aria) {
-      const s = uniq('[aria-label="' + aria.replace(/"/g, '\\\\"') + '"]');
+      const s = uniq('[aria-label="' + cssEscape(aria) + '"]');
       if (s) return s;
     }
     if (el.classList && el.classList.length > 0) {

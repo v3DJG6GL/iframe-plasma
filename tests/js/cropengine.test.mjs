@@ -1331,6 +1331,30 @@ test("picker: the structural fallback is unique among identical subtrees", () =>
     assert.equal(p.doc.querySelector(picked), target, picked);
 });
 
+test("picker: a backslash in a test id or aria-label does not select another element", () => {
+    // Only the quotes were escaped, so CSS read a picked \41 as "A" and a
+    // picked a\62 as "ab": uniq() saw one match, just not the picked one.
+    // jsdom has no CSS.escape, so this runs the picker's fallback; Chromium's
+    // CSS.escape is valid inside the quoted value the same way.
+    const cases = [
+        ["<button aria-label='A'>a</button><button id='t' aria-label='\\41'>b</button>", "[aria-label="],
+        ["<div data-testid='ab'>a</div><div id='t' data-testid='a\\62'>b</div>", "[data-testid="],
+        ["<div data-testid='a\"b'>a</div><div data-testid='x'><span id='t' aria-label='say \"hi\"'>b</span></div>", "[aria-label="],
+    ];
+    for (const [body, prefix] of cases) {
+        const p = runPicker(`<!doctype html><html><body>${body}</body></html>`);
+        const target = p.doc.getElementById("t");
+        // Picked by attribute, not by the id the test uses to find it.
+        target.removeAttribute("id");
+        p.pointAt(target);
+        p.fire(target, "pointerdown");
+        const picked = p.w.__ifpPicked;
+        assert.ok(picked.startsWith(prefix), picked);
+        assert.equal(p.doc.querySelectorAll(picked).length, 1, picked);
+        assert.equal(p.doc.querySelector(picked), target, picked);
+    }
+});
+
 test("picker: the structural fallback does not anchor on a duplicated id", () => {
     const p = runPicker(
         "<!doctype html><html><body>" +
