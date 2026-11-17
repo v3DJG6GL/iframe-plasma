@@ -88,8 +88,11 @@ class FixtureHandler(BaseHTTPRequestHandler):
         # Skip self-recording for the read-only / counter endpoints —
         # otherwise /_report would overwrite lastUrl with "/_report"
         # before the caller could inspect what the test page actually
-        # fetched. /_beat and /_record are similarly noisy.
-        if path not in ("/_report", "/_record", "/_reset", "/_beat"):
+        # fetched. /_beat and /_record are similarly noisy, and so is the
+        # /favicon.ico WebEngine fetches by itself after each page load:
+        # it would replace the recorded dashboard URL for good.
+        if path not in ("/_report", "/_record", "/_reset", "/_beat",
+                        "/favicon.ico"):
             self._record_url()
 
         if path == "/basic":
