@@ -210,7 +210,9 @@ const _APPLY_BODY = `(function(sel, opts){
       // opacity fades the fixed target with it, and visibility:hidden is
       // inherited by it (a reveal-on-scroll section, a dimmed card); its
       // other children are display:none, so resetting both shows nothing else.
-      'html[data-ifp-isolate="1"] [data-ifp-keep="1"]{opacity:1!important;visibility:visible!important;transform:none!important;translate:none!important;rotate:none!important;scale:none!important;filter:none!important;backdrop-filter:none!important;contain:none!important;will-change:auto!important;perspective:none!important;transform-style:flat!important;content-visibility:visible!important;clip-path:none!important;mask:none!important;-webkit-mask:none!important;}',
+      // An ancestor's zoom (a page shrinking its dashboard grid) scales the
+      // fixed target too, so a stretched one covers only part of the view.
+      'html[data-ifp-isolate="1"] [data-ifp-keep="1"]{opacity:1!important;visibility:visible!important;zoom:1!important;transform:none!important;translate:none!important;rotate:none!important;scale:none!important;filter:none!important;backdrop-filter:none!important;contain:none!important;will-change:auto!important;perspective:none!important;transform-style:flat!important;content-visibility:visible!important;clip-path:none!important;mask:none!important;-webkit-mask:none!important;}',
       // Target placement: three scale-mode variants. The element is
       // always positioned fixed at the viewport top-left and elevated
       // above the (hidden) sibling DOM via z-index.

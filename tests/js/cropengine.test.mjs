@@ -366,6 +366,32 @@ test("isolate: a kept ancestor's opacity and visibility do not hide the target",
     }
 });
 
+test("isolate: a kept ancestor's zoom is reset", () => {
+    // Zoom on an ancestor scales the fixed target with it: a page that
+    // shrinks its grid with zoom:0.5 would leave a stretched target covering
+    // a quarter of the view. jsdom computes no zoom, so the injected rule is
+    // read through the CSSOM instead.
+    const dom = new JSDOM(
+        "<!doctype html><html><body><div id='card' style='zoom:0.5'><div id='t'>x</div></div></body></html>",
+        { runScripts: "outside-only" });
+    const w = dom.window;
+    w.MutationObserver = class { observe() {} disconnect() {} takeRecords() { return []; } };
+    w.ResizeObserver = class { observe() {} disconnect() {} };
+    w.requestAnimationFrame = (cb) => { cb(); return 0; };
+    w.cancelAnimationFrame = () => {};
+    w.setInterval = () => 0;
+    w.clearInterval = () => {};
+    w.console = { info: () => {}, warn: () => {}, error: () => {} };
+
+    w.eval(`(${ce.buildApplyJs("#t")})`);
+    assert.equal(w.document.getElementById("card").getAttribute("data-ifp-keep"), "1");
+    const rule = [...w.document.getElementById("ifp-thumb-style").sheet.cssRules]
+        .find((r) => r.selectorText === 'html[data-ifp-isolate="1"] [data-ifp-keep="1"]');
+    assert.ok(rule, "kept-ancestor rule");
+    assert.equal(rule.style.getPropertyValue("zoom"), "1");
+    assert.equal(rule.style.getPropertyPriority("zoom"), "important");
+});
+
 test("isolate: the target is sized by its border box and ignores the page's min size", () => {
     // A content-box target with padding/border would overflow a 100vw box
     // (and fit mode's vw/s counter-size), and a page min-width would beat
