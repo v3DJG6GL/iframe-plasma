@@ -66,8 +66,15 @@ Rectangle {
     // an already-visible selection never jumps. Qt.callLater coalesces bursts
     // and lets layout settle before positionViewAtIndex reads geometry.
     function scrollToCurrent() {
-        if (bar.currentIndex >= 0 && bar.currentIndex < tabList.count)
+        if (bar.currentIndex >= 0 && bar.currentIndex < tabList.count) {
+            // Twice on purpose: on a far jump the first call positions from
+            // estimated item sizes and clamps to an extent estimated before
+            // the target's neighbours exist, so tabs of mixed width leave it
+            // under-scrolled. The first call creates those delegates; the
+            // second positions against their real geometry.
             tabList.positionViewAtIndex(bar.currentIndex, ListView.Contain);
+            tabList.positionViewAtIndex(bar.currentIndex, ListView.Contain);
+        }
     }
     onCurrentIndexChanged: Qt.callLater(scrollToCurrent)
     onFullRepVisibleChanged: if (fullRepVisible) Qt.callLater(scrollToCurrent)

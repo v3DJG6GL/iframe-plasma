@@ -49,6 +49,33 @@ Item {
         }
 
         // ============================================================
+        //  far jump across tabs of mixed width
+        // ============================================================
+        function test_farJump_mixedWidths_scrollsActiveTabFullyOnScreen() {
+            // Short labels first, long ones after: the ListView's extent
+            // estimate for the not-yet-created far delegates is too small,
+            // so a single positionViewAtIndex under-scrolls.
+            bar.tabs = [
+                { label: "Home", url: "http://tab.example/0" },
+                { label: "Logs", url: "http://tab.example/1" },
+                { label: "UPS", url: "http://tab.example/2" },
+                { label: "Network Traffic Overview", url: "http://tab.example/3" },
+                { label: "Kubernetes Cluster Health", url: "http://tab.example/4" },
+                { label: "Node Exporter Full Dashboard", url: "http://tab.example/5" },
+                { label: "Proxmox VE Summary", url: "http://tab.example/6" },
+                { label: "Home Assistant Energy", url: "http://tab.example/7" }
+            ];
+            bar.currentIndex = 0;
+            const list = tabList();
+            verify(list !== null);
+            list.contentX = 0;
+            tryVerify(function() { return activeTabOnScreen(list); });
+
+            bar.currentIndex = 7;
+            tryVerify(function() { return activeTabOnScreen(list); });
+        }
+
+        // ============================================================
         //  auto-scroll after an in-place relabel
         // ============================================================
         function test_inPlaceRelabel_keepsActiveTabOnScreen() {
