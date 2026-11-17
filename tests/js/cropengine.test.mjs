@@ -400,6 +400,53 @@ test("isolate: a match inside an <svg> isolates the outer <svg>", () => {
     }
 });
 
+test("style: the crop rules are also adopted as a constructed sheet, and cleared with it", () => {
+    // A page CSP without style-src 'unsafe-inline' refuses the inline <style>;
+    // constructed sheets are exempt. jsdom has neither CSP nor
+    // adoptedStyleSheets, so both are stubbed: what is checked is that the
+    // engine installs the same rules there, once, and takes only them away.
+    const dom = new JSDOM(
+        "<!doctype html><html><body><div><div id='t'>x</div></div><p>rest</p></body></html>",
+        { runScripts: "outside-only" });
+    const w = dom.window;
+    w.MutationObserver = class { observe() {} disconnect() {} takeRecords() { return []; } };
+    w.ResizeObserver = class { observe() {} disconnect() {} };
+    w.requestAnimationFrame = (cb) => { cb(); return 0; };
+    w.cancelAnimationFrame = () => {};
+    w.setInterval = () => 0;
+    w.clearInterval = () => {};
+    w.console = { info: () => {}, warn: () => {}, error: () => {} };
+    w.CSSStyleSheet = class { replaceSync(text) { this.text = text; } };
+    const pageSheet = { text: "page" };
+    w.document.adoptedStyleSheets = [pageSheet];
+    const ours = () => w.document.adoptedStyleSheets.filter((x) => x !== pageSheet);
+
+    w.eval(`(${ce.buildApplyJs("#t")})`);
+    const inline = w.document.getElementById("ifp-thumb-style");
+    assert.ok(inline, "the inline <style> stays as the fallback");
+    assert.equal(w.document.adoptedStyleSheets[0], pageSheet);
+    assert.equal(ours().length, 1);
+    assert.equal(ours()[0].text, inline.textContent);
+    assert.ok(ours()[0].text.includes('[data-ifp-target="1"]{position:fixed'));
+
+    // Later applies keep one copy, and put it back if the page dropped it.
+    w.__ifpThumbSchedule();
+    assert.equal(ours().length, 1);
+    w.document.adoptedStyleSheets = [pageSheet];
+    w.__ifpThumbSchedule();
+    assert.equal(ours().length, 1);
+
+    // A re-inject replaces it rather than stacking a second copy.
+    w.eval(`(${ce.buildApplyJs("#t")})`);
+    assert.equal(ours().length, 1);
+
+    w.eval(ce.buildClearJs());
+    // (The array comes from the page's realm, so compare by element.)
+    assert.equal(w.document.adoptedStyleSheets.length, 1);
+    assert.equal(w.document.adoptedStyleSheets[0], pageSheet);
+    assert.equal(w.__ifpThumbSheet, null);
+});
+
 test("isolate: the target's own transform does not shift it off the viewport", () => {
     // translate(-50%,-50%) centering, or a grid item placed by translate.
     for (const scaleMode of ["stretch", "fit", "original"]) {

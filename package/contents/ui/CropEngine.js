@@ -118,6 +118,15 @@ const _TEARDOWN_BODY = `
     };
     _ifpRmById('ifp-thumb-display');
     _ifpRmById('ifp-thumb-style');
+    // The constructed copy of the same rules (see ensureStyle).
+    var _ifpSheet = window.__ifpThumbSheet;
+    if (_ifpSheet) {
+        try {
+            document.adoptedStyleSheets = Array.prototype.filter.call(
+                document.adoptedStyleSheets, function(x) { return x !== _ifpSheet; });
+        } catch (e) {}
+    }
+    window.__ifpThumbSheet = null;
     _ifpRmById('ifp-miss-banner');
 `;
 
@@ -172,10 +181,7 @@ const _APPLY_BODY = `(function(sel, opts){
   })();
 
   function ensureStyle() {
-    if (document.getElementById('ifp-thumb-style')) return;
-    const s = document.createElement('style');
-    s.id = 'ifp-thumb-style';
-    s.textContent = [
+    const css = [
       // Grafana-specific chrome hiding (gated on data-ifp-thumb so it
       // never affects the isolation path). Harmless on non-Grafana
       // pages because the selectors don't match anything there.
@@ -234,7 +240,29 @@ const _APPLY_BODY = `(function(sel, opts){
       'html[data-ifp-isolate="1"][data-ifp-scale="fit"] [data-ifp-target="1"]{position:fixed!important;top:0!important;left:0!important;margin:0!important;z-index:2147483647!important;overflow:auto!important;translate:none!important;rotate:none!important;scale:none!important;}',
       'html[data-ifp-isolate="1"][data-ifp-scale="original"] [data-ifp-target="1"]{position:fixed!important;top:0!important;left:0!important;margin:0!important;z-index:2147483647!important;overflow:auto!important;transform:none!important;translate:none!important;rotate:none!important;scale:none!important;}'
     ].join('');
-    (document.head||document.documentElement).appendChild(s);
+    if (!document.getElementById('ifp-thumb-style')) {
+      const s = document.createElement('style');
+      s.id = 'ifp-thumb-style';
+      s.textContent = css;
+      (document.head||document.documentElement).appendChild(s);
+    }
+    // The page's Content-Security-Policy applies to the <style> above: a
+    // style-src without 'unsafe-inline' refuses it, and the crop would show
+    // the whole page while still reporting a match. A constructed sheet is
+    // not subject to style-src, so the same rules go in as one too. Checked
+    // on every apply, as the page may reassign document.adoptedStyleSheets.
+    if ('adoptedStyleSheets' in document) {
+      try {
+        if (!window.__ifpThumbSheet) {
+          const cs = new CSSStyleSheet();
+          cs.replaceSync(css);
+          window.__ifpThumbSheet = cs;
+        }
+        const list = Array.prototype.slice.call(document.adoptedStyleSheets);
+        if (list.indexOf(window.__ifpThumbSheet) < 0)
+          document.adoptedStyleSheets = list.concat([window.__ifpThumbSheet]);
+      } catch (e) {}
+    }
   }
 
   // A <canvas> drawn by uPlot: its plot-area overlay .u-over is a sibling.
