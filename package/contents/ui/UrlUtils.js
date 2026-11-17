@@ -198,6 +198,17 @@ function mayAutoAnswerBasicAuth(lastAnsweredMs, nowMs) {
     return elapsed < 0 || elapsed >= BASIC_AUTH_REANSWER_MS;
 }
 
+// The User-Agent override as WebEngineProfile.httpUserAgent should get it:
+// CR/LF/NUL stripped (parity with the auth-interceptor header guard), and
+// null for "no override" rather than "": once a profile has held a custom
+// UA, assigning "" stores an empty User-Agent header, while null resets it
+// to Chromium's default. Whitespace-only counts as no override: WebEngine
+// simplifies it to "" anyway.
+function userAgentOverride(raw) {
+    const ua = String(raw || "").replace(/[\r\n\0]/g, "");
+    return ua.trim().length > 0 ? ua : null;
+}
+
 // Pure form of resolveTheme(): given the configured themeMode and the
 // resolved KDE backgroundColor (as {r, g, b} in 0..1), return "light" or
 // "dark". The "auto" branch uses Rec. 601 relative luminance with a 0.5
