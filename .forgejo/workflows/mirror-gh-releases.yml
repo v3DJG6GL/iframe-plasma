@@ -82,9 +82,15 @@ jobs:
           DST_HDR="Authorization: Bearer $GH_MIRROR_TOKEN"
           # Reads retry (transient network); writes do not (a retried POST could double-create;
           # a failed write converges on the next run).
-          sget() { curl -fsS --retry 3 --retry-delay 5 --retry-connrefused --retry-all-errors -H "$SRC_HDR" "$@"; }
-          dget() { curl -fsS --retry 3 --retry-delay 5 --retry-connrefused --retry-all-errors -H "$DST_HDR" "$@"; }
-          dput() { curl -fsS -H "$DST_HDR" "$@"; }
+          # On failure, name the URL: curl's own message does not, and a 404 from a
+          # token that cannot see the repo looks the same on either side.
+          urls() { local a; for a; do case $a in http*) printf '%s ' "$a" ;; esac; done; }
+          sget() { curl -fsS --retry 3 --retry-delay 5 --retry-connrefused --retry-all-errors -H "$SRC_HDR" "$@" \
+            || { local rc=$?; echo "::error::source request failed (SRC_TOKEN): $(urls "$@")" >&2; return $rc; }; }
+          dget() { curl -fsS --retry 3 --retry-delay 5 --retry-connrefused --retry-all-errors -H "$DST_HDR" "$@" \
+            || { local rc=$?; echo "::error::github.com request failed (GH_MIRROR_TOKEN): $(urls "$@")" >&2; return $rc; }; }
+          dput() { curl -fsS -H "$DST_HDR" "$@" \
+            || { local rc=$?; echo "::error::github.com write failed (GH_MIRROR_TOKEN): $(urls "$@")" >&2; return $rc; }; }
 
           # ---- source releases (paginated), drafts dropped, oldest first ----
           page=1
