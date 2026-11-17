@@ -111,6 +111,24 @@ TestCase {
         verify(!U.isSafeAuthProfileId(42));
     }
 
+    // ----- tabIndicesSharingProfile (post-login thumbnail reload set) -----
+    function test_tabIndicesSharingProfile_sameAuthProfile() {
+        const tabs = [{ authProfileId: "a" }, { authProfileId: "b" },
+                      { authProfileId: "a" }, { authProfileId: "" }];
+        compare(U.tabIndicesSharingProfile(tabs, 0), [0, 2]);
+        compare(U.tabIndicesSharingProfile(tabs, 1), [1]);
+    }
+    function test_tabIndicesSharingProfile_ephemeralShared() {
+        // Missing and "" authProfileId both use the one ephemeral profile.
+        const tabs = [{ authProfileId: "" }, { authProfileId: "a" }, {}];
+        compare(U.tabIndicesSharingProfile(tabs, 0), [0, 2]);
+    }
+    function test_tabIndicesSharingProfile_badInput() {
+        compare(U.tabIndicesSharingProfile(null, 0), []);
+        compare(U.tabIndicesSharingProfile([{ authProfileId: "a" }], 3), []);
+        compare(U.tabIndicesSharingProfile([{ authProfileId: "a" }], -1), []);
+    }
+
     // ----- hostKey (must equal the C++ canonicalizeHost lookup key) -----
     function test_hostKey_data() {
         return [

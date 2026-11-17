@@ -99,6 +99,19 @@ function isSafeAuthProfileId(id) {
     return typeof id === "string" && /^[A-Za-z0-9_-]+$/.test(id);
 }
 
+// Indices of every tab that shares tab `idx`'s WebEngineProfile, i.e. its
+// cookie jar (main.qml caches one profile per authProfileId; "" is the
+// shared ephemeral one). A login on one of them fills the jar for all.
+function tabIndicesSharingProfile(tabs, idx) {
+    if (!Array.isArray(tabs) || idx < 0 || idx >= tabs.length || !tabs[idx]) return [];
+    const key = tabs[idx].authProfileId || "";
+    const out = [];
+    for (let i = 0; i < tabs.length; i++) {
+        if (tabs[i] && (tabs[i].authProfileId || "") === key) out.push(i);
+    }
+    return out;
+}
+
 // Host key of a URL in the exact form the C++ interceptor looks up
 // (canonicalizeHost): lowercased, IPv6 literal bracketed, the scheme's
 // default port dropped. QML's `URL` is QUrl-backed, not WHATWG: its `.host`

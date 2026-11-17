@@ -2821,8 +2821,13 @@ PlasmoidItem {
                     // logins — see WebTab.qml's onLoadingChanged for the
                     // detection gates). Re-route through the existing soft
                     // reload broadcast so the miniView re-fetches with the
-                    // now-valid cookies on its own.
-                    onAuthSucceeded: root._compactReloadRequested(index)
+                    // now-valid cookies on its own. Every thumbnail on the
+                    // same profile shares that cookie jar and was parked on
+                    // the same login page, so all of them reload.
+                    onAuthSucceeded: {
+                        for (const i of UrlUtils.tabIndicesSharingProfile(root.tabs, index))
+                            root._compactReloadRequested(i);
+                    }
 
                     // Broadcast reload from the popup toolbar / shortcuts /
                     // cache-clear. Soft and hard both filter to THIS tab's
