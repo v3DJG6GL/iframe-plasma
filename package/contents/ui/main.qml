@@ -569,10 +569,12 @@ PlasmoidItem {
 
     // Strip CR/LF/NUL — parity with the auth-interceptor header guard
     // (3cedd16).  Centralised so the createObject + UA-config-changed paths
-    // both sanitise identically.
+    // both sanitise identically.  No override → null, not "": once a
+    // profile has held a custom UA, assigning "" stores an empty
+    // User-Agent header, while null resets it to Chromium's default.
     function _sanitisedUserAgent() {
-        const ua = Plasmoid.configuration.userAgentOverride;
-        return ua.length > 0 ? ua.replace(/[\r\n\0]/g, "") : "";
+        const ua = Plasmoid.configuration.userAgentOverride.replace(/[\r\n\0]/g, "");
+        return ua.length > 0 ? ua : null;
     }
 
     // Per-URL `thumbIconName` is a tagged string with three forms:
