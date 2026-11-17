@@ -983,6 +983,52 @@ test("swap: an element match replaced by a canvas drops the isolation", () => {
     assert.notEqual(t.w.getComputedStyle(disp).display, "none");
 });
 
+test("swap: a canvas match that moves to <body> drops the canvas overlay", () => {
+    // <body> comes first in document order, so the page putting the class
+    // on it makes the same selector match the whole page.
+    const t = runSwapApply(`<!doctype html><html><body><div id='panel'>${UPLOT_X}</div></body></html>`);
+    assert.ok(t.doc.getElementById("ifp-thumb-display"));
+    t.doc.body.classList.add("x");
+    t.tick();
+    assert.equal(t.doc.getElementById("ifp-thumb-display"), null, "no frozen frame over the page");
+    assert.equal(t.doc.documentElement.getAttribute("data-ifp-thumb"), null);
+    assert.equal(t.w.__ifpLastCropKey, null);
+});
+
+test("swap: an element match that moves to <body> drops the isolation", () => {
+    for (const scaleMode of ["stretch", "fit", "original"]) {
+        const dom = new JSDOM(
+            "<!doctype html><html><body><div><div id='t' class='x' style='width:7px'>x</div></div><p>rest</p></body></html>",
+            { runScripts: "outside-only" });
+        const w = dom.window;
+        w.MutationObserver = class { observe() {} disconnect() {} takeRecords() { return []; } };
+        w.ResizeObserver = class { observe() {} disconnect() {} };
+        w.requestAnimationFrame = (cb) => { cb(); return 0; };
+        w.cancelAnimationFrame = () => {};
+        w.setInterval = () => 0;
+        w.clearInterval = () => {};
+        w.console = { info: () => {}, warn: () => {}, error: () => {} };
+        // jsdom has no layout; give fit mode a size to scale.
+        Object.defineProperty(w.Element.prototype, "scrollWidth", { configurable: true, get: () => 100 });
+        Object.defineProperty(w.Element.prototype, "scrollHeight", { configurable: true, get: () => 50 });
+        const el = w.document.getElementById("t");
+
+        w.eval(`(${ce.buildApplyJs(".x", { scaleMode })})`);
+        assert.equal(w.getComputedStyle(el).position, "fixed", scaleMode);
+        if (scaleMode === "fit") assert.match(el.style.transform, /^scale\(/);
+
+        w.document.body.classList.add("x");
+        w.__ifpThumbSchedule();
+        const doc = w.document;
+        assert.equal(doc.documentElement.getAttribute("data-ifp-isolate"), null, scaleMode);
+        assert.notEqual(w.getComputedStyle(el).position, "fixed", scaleMode);
+        assert.notEqual(w.getComputedStyle(doc.querySelector("p")).display, "none", scaleMode);
+        assert.equal(w.__ifpFitTarget || null, null, scaleMode);
+        assert.equal(el.style.transform, "", scaleMode);
+        assert.equal(el.style.width, "7px", scaleMode);
+    }
+});
+
 test("CROP: clear resets the remembered geometry", () => {
     const t = runCanvasApply();
     assert.ok(t.dom.window.__ifpLastCropKey);

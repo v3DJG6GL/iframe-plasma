@@ -497,6 +497,18 @@ const _APPLY_BODY = `(function(sel, opts){
     }
   }
 
+  // Drops both crop modes so the whole page shows: the isolation and thumb
+  // gates, a crop overlay left by a canvas that has since gone (the next
+  // successful crop must be logged again), and the inline scale on a former
+  // fit target that may still be in the page.
+  function dropCrop() {
+    document.documentElement.removeAttribute('data-ifp-isolate');
+    document.documentElement.removeAttribute('data-ifp-thumb');
+    dropOverlay();
+    window.__ifpLastCropKey = null;
+    if (window.__ifpFitTarget) { releaseFitTarget(); forgetOwnMutations(); }
+  }
+
   // Last matched element from apply(). schedule()'s rAF callback reads
   // this instead of issuing a second document.querySelector(sel) just
   // moments after apply() already did one.
@@ -515,20 +527,11 @@ const _APPLY_BODY = `(function(sel, opts){
     if (!el) {
       matchedEl = null;
       // Fail open: when the new selector can't match yet (SPA hasn't
-      // mounted the target, page mid-route-change), drop the gating
-      // data-ifp-* attributes so the body is fully visible instead
-      // of blanked by the leftover isolation rule from the previous
-      // selector. Observers will re-engage isolation on the next
-      // mutation if/when the target eventually appears.
-      document.documentElement.removeAttribute('data-ifp-isolate');
-      document.documentElement.removeAttribute('data-ifp-thumb');
-      // Same for a crop overlay left by a canvas that has since gone; the
-      // next successful crop must be logged again.
-      dropOverlay();
-      window.__ifpLastCropKey = null;
-      // A former fit target may still be in the page (its class moved
-      // away): take the inline scale off it too.
-      if (window.__ifpFitTarget) { releaseFitTarget(); forgetOwnMutations(); }
+      // mounted the target, page mid-route-change), show the full page
+      // instead of the previous selector's leftover crop. Observers will
+      // re-engage isolation on the next mutation if/when the target
+      // eventually appears.
+      dropCrop();
       return 'wait';
     }
     if (el === document.body || el === document.documentElement) {
@@ -536,7 +539,10 @@ const _APPLY_BODY = `(function(sel, opts){
       // isolating would hide every child of <body> (none is an ancestor of
       // the target) while still reporting a match: a silently blank view.
       // matchedEl stays null, which makes the keyword scan read <body>.
+      // The same selector may have cropped a descendant before (the page
+      // put the matching class on <body>): show the whole page now.
       matchedEl = null;
+      dropCrop();
       return 'matched';
     }
     ensureStyle();
