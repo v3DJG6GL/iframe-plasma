@@ -21,6 +21,8 @@
 #include <QtWebEngineCore/QWebEngineSettings>
 #include <QtWebEngineQuick>
 
+#include <memory>
+
 using namespace Qt::Literals::StringLiterals;
 
 namespace {
@@ -40,17 +42,19 @@ QString gcScriptSource(int intervalSec)
 }
 
 // Run `js` in the page's MainWorld and wait for the result; an invalid
-// QVariant means it timed out.
+// QVariant means it timed out. After a timeout the callback is still
+// pending and the page's destructor runs it later, so it holds its state by
+// shared_ptr instead of capturing this frame's locals (as pageBody does).
 QVariant runMainWorld(QWebEnginePage &page, const QString &js)
 {
-    QVariant out;
-    bool done = false;
-    page.runJavaScript(js, QWebEngineScript::MainWorld, [&](const QVariant &v) {
-        out = v;
-        done = true;
+    auto out = std::make_shared<QVariant>();
+    auto done = std::make_shared<bool>(false);
+    page.runJavaScript(js, QWebEngineScript::MainWorld, [out, done](const QVariant &v) {
+        *out = v;
+        *done = true;
     });
-    (void)QTest::qWaitFor([&] { return done; }, 5000);
-    return out;
+    (void)QTest::qWaitFor([done] { return *done; }, 5000);
+    return *out;
 }
 
 } // namespace
