@@ -196,7 +196,10 @@ const _APPLY_BODY = `(function(sel, opts){
       // target. Two-level rule covers body-direct-children AND every
       // intermediate kept ancestor in the target's chain — so e.g.
       // body>div.app>div.sidebar gets hidden even though div.app is kept.
-      'html[data-ifp-isolate="1"]{margin:0!important;padding:0!important;background:#181b1f!important;}',
+      // overflow:hidden on html too: body's only reaches the viewport while
+      // html's is visible, so a page with html{overflow-y:scroll} would keep
+      // its scrollbar over the right edge of a 100vw stretched target.
+      'html[data-ifp-isolate="1"]{margin:0!important;padding:0!important;background:#181b1f!important;overflow:hidden!important;}',
       'html[data-ifp-isolate="1"] body{margin:0!important;padding:0!important;background:#181b1f!important;overflow:hidden!important;}',
       'html[data-ifp-isolate="1"] body > *:not([data-ifp-keep="1"]):not([data-ifp-target="1"]),html[data-ifp-isolate="1"] [data-ifp-keep="1"] > *:not([data-ifp-keep="1"]):not([data-ifp-target="1"]){display:none!important;}',
       // A kept ancestor with a transform (or the individual translate/rotate/
@@ -481,8 +484,8 @@ const _APPLY_BODY = `(function(sel, opts){
     var bcs = getComputedStyle(el);
     var cw = el.scrollWidth + (parseFloat(bcs.borderLeftWidth) || 0) + (parseFloat(bcs.borderRightWidth) || 0);
     var ch = el.scrollHeight + (parseFloat(bcs.borderTopWidth) || 0) + (parseFloat(bcs.borderBottomWidth) || 0);
-    // The viewport without its scrollbar: isolation hides overflow on body
-    // only, so a page with html{overflow-y:scroll} keeps one, and innerWidth
+    // The viewport without its scrollbar: isolation hides the root's overflow,
+    // but an inline !important on <html> still keeps one, and innerWidth
     // would put the scaled target's right edge under it. The scrolling
     // element's clientWidth is that size in standards and quirks mode alike
     // (and, unlike visualViewport, is not shrunk by a pinch zoom).

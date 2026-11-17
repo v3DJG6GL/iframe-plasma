@@ -392,6 +392,33 @@ test("isolate: a kept ancestor's zoom is reset", () => {
     assert.equal(rule.style.getPropertyPriority("zoom"), "important");
 });
 
+test("isolate: the root's own scrollbar is hidden", () => {
+    // body's overflow:hidden reaches the viewport only while html's overflow
+    // is visible: a page with html{overflow-y:scroll} keeps its scrollbar
+    // over the right edge of a 100vw stretched target. jsdom computes no
+    // overflow longhands, so the injected rule is read through the CSSOM.
+    const dom = new JSDOM(
+        "<!doctype html><html><head><style>html{overflow-y:scroll}</style></head>" +
+        "<body><div><div id='t'>x</div></div></body></html>",
+        { runScripts: "outside-only" });
+    const w = dom.window;
+    w.MutationObserver = class { observe() {} disconnect() {} takeRecords() { return []; } };
+    w.ResizeObserver = class { observe() {} disconnect() {} };
+    w.requestAnimationFrame = (cb) => { cb(); return 0; };
+    w.cancelAnimationFrame = () => {};
+    w.setInterval = () => 0;
+    w.clearInterval = () => {};
+    w.console = { info: () => {}, warn: () => {}, error: () => {} };
+
+    w.eval(`(${ce.buildApplyJs("#t")})`);
+    assert.equal(w.document.documentElement.getAttribute("data-ifp-isolate"), "1");
+    const rule = [...w.document.getElementById("ifp-thumb-style").sheet.cssRules]
+        .find((r) => r.selectorText === 'html[data-ifp-isolate="1"]');
+    assert.ok(rule, "root isolation rule");
+    assert.equal(rule.style.getPropertyValue("overflow"), "hidden");
+    assert.equal(rule.style.getPropertyPriority("overflow"), "important");
+});
+
 test("isolate: the target is sized by its border box and ignores the page's min size", () => {
     // A content-box target with padding/border would overflow a 100vw box
     // (and fit mode's vw/s counter-size), and a page min-width would beat
