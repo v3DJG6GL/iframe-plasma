@@ -479,27 +479,29 @@ PlasmoidItem {
         const key = authProfileId || "";
         if (root._profiles[key]) return root._profiles[key];
         const isEphemeral = (key.length === 0);
-        if (!isEphemeral && !UrlUtils.isSafeAuthProfileId(key)) {
-            // The id becomes a storage path below; never let it leave the
-            // storage root. The ephemeral profile keeps the tab usable
-            // without touching disk or carrying any credential.
+        // An unsafe id would become a storage path below and could leave the
+        // storage root, so it is kept in memory instead. It still gets its
+        // OWN off-the-record profile, not the shared "" one: the tab still
+        // authenticates as that profile, and its cookies and HTTP-auth cache
+        // must never reach the jar every auth=None tab uses.
+        const inMemory = isEphemeral || !UrlUtils.isSafeAuthProfileId(key);
+        if (!isEphemeral && inMemory) {
             console.warn(Log.auth, "iframe-plasma[profile] refusing unsafe auth-profile id="
-                + JSON.stringify(key) + " — using the ephemeral profile");
-            return root.profileForAuthId("");
+                + JSON.stringify(key) + " as a storage path — keeping its profile in memory");
         }
         // Empty storageName + empty persistentStoragePath drives the
         // underlying QQuickWebEngineProfile into off-the-record mode for the
-        // ephemeral path (no cookies/cache touch disk).  offTheRecord = true
+        // in-memory path (no cookies/cache touch disk).  offTheRecord = true
         // is also pinned on instance() below as defense-in-depth.
         const prototype = profileComponent.createObject(root, {
             profileAuthId: key,
-            storageName: isEphemeral
+            storageName: inMemory
                 ? ""
                 : Plasmoid.metaData.pluginId + "-" + (Plasmoid.id || 0) + "-" + key,
-            persistentCookiesPolicy: isEphemeral
+            persistentCookiesPolicy: inMemory
                 ? WebEngineProfile.NoPersistentCookies
                 : WebEngineProfile.ForcePersistentCookies,
-            persistentStoragePath: isEphemeral
+            persistentStoragePath: inMemory
                 ? ""
                 : root.profileStorageRoot + "/" + key
         });
@@ -517,9 +519,9 @@ PlasmoidItem {
             return null;
         }
         // Runtime fields, applied post-construction.  offTheRecord on the
-        // ephemeral profile is belt-and-braces: storageName/path are already
+        // in-memory profiles is belt-and-braces: storageName/path are already
         // empty so the underlying profile is in-memory anyway.
-        if (isEphemeral) profile.offTheRecord = true;
+        if (inMemory) profile.offTheRecord = true;
         // Defense-in-depth: pin spellCheck so a future Qt default-flip can't
         // start posting Grafana template-variable typings to the platform
         // dictionary service.
