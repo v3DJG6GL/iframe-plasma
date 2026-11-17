@@ -965,6 +965,13 @@ PlasmoidItem {
             if ((profile.authType || "basic") === "none") {
                 continue;
             }
+            // Same for a profile that doesn't pre-empt: it never gets an
+            // interceptor (profileForAuthId / syncInterceptor gate on this),
+            // so the secret would be read only to be dropped below.
+            // handleBasicAuth reads it on a real 401; a preempt flip re-primes.
+            if (!RowSchema.effectivePreempt(profile)) {
+                continue;
+            }
             const secrets = root.authSupport.getMap(root.authSupport.profileKey(id)) || {};
             // Pick the secret keyed by authType. The previous positional
             // `||` chain returned secrets.password first — so a basic→bearer
