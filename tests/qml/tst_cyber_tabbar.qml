@@ -48,6 +48,53 @@ Item {
                 && item.x + item.width <= list.contentX + list.width + 0.5;
         }
 
+        function cleanup() {
+            bar.visible = true;
+            bar.statuses = [];
+        }
+
+        function findIn(item, pred) {
+            if (!item) return null;
+            if (pred(item)) return item;
+            const kids = item.children || [];
+            for (let i = 0; i < kids.length; ++i) {
+                const hit = findIn(kids[i], pred);
+                if (hit) return hit;
+            }
+            return null;
+        }
+
+        // ============================================================
+        //  pulses stop while the bar is hidden
+        // ============================================================
+        // main.qml hides the bar for a single tab (the default setup)
+        // without destroying it: tab 0 stays active with its glow loaded,
+        // so an ungated infinite pulse keeps the window repainting for an
+        // effect nobody can see.
+        function test_hiddenBar_pulsesDoNotAnimate() {
+            bar.tabs = root.makeTabs(1, "solo");
+            bar.currentIndex = 0;
+            bar.statuses = ["loading"];
+            const list = tabList();
+            verify(list !== null);
+            tryVerify(function() { return list.itemAtIndex(0) !== null; });
+            const del = list.itemAtIndex(0);
+            const loader = findIn(del, function(o) { return o.sourceComponent !== undefined; });
+            verify(loader !== null);
+            tryVerify(function() { return loader.item !== null; });
+            const glow = loader.item;
+            const dot = findIn(del, function(o) { return o.text === "●"; });
+            verify(dot !== null);
+
+            bar.visible = false;
+            wait(50);
+            const glowBefore = glow.opacity;
+            const dotBefore = dot.opacity;
+            wait(400);
+            compare(glow.opacity, glowBefore);
+            compare(dot.opacity, dotBefore);
+        }
+
         // ============================================================
         //  far jump across tabs of mixed width
         // ============================================================

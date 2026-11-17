@@ -170,8 +170,9 @@ Rectangle {
                         // below — without it the infinite pulse keeps the
                         // QtQuick animation timer ticking when the popup
                         // is collapsed (the full rep is hidden, not
-                        // destroyed).
-                        running: tabDel.status === "loading" && bar.fullRepVisible
+                        // destroyed). bar.visible: main.qml hides the bar
+                        // (one tab, showTabBar off) without destroying it.
+                        running: tabDel.status === "loading" && bar.visible && bar.fullRepVisible
                         loops: Animation.Infinite
                         NumberAnimation { from: 0.3; to: 1.0; duration: 700; easing.type: Easing.InOutSine }
                         NumberAnimation { from: 1.0; to: 0.3; duration: 700; easing.type: Easing.InOutSine }
@@ -252,7 +253,10 @@ Rectangle {
                     brightness: 0.15
                     SequentialAnimation on opacity {
                         loops: Animation.Infinite
-                        running: bar.fullRepVisible
+                        // bar.visible too: a hidden bar (one tab, the
+                        // default setup) keeps tab 0 active and this
+                        // effect loaded, so the pulse would tick unseen.
+                        running: bar.visible && bar.fullRepVisible
                         NumberAnimation { from: 0.55; to: 0.95; duration: 1200; easing.type: Easing.InOutSine }
                         NumberAnimation { from: 0.95; to: 0.55; duration: 1200; easing.type: Easing.InOutSine }
                     }
