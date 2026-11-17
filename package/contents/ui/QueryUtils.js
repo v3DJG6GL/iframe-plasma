@@ -125,6 +125,16 @@ function isAutheliaHost(currentUrl, autheliaHost) {
         // bare upstream login page.
         const host = new URL(currentUrl).host;
         let want = Sanitize.stripTrim(String(autheliaHost).toLowerCase());
+        // A value copied from the browser's address bar carries a scheme,
+        // path or trailing slash; keep only its host (and any port, which
+        // the host:port rule needs). A bare value is cut at the first path
+        // character so "host:port" and "::1" behave as before.
+        const scheme = want.indexOf("://");
+        if (scheme !== -1) {
+            try { want = new URL(want).host; }
+            catch (e) { want = want.slice(scheme + 3); }
+        }
+        want = want.split(/[/?#]/)[0];
         if (!want) return false;
         // URL.host is QUrl's display form of an internationalised name:
         // punycode or Unicode depending on Qt's TLD whitelist. Put an IDN

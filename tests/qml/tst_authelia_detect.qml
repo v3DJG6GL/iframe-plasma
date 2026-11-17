@@ -90,6 +90,31 @@ TestCase {
         verify(Q.isAutheliaHost("https://authélia.example:9000/x", "authélia.example:9000"));
     }
 
+    // A value pasted from the address bar: the scheme, path and trailing
+    // slash are dropped, the host:port and IPv6 rules still hold.
+    function test_pastedUrl_matchesItsHost() {
+        verify(Q.isAutheliaHost("https://auth.example.com/2fa", "https://auth.example.com"));
+        verify(Q.isAutheliaHost("https://auth.example.com/2fa", "https://auth.example.com/"));
+        verify(Q.isAutheliaHost("https://sso.auth.example.com/x",
+                                 "https://auth.example.com/?rd=https%3A%2F%2Fg"));
+        verify(Q.isAutheliaHost("https://auth.example.com/2fa", "auth.example.com/"));
+        verify(Q.isAutheliaHost("https://auth.example.com/2fa", "auth.example.com/2fa#x"));
+        verify(!Q.isAutheliaHost("https://example.com/", "https://auth.example.com/"));
+    }
+    function test_pastedUrl_portRuleKept() {
+        verify(!Q.isAutheliaHost("https://auth.example.com:9000/2fa", "https://auth.example.com/"));
+        verify(Q.isAutheliaHost("https://auth.example.com:9000/2fa", "https://auth.example.com:9000/"));
+        verify(Q.isAutheliaHost("https://auth.example.com:9000/2fa", "auth.example.com:9000/"));
+    }
+    function test_pastedUrl_ipv6() {
+        verify(Q.isAutheliaHost("https://[::1]/login", "https://[::1]/"));
+        verify(Q.isAutheliaHost("https://[::1]/login", "::1/"));
+    }
+    function test_pastedUrl_schemeOnly_returnsFalse() {
+        verify(!Q.isAutheliaHost("https://auth.example.com/", "https://"));
+        verify(!Q.isAutheliaHost("https://auth.example.com/", "/"));
+    }
+
     function test_malformedUrl_returnsFalse() {
         verify(!Q.isAutheliaHost("not a url", "auth.example.com"));
         verify(!Q.isAutheliaHost("https://", "auth.example.com"));
