@@ -511,10 +511,12 @@ KCM.SimpleKCM {
     }
     function saveConfig() {
         const writes = _pendingSecretWrites;
-        _pendingSecretWrites = ({});
         const ids = _pendingSecretRemovals;
         _pendingSecretRemovals = [];
-        if (!authSupport) return;
+        if (!authSupport) {
+            _pendingSecretWrites = ({});
+            return;
+        }
         // Writes first, then removals; a profile deleted after its secret was
         // typed is skipped here, the removal below covers it.
         for (const id of Object.keys(writes)) {
@@ -523,6 +525,9 @@ KCM.SimpleKCM {
                 console.warn(Log.auth, "iframe-plasma[auth] could not write the wallet entry of profile", id);
             }
         }
+        // Cleared only after the writes: this reassignment is what re-runs
+        // each card's hasStoredSecret, which must then see the new entries.
+        _pendingSecretWrites = ({});
         for (const id of ids) {
             const key = authSupport.profileKey(id);
             if (authSupport.removeKey(key)) continue;
