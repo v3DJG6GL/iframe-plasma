@@ -13,11 +13,14 @@
 #include <QHostAddress>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QPointer>
 #include <QProcess>
 #include <QString>
 #include <QTcpSocket>
 #include <QTimer>
 #include <QtWebEngineCore/QWebEnginePage>
+
+#include <memory>
 
 // Runs the script named by IFRAME_FIXTURE_HTTPD on an OS-chosen port; the
 // server announces the port as one "LISTEN <port>" line on stdout.
@@ -107,14 +110,19 @@ inline QJsonObject fetchReport(int port)
 }
 
 // The page's rendered text; empty if it did not arrive within 5 s.
+// After a timeout the callback is still pending, and the page's destructor
+// runs it later, so it must not touch this frame's locals: it holds the
+// result by shared_ptr and the loop by QPointer.
 inline QString pageBody(QWebEnginePage &page)
 {
-    QString out;
+    auto out = std::make_shared<QString>();
     QEventLoop loop;
-    page.toPlainText([&out, &loop](const QString &s) {
-        out = s; loop.quit();
+    QPointer<QEventLoop> lp(&loop);
+    page.toPlainText([out, lp](const QString &s) {
+        *out = s;
+        if (lp) lp->quit();
     });
     QTimer::singleShot(5000, &loop, &QEventLoop::quit);
     loop.exec();
-    return out;
+    return *out;
 }
