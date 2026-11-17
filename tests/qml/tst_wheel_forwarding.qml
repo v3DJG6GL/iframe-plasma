@@ -26,6 +26,8 @@ Item {
         property real contentY: 0
         property real contentHeight: 1000
         property real originY: 0
+        property real topMargin: 0
+        property real bottomMargin: 0
         function returnToBounds() {}
         Rectangle {
             id: handlerChild
@@ -41,6 +43,8 @@ Item {
         property real contentY: 0
         property real contentHeight: 1000
         property real originY: 0
+        property real topMargin: 0
+        property real bottomMargin: 0
         function returnToBounds() {}
         Rectangle {
             id: noWheelChild
@@ -66,6 +70,8 @@ Item {
         property real contentY: 0
         property real contentHeight: 1000
         property real originY: 0
+        property real topMargin: 0
+        property real bottomMargin: 0
         function returnToBounds() {}
     }
 
@@ -86,6 +92,71 @@ Item {
         // One notch up (angleDelta 120 → 15 px) / down.
         function wheelUp(item)   { mouseWheel(item, 10, 10, 0, 120); }
         function wheelDown(item) { mouseWheel(item, 10, 10, 0, -120); }
+
+        // The margin tests below change margins / contentHeight; every
+        // other test assumes the zero-margin, 1000-px defaults (and sets
+        // its own originY; the margin tests rely on 0).
+        function init() {
+            for (const t of [handlerTarget, noWheelTarget, popupTarget]) {
+                t.originY = 0;
+                t.topMargin = 0;
+                t.bottomMargin = 0;
+                t.contentHeight = 1000;
+            }
+        }
+
+        // ===== top/bottomMargin: Flickable's real range ==============
+        // KCM.SimpleKCM / ScrollablePage put the page padding in the
+        // flickable's bottomMargin (and take it out of contentHeight), so
+        // the real range is [originY - topMargin,
+        // originY + contentHeight + bottomMargin - height]. A forwarded
+        // wheel down at the real bottom (1000 + 6 - 100 = 906) moved the
+        // page UP to 900.
+        function test_handler_wheelDownAtRealBottomStaysPut() {
+            handlerTarget.bottomMargin = 6;
+            handlerTarget.contentY = 906;
+            wheelDown(handlerChild);
+            compare(handlerTarget.contentY, 906);
+        }
+        function test_handler_reachesBottomMargin() {
+            handlerTarget.bottomMargin = 6;
+            handlerTarget.contentY = 895;
+            wheelDown(handlerChild);
+            compare(handlerTarget.contentY, 906);
+        }
+        function test_handler_reachesTopMargin() {
+            handlerTarget.topMargin = 6;
+            handlerTarget.contentY = 5;
+            wheelUp(handlerChild);
+            compare(handlerTarget.contentY, -6);
+        }
+        function test_noWheel_wheelDownAtRealBottomStaysPut() {
+            noWheelTarget.bottomMargin = 6;
+            noWheelTarget.contentY = 906;
+            wheelDown(noWheelChild);
+            compare(noWheelTarget.contentY, 906);
+        }
+        function test_noWheel_reachesTopMargin() {
+            noWheelTarget.topMargin = 6;
+            noWheelTarget.contentY = 5;
+            wheelUp(noWheelChild);
+            compare(noWheelTarget.contentY, -6);
+        }
+        function test_noWheel_overflowByMarginOnlyScrolls() {
+            // contentHeight == height: only the margins make it scrollable
+            // (as SimpleKCM's own __flickableOverflows counts them).
+            noWheelTarget.contentHeight = 100;
+            noWheelTarget.bottomMargin = 6;
+            noWheelTarget.contentY = 0;
+            wheelDown(noWheelChild);
+            compare(noWheelTarget.contentY, 6);
+        }
+        function test_popupForwarder_wheelDownAtRealBottomStaysPut() {
+            popupTarget.bottomMargin = 6;
+            popupTarget.contentY = 906;
+            wheelDown(popupList);
+            compare(popupTarget.contentY, 906);
+        }
 
         function test_handler_scrollsAboveZeroWhenOriginNegative() {
             handlerTarget.originY = -500;

@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 import QtQuick
+import "WheelScroll.js" as WheelScroll
 
 // Wheel forwarder for open ComboBox popups. By default, a wheel landing
 // on an expanded dropdown goes to the popup's internal ListView; if the
@@ -36,24 +37,11 @@ WheelHandler {
             return
         }
         if (combo && combo.popup) combo.popup.close()
-        let p = scrollTarget
-        while (p) {
-            if (typeof p.returnToBounds === "function"
-                && p.contentY !== undefined
-                && p.contentHeight !== undefined
-                && p.height !== undefined
-                && p.contentHeight > p.height) {
-                // Origin-relative extent, as in ScrollForwardingWheelHandler:
-                // the URL list's mixed-height cards move originY off 0, and
-                // a [0, …] clamp made the page jump on a one-notch scroll.
-                const o = p.originY !== undefined ? p.originY : 0
-                p.contentY = Math.max(o,
-                    Math.min(o + p.contentHeight - p.height,
-                             p.contentY - dy))
-                break
-            }
-            p = p.parent
-        }
+        // Range includes originY and the page margins (see WheelScroll.js):
+        // the URL list's mixed-height cards move originY off 0, and the
+        // KCM page's bottom padding sits in bottomMargin.
+        const p = WheelScroll.findOverflowing(scrollTarget)
+        if (p) WheelScroll.scrollBy(p, dy)
         event.accepted = true
     }
 }

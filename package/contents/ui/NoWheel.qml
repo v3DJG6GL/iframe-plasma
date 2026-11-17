@@ -13,7 +13,7 @@
  * QML.
  *
  * We walk the parent chain and pick the first Flickable that is actually
- * overflowing (contentHeight > height). Inside a QQC.ScrollView wrapping
+ * overflowing (WheelScroll.overflows). Inside a QQC.ScrollView wrapping
  * a ListView, the ListView itself is expanded to its full content height
  * (so contentH == height == "fit everything") and the OUTER Flickable
  * that the ScrollView creates is what scrolls — picking by overflow gets
@@ -30,6 +30,7 @@
  * inner ListView).
  */
 import QtQuick
+import "WheelScroll.js" as WheelScroll
 
 MouseArea {
     id: root
@@ -42,32 +43,10 @@ MouseArea {
         // /8 ≈ 15 px per notch — matches the QQC2 ScrollBar default step.
         const dy = wheel.pixelDelta.y !== 0 ? wheel.pixelDelta.y
                  : wheel.angleDelta.y / 8
-        const t = root.scrollTarget || root._findOverflowingFlickable(root.parent)
-        if (t) {
-            // Origin-relative extent, as in ScrollForwardingWheelHandler:
-            // a ListView's originY leaves 0 once delegate heights vary.
-            const o = t.originY !== undefined ? t.originY : 0
-            t.contentY = Math.max(o, Math.min(o + t.contentHeight - t.height,
-                                              t.contentY - dy))
-        }
+        // Range includes originY and the page margins (see WheelScroll.js).
+        const t = root.scrollTarget || WheelScroll.findOverflowing(root.parent)
+        if (t) WheelScroll.scrollBy(t, dy)
         wheel.accepted = true
-    }
-    // Duck-type Flickable via `returnToBounds()` (public Flickable method) and
-    // require actual overflow so we skip ListViews that the surrounding
-    // ScrollView expanded to fit their full content.
-    function _findOverflowingFlickable(item) {
-        let p = item
-        while (p) {
-            if (typeof p.returnToBounds === "function"
-                && p.contentY !== undefined
-                && p.contentHeight !== undefined
-                && p.height !== undefined
-                && p.contentHeight > p.height) {
-                return p
-            }
-            p = p.parent
-        }
-        return null
     }
     // Above the control's own content so wheels are intercepted first.
     z: 9999

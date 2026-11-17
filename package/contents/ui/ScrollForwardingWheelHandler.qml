@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 import QtQuick
+import "WheelScroll.js" as WheelScroll
 
 // Forward a wheel event landing on this handler's parent up to the nearest
 // ancestor that exposes Flickable-like properties (returnToBounds + contentY
@@ -17,25 +18,9 @@ WheelHandler {
     onWheel: (event) => {
         const dy = event.pixelDelta.y !== 0 ? event.pixelDelta.y
                  : event.angleDelta.y / 8
-        let p = parent
-        while (p) {
-            if (typeof p.returnToBounds === "function"
-                && p.contentY !== undefined
-                && p.contentHeight !== undefined
-                && p.height !== undefined
-                && p.contentHeight > p.height) {
-                // Clamp to the origin-relative extent: a ListView with
-                // mixed-height delegates moves originY off 0, and a
-                // [0, contentHeight - height] clamp then cuts off its
-                // first or last cards. NoWheel.qml does the same.
-                const o = p.originY !== undefined ? p.originY : 0
-                p.contentY = Math.max(o,
-                    Math.min(o + p.contentHeight - p.height,
-                             p.contentY - dy))
-                break
-            }
-            p = p.parent
-        }
+        // Range includes originY and the page margins (see WheelScroll.js).
+        const p = WheelScroll.findOverflowing(parent)
+        if (p) WheelScroll.scrollBy(p, dy)
         event.accepted = true
     }
 }
