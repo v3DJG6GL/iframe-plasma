@@ -1499,6 +1499,29 @@ test("keyword scan: a rendered node's aria-label still matches", () => {
     assert.deepEqual(t.kw(), ["[ifp-keyword] hit=true"]);
 });
 
+test("keyword scan: the matched element's own aria-label matches", () => {
+    // A status badge picked by data-testid carries the state in its own
+    // label, which querySelectorAll (descendants only) does not return.
+    const hidden = { value: true };
+    const t = runKeywordApply(hidden,
+        "<div><span data-testid='status' aria-label='Stream offline'></span></div>",
+        "[data-testid='status']", ["offline"]);
+    emulateCheckVisibility(t.w);
+    t.tickInterval();
+    assert.deepEqual(t.kw(), ["[ifp-keyword] hit=true"]);
+});
+
+test("keyword scan: a display:none matched element's own aria-label does not match", () => {
+    const hidden = { value: true };
+    const t = runKeywordApply(hidden,
+        "<p>All systems nominal</p><div style='display:none'>" +
+        "<span data-testid='status' aria-label='Stream offline'></span></div>",
+        "[data-testid='status']", ["offline"]);
+    emulateCheckVisibility(t.w);
+    t.tickInterval();
+    assert.deepEqual(t.kw(), ["[ifp-keyword] hit=false"]);
+});
+
 // ============================================================
 // Fit mode: no self-retriggering (H2)
 // ============================================================

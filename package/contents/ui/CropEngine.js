@@ -471,8 +471,9 @@ const _APPLY_BODY = `(function(sel, opts){
   // element's innerText so CSS-hidden banners do not falsely match;
   // falls back to <body> when there is no matched element (e.g. mode
   // is fullPanel or selector hasn't resolved yet). Concatenates the
-  // \`aria-label\` of any rendered descendant carrying one so screen-reader-only
-  // states (e.g. "Alert: stream offline") are also detectable.
+  // \`aria-label\` of the scope itself and of any rendered descendant
+  // carrying one so screen-reader-only states (e.g. "Alert: stream
+  // offline") are also detectable.
   // innerText respects CSS visibility (preferred — hidden banners
   // don't false-match in real Chromium WebEngine). Some environments
   // (jsdom < ~22, detached / pre-layout nodes) return undefined/null
@@ -491,7 +492,10 @@ const _APPLY_BODY = `(function(sel, opts){
       try { txt = root.textContent || ''; } catch (e2) { txt = ''; }
     }
     try {
-      var aria = root.querySelectorAll('[aria-label]');
+      // querySelectorAll returns descendants only; the matched element's own
+      // label (a status badge picked by data-testid) must be scanned too.
+      var aria = Array.prototype.slice.call(root.querySelectorAll('[aria-label]'));
+      if (root.hasAttribute('aria-label')) aria.unshift(root);
       for (var i = 0; i < aria.length; i++) {
         // Same rule as innerText: a label on a node that is not rendered
         // (a pre-rendered, display:none "Offline" badge) must not match.
