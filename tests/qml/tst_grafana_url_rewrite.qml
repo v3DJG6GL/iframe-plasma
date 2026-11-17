@@ -284,8 +284,9 @@ TestCase {
         compare(out, "https://g/d-solo/abc/slug?orgId=1&panelId=7&from=now-24h&to=now&kiosk&theme=${theme}&refresh=30s&hideLogo=true&_ifp_hidePanelMenu=1");
     }
     function test_fullPipeline_gotoLink_paramsApplied() {
-        // /goto/<id> can't be d-solo-rewritten client-side, but every
-        // other managed param still applies (Grafana 302-preserves query).
+        // /goto/<id> can't be d-solo-rewritten client-side; the other
+        // managed params are still appended, though Grafana's goto
+        // redirect drops them (the dialog warns about that).
         const opts = {
             convertDSolo: true, timeRange: "1h",
             kiosk: true, theme: false,

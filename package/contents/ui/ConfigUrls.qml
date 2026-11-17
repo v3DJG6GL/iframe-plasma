@@ -1454,9 +1454,12 @@ KCM.SimpleKCM {
             Kirigami.InlineMessage {
                 Layout.fillWidth: true
                 Layout.topMargin: Kirigami.Units.smallSpacing
-                type: Kirigami.MessageType.Information
+                // Warning, not Information: Grafana's /goto/ handler
+                // redirects to the stored path only, so every option
+                // appended here is dropped before the dashboard loads.
+                type: Kirigami.MessageType.Warning
                 visible: grafanaHelper.editingIndex < 0 && pastedUrl.text.indexOf("/goto/") !== -1
-                text: i18n("This is a `/goto/<id>` short URL. Kiosk / theme / refresh / time range will be appended, but `/d/` → `/d-solo/` rewrite needs the resolved dashboard URL — paste the `/d/...?...&viewPanel=panel-N` form for full conversion.")
+                text: i18n("This is a `/goto/<id>` short URL. Grafana's short-link redirect drops the options added here (kiosk, theme, refresh, time range), and the `/d/` → `/d-solo/` rewrite needs the resolved dashboard URL. Open the link in a browser and paste the resolved `/d/...?...&viewPanel=panel-N` URL instead.")
             }
         }
 

@@ -189,10 +189,10 @@ The **From Grafana URL…** button is the easy way to add a panel:
   there regardless).
 
 `/goto/<id>` short links can't be d-solo-rewritten client-side (Grafana would
-need to resolve them first). For full conversion paste the resolved
-`/d/...?...&viewPanel=panel-N` form. The kiosk/theme/refresh/time-range
-overrides do still apply, because Grafana 302-preserves query params across
-the goto redirect.
+need to resolve them first), and the kiosk/theme/refresh/time-range options
+don't apply to them either: Grafana's goto redirect goes to the stored
+dashboard path only and drops any query params added to the short link. Paste
+the resolved `/d/...?...&viewPanel=panel-N` form instead.
 
 ### Display tab
 
