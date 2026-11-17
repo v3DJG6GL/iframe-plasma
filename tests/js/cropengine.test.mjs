@@ -1013,6 +1013,21 @@ test("hidden page: a removed target falls back to scanning the body", () => {
     assert.deepEqual(t.kw(), ["[ifp-keyword] hit=true", "[ifp-keyword] hit=false"]);
 });
 
+test("hidden page: a target that comes back is scanned again", () => {
+    // One tick without the target must not leave the scan on <body> for
+    // good: another panel there may carry the keyword.
+    const hidden = { value: true };
+    const t = runKeywordApply(hidden);
+    t.tickInterval();
+    assert.deepEqual(t.kw(), ["[ifp-keyword] hit=true"]);
+    t.w.document.body.innerHTML = "<p>No active streams</p>";
+    t.tickInterval();
+    t.w.document.body.innerHTML = "<div id='t'>Streaming now</div><p>No active streams</p>";
+    t.tickInterval();
+    t.tickInterval();
+    assert.deepEqual(t.kw(), ["[ifp-keyword] hit=true", "[ifp-keyword] hit=false"]);
+});
+
 test("visible page: interval still goes through rAF", () => {
     const hidden = { value: false };
     const t = runKeywordApply(hidden);

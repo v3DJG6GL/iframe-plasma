@@ -700,9 +700,13 @@ const _APPLY_BODY = `(function(sel, opts){
       if (!window.__ifpPickerArmed) {
         // apply() does not run here, so matchedEl may be a node the page
         // has since replaced; its old text would keep the keyword hit (and
-        // the tab's exclusion) alive for good. Look the target up again.
-        if (matchedEl && !matchedEl.isConnected) {
+        // the tab's exclusion) alive for good. Look the target up again —
+        // also while none is held, or one tick without it would leave the
+        // scan reading <body> for as long as the page stays hidden.
+        if (sel && (!matchedEl || !matchedEl.isConnected)) {
           try { matchedEl = document.querySelector(sel); } catch (e) { matchedEl = null; }
+          // Same as apply(): a body/html match means "scan the whole page".
+          if (matchedEl === document.body || matchedEl === document.documentElement) matchedEl = null;
         }
         runKeywordScan();
       }
