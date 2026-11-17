@@ -185,8 +185,11 @@ KCM.SimpleKCM {
                 // Judge by the values the page holds now, not by the file:
                 // a hidden SpinBox clamps an out-of-range value on assignment.
                 const outcome = BackupPage.importOutcome(page._persisted, result.config, page._collectConfig());
+                const banner = BackupPage.importBanner(result, outcome);
                 const backup = IframePlasma.BackupBridge.lastBackupPath();
-                let msg = outcome.changed
+                let msg = banner.headline === "unusable"
+                    ? i18n("No settings in the file could be imported.")
+                    : banner.headline === "changed"
                     ? i18n("Configuration imported. Click Apply to persist.")
                     : i18n("Imported file matches the current configuration — nothing to apply.");
                 if (backup) {
@@ -213,9 +216,10 @@ KCM.SimpleKCM {
                     msg += " " + i18n("(Warning: %1)", result.error);
                 }
                 // A snapshot-write failure leaves the user with no revert
-                // point; render as Warning rather than Positive so the
-                // severity isn't hidden behind a green banner.
-                const sev = (result.error || result.warning) ? "warning" : false;
+                // point, and a skipped key means part of the file was
+                // discarded; either renders as Warning rather than Positive
+                // so it isn't hidden behind a green banner.
+                const sev = banner.warning ? "warning" : false;
                 page._showResult(msg, sev);
             } else {
                 page._showResult(i18n("Import failed: %1", result.error), true);

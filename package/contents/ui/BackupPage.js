@@ -32,6 +32,24 @@ function importOutcome(before, wanted, after) {
     return { changed: changed, adjusted: adjusted };
 }
 
+// How the import banner reads, from importFromFile's `result` and the
+// importOutcome above:
+//   headline — "changed" (Apply is enabled), "matches" (the file's values
+//              are the persisted ones) or "unusable" (the file carried
+//              settings but every one was skipped, so nothing was compared
+//              and "matches" would claim a match for a discarded file)
+//   warning  — not a plain success: something was skipped, or the
+//              revert-point snapshot reported an error / caveat
+function importBanner(result, outcome) {
+    const r = result || {};
+    const skipped = r.skipped ? r.skipped.length : 0;
+    const used = r.config ? Object.keys(r.config).length : 0;
+    let headline;
+    if (used === 0 && skipped > 0) headline = "unusable";
+    else headline = (outcome && outcome.changed) ? "changed" : "matches";
+    return { headline: headline, warning: skipped > 0 || !!(r.error || r.warning) };
+}
+
 // File URL of `fileName` inside the folder `folderUrl` ("file:///…", as
 // StandardPaths returns it). The dialog needs the folder: "file://" plus a
 // bare name parses the name as the URL host and leaves the path empty.

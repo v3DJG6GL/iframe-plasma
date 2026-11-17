@@ -72,6 +72,43 @@ TestCase {
         compare(out.adjusted, []);
     }
 
+    // ===== importBanner ==============================================
+    // A flat or all-wrong-typed file: importFromFile skips every entry and
+    // hands back an empty config. Nothing was read, so the banner must not
+    // claim the file matches, and must not be a green success.
+    function test_importBanner_everythingSkipped_unusableWarning() {
+        const result = { ok: true, config: {}, skipped: ["urlsJson", "zoomFactor"],
+                         error: "", warning: "" };
+        const out = B.importBanner(result, B.importOutcome({ zoomFactor: 100 }, {},
+                                                           { zoomFactor: 100 }));
+        compare(out.headline, "unusable");
+        compare(out.warning, true);
+    }
+
+    function test_importBanner_partlySkipped_warning() {
+        const result = { ok: true, config: { zoomFactor: 150 }, skipped: ["futureKey"],
+                         error: "", warning: "" };
+        const out = B.importBanner(result, { changed: true, adjusted: [] });
+        compare(out.headline, "changed");
+        compare(out.warning, true);
+    }
+
+    function test_importBanner_cleanMatch_positive() {
+        const result = { ok: true, config: { zoomFactor: 100 }, skipped: [],
+                         error: "", warning: "" };
+        const out = B.importBanner(result, { changed: false, adjusted: [] });
+        compare(out.headline, "matches");
+        compare(out.warning, false);
+    }
+
+    function test_importBanner_snapshotCaveat_warning() {
+        const result = { ok: true, config: { zoomFactor: 150 }, skipped: [],
+                         error: "", warning: "perms" };
+        const out = B.importBanner(result, { changed: true, adjusted: [] });
+        compare(out.headline, "changed");
+        compare(out.warning, true);
+    }
+
     // ===== exportFileUrl =============================================
     function test_exportFileUrl_nameIsThePathNotTheHost() {
         const name = "iframe-plasma-config-2026-05-27.json";
