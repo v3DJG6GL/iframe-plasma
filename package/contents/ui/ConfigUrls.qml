@@ -300,13 +300,10 @@ KCM.SimpleKCM {
     // `Plasmoid` isn't imported in this file, so the access threw a silent
     // ReferenceError and the dropdown was always empty.)
     property string cfg_authProfilesJson: "[]"
-    property var authProfiles: parseAuthProfiles(cfg_authProfilesJson)
-    function parseAuthProfiles(jsonStr) {
-        try {
-            const arr = JSON.parse(jsonStr || "[]");
-            return Array.isArray(arr) ? arr : [];
-        } catch (e) { return []; }
-    }
+    // Shared parser drops non-object rows (null/strings/arrays from a
+    // Backup import), so the `p.id` / `p.username` reads below can't throw
+    // and the KCM sees the same profile set as main.qml.
+    property var authProfiles: UrlUtils.parseAuthProfiles(cfg_authProfilesJson)
     // When the Authentication tab deletes a profile, cfg_urlsJson is
     // patched there to unlink references. Our listModel was populated
     // once in Component.onCompleted, so it still carries the now-orphaned
