@@ -1250,10 +1250,16 @@ PlasmoidItem {
     // next-index walk advances past them in order. If every tab is excluded
     // (or only the current one is non-excluded) the timer keeps running but
     // advanceCycleTab is a no-op for that tick.
+    //
+    // The rotation is a panel-preview concern: with the preview off the slot
+    // shows only the icon, and ConfigDisplay disables the cycle switch, so
+    // the timer must stop too — else hidden ticks move currentTabIndex and
+    // the popup opens on a tab the user never picked.
     Timer {
         id: cycleTimer
         interval: Math.max(5, Plasmoid.configuration.autoCycleIntervalSec) * 1000
         running: Plasmoid.configuration.autoCycleEnabled
+                 && Plasmoid.configuration.compactPreviewEnabled
                  && root.tabs.length > 1
                  && !root.expanded
                  && root.compactObservable
