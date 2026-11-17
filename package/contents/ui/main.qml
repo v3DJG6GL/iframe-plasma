@@ -1178,8 +1178,9 @@ PlasmoidItem {
     }
 
     // Challenge -> Date.now() of the last auto-answer in handleBasicAuth, so a
-    // challenge the server sends straight back is not answered again. Emptied
-    // by primeAuthProfiles: a re-read secret gets a fresh attempt.
+    // challenge the server sends straight back is not answered again (and,
+    // once that happened, never again: see UrlUtils.claimBasicAuthAnswer).
+    // Emptied by primeAuthProfiles: a re-read secret gets a fresh attempt.
     property var _basicAuthAnswered: ({})
 
     // Handler invoked from WebTab and the panel thumbnail on every
@@ -1231,13 +1232,11 @@ PlasmoidItem {
             const pw = (secrets && secrets.password) || "";
             if (pw.length > 0) {
                 const challenge = UrlUtils.basicAuthChallengeKey(view, profile.id, request.url, request.realm);
-                const now = Date.now();
-                if (!UrlUtils.mayAutoAnswerBasicAuth(root._basicAuthAnswered[challenge], now)) {
-                    console.warn(Log.auth, "iframe-plasma[auth] stored credentials were just rejected"
+                if (!UrlUtils.claimBasicAuthAnswer(root._basicAuthAnswered, challenge, Date.now())) {
+                    console.warn(Log.auth, "iframe-plasma[auth] stored credentials were rejected"
                         + " (profile=" + profile.id + ") -> letting Qt prompt");
                     return;
                 }
-                root._basicAuthAnswered[challenge] = now;
                 request.accepted = true;
                 request.dialogAccept(user, pw);
                 console.debug(Log.auth, "iframe-plasma[auth] dialogAccept (profile=" + profile.id + ", user=" + user + ")");

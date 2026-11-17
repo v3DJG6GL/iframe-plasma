@@ -63,6 +63,46 @@ TestCase {
         verify(U.mayAutoAnswerBasicAuth(answered["profile|https://dash.example/d/y|realm"], 1010));
     }
 
+    // ===== claimBasicAuthAnswer =======================================
+    // The thumbnail's retry schedule (ThumbRetryPolicy: +3 s, +10 s, +30 s,
+    // then every 300 s) re-challenges after the 10 s window has passed.
+    function _replayRetryingView(offsetsMs) {
+        const answered = {};
+        const key = "thumb:0|p|https://dash.example/d/x|realm";
+        let sent = 0;
+        for (const t of offsetsMs) {
+            if (U.claimBasicAuthAnswer(answered, key, 1000 + t))
+                sent++;
+        }
+        return sent;
+    }
+    function test_claim_rejectionIsStickyAcrossRetries() {
+        // Answer at 0 rejected (challenge straight back at 50 ms): the
+        // retries at 3 s, 13 s, 43 s and 343 s must not resend it.
+        compare(_replayRetryingView([0, 50, 3050, 13050, 43050, 343050]), 1);
+    }
+    function test_claim_reChallengeAfterWindowWithoutRejection_answered() {
+        // A session that expires later is not a rejection: answer again.
+        compare(_replayRetryingView([0, 60000, 120000]), 3);
+    }
+    function test_claim_resetMapRetriesOnce() {
+        // primeAuthProfiles empties the map after a secret change.
+        const key = "popup:0|p|https://dash.example/d/x|realm";
+        let answered = {};
+        verify(U.claimBasicAuthAnswer(answered, key, 1000));
+        verify(!U.claimBasicAuthAnswer(answered, key, 1050));
+        answered = {};
+        verify(U.claimBasicAuthAnswer(answered, key, 90000));
+    }
+    function test_claim_otherChallengeUnaffectedByRejection() {
+        const answered = {};
+        const a = "thumb:0|p|https://dash.example/d/x|realm";
+        const b = "thumb:1|p|https://dash.example/d/y|realm";
+        verify(U.claimBasicAuthAnswer(answered, a, 1000));
+        verify(!U.claimBasicAuthAnswer(answered, a, 1050));
+        verify(U.claimBasicAuthAnswer(answered, b, 1060));
+    }
+
     // ===== basicAuthChallengeKey =====================================
     function test_challengeKey_popupAndThumbOfSameTabDiffer() {
         // Same profile, URL and realm: only the asking view tells them apart.

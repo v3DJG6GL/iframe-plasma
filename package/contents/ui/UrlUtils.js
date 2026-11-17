@@ -200,11 +200,29 @@ const BASIC_AUTH_REANSWER_MS = 10000;
 function basicAuthChallengeKey(view, profileId, requestUrl, realm) {
     return String(view) + "|" + profileId + "|" + String(requestUrl) + "|" + (realm || "");
 }
+// Stored in the last-answer map once a rejection was detected. Sticky: a
+// retrying view (the thumbnail's 3/10/30 s backoff, then every 300 s and
+// on each auto-cycle landing) comes back after the window has passed, and
+// answering it again would keep sending the wrong password forever.
+// primeAuthProfiles empties the map, so a changed secret is tried afresh.
+const BASIC_AUTH_REJECTED = -1;
 function mayAutoAnswerBasicAuth(lastAnsweredMs, nowMs) {
+    if (lastAnsweredMs === BASIC_AUTH_REJECTED) return false;
     if (!lastAnsweredMs) return true;
     const elapsed = nowMs - lastAnsweredMs;
     // elapsed < 0: the wall clock stepped back; do not stay locked out.
     return elapsed < 0 || elapsed >= BASIC_AUTH_REANSWER_MS;
+}
+// handleBasicAuth's bookkeeping on `answered` (challenge key -> last
+// answer ms): true records an answer now, false marks the challenge
+// rejected for good (see BASIC_AUTH_REJECTED).
+function claimBasicAuthAnswer(answered, key, nowMs) {
+    if (!mayAutoAnswerBasicAuth(answered[key], nowMs)) {
+        answered[key] = BASIC_AUTH_REJECTED;
+        return false;
+    }
+    answered[key] = nowMs;
+    return true;
 }
 
 // The User-Agent override as WebEngineProfile.httpUserAgent should get it:
