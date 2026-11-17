@@ -123,6 +123,43 @@ TestCase {
         compare(Q.readQuery("https://x?a=1&a=2", "a"), "1");
     }
 
+    // ===== canonicalUrlKey ===========================================
+    // The configured URL as typed must key equal to Chromium's form of it,
+    // or WebTab's SPA-login return check never fires.
+    function test_canonicalUrlKey_bareOrigin_getsSlash() {
+        compare(Q.canonicalUrlKey("https://app.example.com"),
+                Q.canonicalUrlKey("https://app.example.com/"));
+        compare(Q.canonicalUrlKey("https://app.example.com"), "https://app.example.com/");
+    }
+    function test_canonicalUrlKey_emptyPathWithQuery_getsSlash() {
+        compare(Q.canonicalUrlKey("https://app.example.com?x=1"), "https://app.example.com/?x=1");
+    }
+    function test_canonicalUrlKey_defaultPortDropped() {
+        compare(Q.canonicalUrlKey("https://app.example.com:443/x"), "https://app.example.com/x");
+        compare(Q.canonicalUrlKey("http://app.example.com:80/x"), "http://app.example.com/x");
+    }
+    function test_canonicalUrlKey_nonDefaultPortKept() {
+        compare(Q.canonicalUrlKey("https://app.example.com:80/x"), "https://app.example.com:80/x");
+        compare(Q.canonicalUrlKey("http://app.example.com:443/x"), "http://app.example.com:443/x");
+        compare(Q.canonicalUrlKey("https://app.example.com:4430/x"), "https://app.example.com:4430/x");
+        compare(Q.canonicalUrlKey("https://[::443]/x"), "https://[::443]/x");
+    }
+    function test_canonicalUrlKey_schemeAndHostLowercased_pathKept() {
+        compare(Q.canonicalUrlKey("HTTPS://App.Example.COM/Dash?Q=A"), "https://app.example.com/Dash?Q=A");
+    }
+    function test_canonicalUrlKey_hashStripped() {
+        compare(Q.canonicalUrlKey("https://app.example.com/d#panel"), "https://app.example.com/d");
+        compare(Q.canonicalUrlKey("https://app.example.com#x"), "https://app.example.com/");
+    }
+    function test_canonicalUrlKey_differentPagesStayDifferent() {
+        verify(Q.canonicalUrlKey("https://app.example.com/login")
+               !== Q.canonicalUrlKey("https://app.example.com/"));
+    }
+    function test_canonicalUrlKey_nonUrl_passesThrough() {
+        compare(Q.canonicalUrlKey(""), "");
+        compare(Q.canonicalUrlKey("about:blank"), "about:blank");
+    }
+
     // ===== matchTimeRangePreset ======================================
     function test_matchPreset_24h() { compare(Q.matchTimeRangePreset("now-24h", "now"), "24h"); }
     function test_matchPreset_5m()  { compare(Q.matchTimeRangePreset("now-5m",  "now"), "5m"); }

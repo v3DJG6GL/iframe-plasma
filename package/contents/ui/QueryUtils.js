@@ -20,6 +20,9 @@
  *     query (decoded), "" if absent. Flag-style params (no `=`) read
  *     as "".
  *
+ *   canonicalUrlKey(urlStr) — comparison key for "same page" checks
+ *     between a configured URL and WebEngine's reported one.
+ *
  *   matchTimeRangePreset(fromValue, toValue) — given the from/to query
  *     values, return the preset suffix ("24h" etc.), "custom" for
  *     non-preset, or "" when both absent. Pure factoring of WebTab's
@@ -100,6 +103,31 @@ function readQuery(urlStr, name) {
         }
         return "";
     } catch (e) { return ""; }
+}
+
+// Comparison key for a URL, so a configured URL (kept as typed by QUrl)
+// matches the same page as WebEngine reports it (Chromium's canonical
+// form): hash stripped, scheme and host lowercased, the default port of
+// http/https dropped, and an empty http(s) path written as "/".
+function canonicalUrlKey(urlStr) {
+    let s = String(urlStr || "");
+    const hashIdx = s.indexOf('#');
+    if (hashIdx >= 0) s = s.slice(0, hashIdx);
+    const m = s.match(/^([A-Za-z][A-Za-z0-9+.-]*):\/\/([^/?]*)(.*)$/);
+    if (!m) return s;
+    const scheme = m[1].toLowerCase();
+    const at = m[2].lastIndexOf('@');
+    const userinfo = at >= 0 ? m[2].slice(0, at + 1) : "";
+    let hostPort = (at >= 0 ? m[2].slice(at + 1) : m[2]).toLowerCase();
+    let rest = m[3];
+    if ((scheme === "https" && /:443$/.test(hostPort))
+            || (scheme === "http" && /:80$/.test(hostPort))) {
+        hostPort = hostPort.replace(/:\d+$/, "");
+    }
+    if ((scheme === "http" || scheme === "https") && rest.charAt(0) !== "/") {
+        rest = "/" + rest;
+    }
+    return scheme + "://" + userinfo + hostPort + rest;
 }
 
 function matchTimeRangePreset(fromValue, toValue) {

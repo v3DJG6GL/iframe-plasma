@@ -84,9 +84,10 @@ Item {
     // back to /dashboard). Used to fire `authSucceeded` for SPA flows that
     // never touch the Authelia host. Empty until the first success.
     property string _lastSuccessUrl: ""
-    // The configured URL (hash stripped) at that success. A load that
-    // lands on a NEW configured URL (e.g. a ${theme} re-resolve) is not a
-    // return from a login page, so the target must not have moved since.
+    // The configured URL's QueryUtils.canonicalUrlKey at that success. A
+    // load that lands on a NEW configured URL (e.g. a ${theme} re-resolve)
+    // is not a return from a login page, so the target must not have moved
+    // since.
     property string _lastSuccessTargetKey: ""
 
     // True from a successful load on the Authelia host until the next
@@ -690,18 +691,16 @@ Item {
                         // so emit authSucceeded so main.qml broadcasts a soft reload.
                         const wasAuthing = tab._authPending;
                         tab._authPending = onAuthelia;
-                        function _stripHash(u) {
-                            const i = u.indexOf('#');
-                            return i >= 0 ? u.slice(0, i) : u;
-                        }
-                        const finalKey = _stripHash(finalUrl);
-                        const targetKey = _stripHash(String(tab.url));
+                        // Canonical keys: tab.url is the URL as typed, while
+                        // webview.url is Chromium's form ("/" path, no :443).
+                        const finalKey = QueryUtils.canonicalUrlKey(finalUrl);
+                        const targetKey = QueryUtils.canonicalUrlKey(String(tab.url));
                         const arrivedAtTargetFromElsewhere =
                             !onAuthelia
                             && finalKey === targetKey
                             && tab._lastSuccessUrl !== ""
                             && tab._lastSuccessTargetKey === targetKey
-                            && _stripHash(tab._lastSuccessUrl) !== finalKey;
+                            && QueryUtils.canonicalUrlKey(tab._lastSuccessUrl) !== finalKey;
 
                         if (onAuthelia) {
                             if (!tab.loginInProgress) {
