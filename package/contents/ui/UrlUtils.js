@@ -196,7 +196,9 @@ function thumbRangeFor(tab, overrideRange) {
 
 // Same heuristic main.qml's toolbar uses to gate Time-range / Refresh
 // dropdowns: only enable them for Grafana-shaped URLs. Matches /d/ and
-// /d-solo/ followed by an alphanumeric uid segment.
+// /d-solo/ followed by an alphanumeric uid segment. The slug after the uid
+// is optional in Grafana (`/d/<uid>?orgId=1`, `/d-solo/<uid>?panelId=2`),
+// so the uid may end at `/`, `?` or the end of the base.
 //
 // Drop the `#fragment` before scanning: a hash-routed share URL like
 // `https://example.com/page#/d/abc/dashboard` would otherwise false-
@@ -208,7 +210,7 @@ function isGrafanaEmbed(u) {
     const s = String(u);
     const hashIdx = s.indexOf('#');
     const base = hashIdx === -1 ? s : s.slice(0, hashIdx);
-    return /\/d(-solo)?\/[A-Za-z0-9_-]+\//.test(base);
+    return /\/d(-solo)?\/[A-Za-z0-9_-]+(?:[\/?]|$)/.test(base);
 }
 
 // Concise display form of a tab URL for the config-card header subtitle:

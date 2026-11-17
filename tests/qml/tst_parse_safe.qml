@@ -160,6 +160,17 @@ TestCase {
     function test_isGrafanaEmbed_matchesWithUnderscores() {
         verify(U.isGrafanaEmbed("https://x/d/abc_123-de/slug"));
     }
+    function test_isGrafanaEmbed_matchesSluglessUid() {
+        // Grafana's slug is optional; the KCM's own d-solo rewrite of a
+        // slugless /d/<uid>?viewPanel=… URL yields /d-solo/<uid>?panelId=….
+        verify(U.isGrafanaEmbed("https://g.example/d/abc123?orgId=1&viewPanel=panel-5"));
+        verify(U.isGrafanaEmbed("https://g.example/d-solo/abc123?orgId=1&panelId=5"));
+        verify(U.isGrafanaEmbed("https://g.example/d/abc123"));
+        verify(U.isGrafanaEmbed("https://g.example/d-solo/abc123#x"));
+        // A uid segment still has to be there.
+        verify(!U.isGrafanaEmbed("https://g.example/d/?orgId=1"));
+        verify(!U.isGrafanaEmbed("https://g.example/dashboards?orgId=1"));
+    }
     function test_isGrafanaEmbed_rejectsRandomUrl() {
         verify(!U.isGrafanaEmbed("https://kde.org/"));
     }
@@ -228,6 +239,8 @@ TestCase {
     function test_effectiveThumbMode_chartPresetOnGrafanaIsKept() {
         compare(U.effectiveThumbMode("chartOnly", "https://g/d-solo/abc/x"), "chartOnly");
         compare(U.effectiveThumbMode("chartWithAxes", "https://g/d/abc/x?viewPanel=2"), "chartWithAxes");
+        // Slugless Grafana rows keep their chart crop too.
+        compare(U.effectiveThumbMode("chartOnly", "https://g/d-solo/abc?orgId=1&panelId=5"), "chartOnly");
     }
     function test_effectiveThumbMode_genericModesPassThrough() {
         compare(U.effectiveThumbMode("custom", "https://ha.local/lovelace"), "custom");
