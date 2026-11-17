@@ -83,6 +83,10 @@ Item {
     // back to /dashboard). Used to fire `authSucceeded` for SPA flows that
     // never touch the Authelia host. Empty until the first success.
     property string _lastSuccessUrl: ""
+    // The configured URL (hash stripped) at that success. A load that
+    // lands on a NEW configured URL (e.g. a ${theme} re-resolve) is not a
+    // return from a login page, so the target must not have moved since.
+    property string _lastSuccessTargetKey: ""
 
     // True from a successful load on the Authelia host until the next
     // successful load elsewhere. loadStatus can't carry this: every
@@ -704,6 +708,7 @@ Item {
                             !onAuthelia
                             && finalKey === targetKey
                             && tab._lastSuccessUrl !== ""
+                            && tab._lastSuccessTargetKey === targetKey
                             && _stripHash(tab._lastSuccessUrl) !== finalKey;
 
                         if (onAuthelia) {
@@ -729,6 +734,7 @@ Item {
                             }
                         }
                         tab._lastSuccessUrl = finalUrl;
+                        tab._lastSuccessTargetKey = targetKey;
                         tab._captureNavTiming();
                         tab._applyPopupSelector();
                     } else if (info.status === WebEngineView.LoadStoppedStatus) {
