@@ -383,6 +383,22 @@ KCM.SimpleKCM {
                             onEditingFinished: {
                                 if (text.length === 0) return;
                                 if (!page.authSupport) return;
+                                // Probe the wallet before showing "Saved": OK
+                                // (or Return) closes the dialog in the same
+                                // tick as the Apply-time write, so the header
+                                // error for a disabled / locked / refused
+                                // wallet is never seen. has() runs the open
+                                // (honouring the unlock backoff).
+                                page.authSupport.has(page.authSupport.profileKey(card.id));
+                                if (!page.authSupport.isWalletReady()) {
+                                    // Not staged. Clear + hide anyway so the
+                                    // masked dots can't read as captured; the
+                                    // red pill says why.
+                                    showSecret.checked = false;
+                                    text = "";
+                                    failedHint.show();
+                                    return;
+                                }
                                 const map = {};
                                 map[page.authSpec(card.authType).fieldName] = text;
                                 // Staged, not written: the wallet write waits
@@ -405,13 +421,22 @@ KCM.SimpleKCM {
                             icon.name: checked ? "password-show-on" : "password-show-off"
                             checkable: true
                         }
-                        // Transient capture-confirmation pill. A wallet
-                        // write that fails on Apply shows in the header.
+                        // Transient capture-confirmation pill, and its red
+                        // mirror for a wallet that is not open when the
+                        // secret is typed. A write that still fails on Apply
+                        // shows in the header.
                         HintPill {
                             id: savedHint
                             iconSource: "emblem-success"
                             tint: Kirigami.Theme.positiveTextColor
                             text: i18n("Saved")
+                        }
+                        HintPill {
+                            id: failedHint
+                            iconSource: "dialog-error"
+                            tint: Kirigami.Theme.negativeTextColor
+                            text: i18n("Wallet unavailable")
+                            holdMs: 4000
                         }
                     }
 
