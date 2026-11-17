@@ -35,22 +35,25 @@ function importOutcome(before, wanted, after) {
 // How the import banner reads, from importFromFile's `result` and the
 // importOutcome above:
 //   headline — "changed" (Apply is enabled), "matches" (the file's values
-//              are the persisted ones) or "unusable" (the file carried
-//              settings but every one was skipped, so nothing was compared
-//              and "matches" would claim a match for a discarded file)
-//   warning  — not a plain success: something was skipped, a value was
-//              adjusted to fit (the file's value was replaced, too), or the
-//              revert-point snapshot reported an error / caveat
+//              are the persisted ones) or "unusable" (no setting in the
+//              file could be used: every one was skipped, or it carried
+//              none, so nothing was compared and "matches" would claim a
+//              match for a file that supplied nothing)
+//   warning  — not a plain success: the file was unusable, something
+//              was skipped, a value was adjusted to fit (the file's value
+//              was replaced, too), or the revert-point snapshot reported an
+//              error / caveat
 function importBanner(result, outcome) {
     const r = result || {};
     const skipped = r.skipped ? r.skipped.length : 0;
     const used = r.config ? Object.keys(r.config).length : 0;
     let headline;
-    if (used === 0 && skipped > 0) headline = "unusable";
+    if (used === 0) headline = "unusable";
     else headline = (outcome && outcome.changed) ? "changed" : "matches";
     const adjusted = (outcome && outcome.adjusted) ? outcome.adjusted.length : 0;
     return { headline: headline,
-             warning: skipped > 0 || adjusted > 0 || !!(r.error || r.warning) };
+             warning: used === 0 || skipped > 0 || adjusted > 0
+                      || !!(r.error || r.warning) };
 }
 
 // File URL of `fileName` inside the folder `folderUrl` ("file:///…", as

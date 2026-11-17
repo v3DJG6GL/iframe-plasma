@@ -85,6 +85,16 @@ TestCase {
         compare(out.warning, true);
     }
 
+    // A valid file that carries no settings at all ({"config":{}} or empty
+    // groups): nothing skipped, nothing used. It matched nothing either.
+    function test_importBanner_noSettings_unusableWarning() {
+        const result = { ok: true, config: {}, skipped: [], error: "", warning: "" };
+        const out = B.importBanner(result, B.importOutcome({ zoomFactor: 100 }, {},
+                                                           { zoomFactor: 100 }));
+        compare(out.headline, "unusable");
+        compare(out.warning, true);
+    }
+
     function test_importBanner_partlySkipped_warning() {
         const result = { ok: true, config: { zoomFactor: 150 }, skipped: ["futureKey"],
                          error: "", warning: "" };
