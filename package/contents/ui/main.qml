@@ -308,10 +308,15 @@ PlasmoidItem {
             }
             console.info(Log.auth, "iframe-plasma[auth] changed profile ids=" + JSON.stringify(changedIds)
                 + " — reloading referencing tabs");
+            // Targeted per-view reloads, not the shared _tabReloadRequested
+            // broadcast: that would wake every Discarded view on the profile.
+            // A Discarded view picks up the re-primed profile on its next
+            // landing anyway.
             for (let i = 0; i < root.tabs.length; i++) {
                 const t = root.tabs[i];
                 if (t && t.authProfileId && changedIds.indexOf(t.authProfileId) !== -1) {
-                    root._tabReloadRequested(i, "soft");
+                    root._compactReloadRequested(i);
+                    root._popupReloadRequested(i);
                 }
             }
         }
@@ -2915,12 +2920,17 @@ PlasmoidItem {
                             if (kind === "hard") hardReload();
                             else                 reload();
                         }
-                        // Popup-mode flip on KCM Apply. A Discarded view is
-                        // left alone: it reloads with the new mode when it
-                        // is next shown.
+                        // Popup-mode flip / auth-profile change on KCM
+                        // Apply. A Discarded view is left alone: it reloads
+                        // with the new mode and profile when it is next
+                        // shown. Its login latch is still cleared, as
+                        // reload() would have (see reloadAll).
                         function on_PopupReloadRequested(tabIdx) {
                             if (tabIdx !== index) return;
-                            if (webView && webView.lifecycleState === WebEngineView.LifecycleState.Discarded) return;
+                            if (webView && webView.lifecycleState === WebEngineView.LifecycleState.Discarded) {
+                                loginInProgress = false;
+                                return;
+                            }
                             reload();
                         }
                     }
