@@ -107,6 +107,20 @@ KCM.SimpleKCM {
         };
     }
 
+    // The configuration as persisted, i.e. what the shell's Apply button is
+    // judged against (AppletConfiguration.isConfigurationChanged compares
+    // the page with Plasmoid.configuration). The page opens with exactly
+    // those values and the shell writes the page's values on Apply, so a
+    // copy taken at load and refreshed in saveConfig() tracks it. The
+    // pre-import page values would not: an earlier import on this page may
+    // still be unapplied.
+    property var _persisted: ({})
+    Component.onCompleted: _persisted = _collectConfig()
+    // Called by the shell before it writes the cfg_* values.
+    function saveConfig() {
+        _persisted = _collectConfig();
+    }
+
     function _applyConfig(m) {
         // Assign each known key back into its alias. KCM sees the
         // property writes, marks the page dirty, and enables Apply.
@@ -159,18 +173,15 @@ KCM.SimpleKCM {
             const path = page._urlToPath(selectedFile);
             const result = IframePlasma.BackupBridge.importFromFile(path, page._collectConfig());
             if (result.ok) {
-                // Snapshot current values BEFORE applying so we can tell
-                // whether the import actually changes anything. Re-importing
-                // a backup identical to the live config (e.g. export then
-                // immediately import) writes no new values, so KCM never
-                // marks the page dirty and Apply stays disabled — correct,
-                // but the old unconditional "Click Apply" text misled the
-                // user into hunting for a greyed-out button.
-                const before = page._collectConfig();
+                // Compare against the persisted config, the same test the
+                // shell enables Apply by. Re-importing a backup identical to
+                // it (e.g. export then immediately import) leaves Apply
+                // disabled, and the old unconditional "Click Apply" text
+                // misled the user into hunting for a greyed-out button.
                 page._applyConfig(result.config);
                 // Judge by the values the page holds now, not by the file:
                 // a hidden SpinBox clamps an out-of-range value on assignment.
-                const outcome = BackupPage.importOutcome(before, result.config, page._collectConfig());
+                const outcome = BackupPage.importOutcome(page._persisted, result.config, page._collectConfig());
                 const backup = IframePlasma.BackupBridge.lastBackupPath();
                 let msg = outcome.changed
                     ? i18n("Configuration imported. Click Apply to persist.")

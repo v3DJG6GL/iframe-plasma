@@ -8,11 +8,12 @@
 .pragma library
 
 // What an import did to the page, from three flat key->value maps:
-// `before` / `after` are the live values around the apply, `wanted` is what
-// the file asked for. The controls behind the page's aliases can store
-// something other than the value assigned (a SpinBox clamps to its range),
-// so both answers come from `after`, never from `wanted`:
-//   changed  — some live value differs from before (Apply is enabled)
+// `before` is the persisted configuration, `after` the live values after the
+// apply, `wanted` what the file asked for. The controls behind the page's
+// aliases can store something other than the value assigned (a SpinBox
+// clamps to its range), so both answers come from `after`, never from
+// `wanted`:
+//   changed  — some live value differs from the persisted one (Apply is enabled)
 //   adjusted — keys whose stored value is not the imported one
 // Keys the page does not hold (absent from `after`) are ignored.
 function importOutcome(before, wanted, after) {
