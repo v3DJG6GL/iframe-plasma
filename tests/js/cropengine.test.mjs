@@ -620,6 +620,34 @@ test("keyword scan: an empty selector scans the page without cropping it", () =>
     assert.equal(logs[logs.length - 1], "[ifp-keyword] hit=false");
 });
 
+test("keyword scan: an invalid selector still scans the page", () => {
+    // A selector typo must not switch keyword exclusion off: the scan falls
+    // back to <body>, and QML still hears 'invalid'.
+    const dom = new JSDOM(
+        "<!doctype html><html><body><div id='t'>No active streams</div></body></html>",
+        { runScripts: "outside-only" });
+    const w = dom.window;
+    w.MutationObserver = class { observe() {} disconnect() {} };
+    w.ResizeObserver = class { observe() {} disconnect() {} };
+    w.requestAnimationFrame = (cb) => { cb(); return 0; };
+    w.cancelAnimationFrame = () => {};
+    let intervalCb = null;
+    w.setInterval = (cb) => { intervalCb = cb; return 1; };
+    w.clearInterval = () => {};
+    const logs = [];
+    w.console = { info: (m) => logs.push(String(m)), warn: () => {}, error: () => {} };
+    const result = w.eval(`(${ce.buildApplyJs("#t >", { keywords: ["No active streams"] })})`);
+    assert.equal(result, "invalid");
+    assert.equal(typeof intervalCb, "function", "the poll must be installed");
+    intervalCb();
+    const kw = () => logs.filter(l => l.indexOf("[ifp-keyword]") !== -1);
+    assert.deepEqual(kw(), ["[ifp-keyword] hit=true"]);
+    w.document.getElementById("t").textContent = "Streaming now";
+    intervalCb();
+    assert.deepEqual(kw(), ["[ifp-keyword] hit=true", "[ifp-keyword] hit=false"]);
+    assert.equal(w.document.getElementById("ifp-miss-banner"), null);
+});
+
 test("clear: emits final [ifp-keyword] hit=false", () => {
     const dom = new JSDOM(
         "<!doctype html><html><body><div id='t'>hi</div></body></html>",

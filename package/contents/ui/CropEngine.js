@@ -578,7 +578,13 @@ const _APPLY_BODY = `(function(sel, opts){
   }
 
   const first = apply();
-  if (first === 'invalid') return first;
+  if (first === 'invalid') {
+    if (compiledKeywords.length === 0) return first;
+    // Exclude keywords must still be evaluated (a selector typo would
+    // otherwise silently keep or lift the tab's exclusion): scan <body> as a
+    // full-page thumbnail does. Still reported to QML as 'invalid' below.
+    sel = '';
+  }
 
   // Robust observer architecture:
   //   - rAF-coalesced re-application: handles burst mutations naturally.
@@ -719,6 +725,7 @@ const _APPLY_BODY = `(function(sel, opts){
   // mark the thumbnail "blank" and arm a retry only for the canvas case.
   return first === 'matched' ? 'matched-and-observing'
        : first === 'canvas-pending' ? 'canvas-pending'
+       : first === 'invalid' ? 'invalid'
        : 'observing';
 })`;
 
