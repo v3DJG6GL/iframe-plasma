@@ -1923,9 +1923,13 @@ PlasmoidItem {
                         // now-Nu/now (user picked absolute timestamps in
                         // Grafana). resolveThumbUrlWith's regex validator
                         // would reject it and log a spurious "rejected
-                        // invalid thumbTimeRange" warning. Skip silently;
-                        // thumb keeps its configured range.
-                        if (newRange === "custom") return;
+                        // invalid thumbTimeRange" warning. Clear the
+                        // override instead, so the thumb falls back to the
+                        // URL's own range rather than keeping a stale preset.
+                        if (newRange === "custom") {
+                            miniView.sessionRangeOverride = "";
+                            return;
+                        }
                         console.debug(Log.thumb, "iframe-plasma[mini-range] idx=" + miniView.ownIndex
                             + " applying override=" + JSON.stringify(newRange));
                         miniView.sessionRangeOverride = newRange;
