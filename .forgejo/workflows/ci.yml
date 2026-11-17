@@ -120,6 +120,7 @@ jobs:
             libkf6wallet-dev libkf6kcmutils-dev libkf6coreaddons-dev \
             libkf6i18n-dev libkf6package-dev libplasma-dev \
             qt6-webengine-dev qt6-webengine-dev-tools \
+            qml6-module-org-kde-iconthemes \
             python3-dbusmock python3-dbus \
             appstream \
             xvfb
