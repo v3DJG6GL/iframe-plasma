@@ -18,9 +18,22 @@
  *                              Returns { row, synthesized: bool } so
  *                              callers know to re-persist.
  *
+ * isRowObject(entry)         — true for a plain-object row; both KCM
+ *                              repopulate loops skip anything else.
+ *
  * Neither function mutates `entry`.
  */
 .pragma library
+
+// The widget never sees a null / string / number / array row
+// (UrlUtils.parseAuthProfiles filters them; parseTabs' isLiveTab rejects
+// them), but the normalisers turn each one into a blank default row. The
+// KCM pages skip them on load and re-persist, so a junk row from a Backup
+// import or hand-edited appletsrc is dropped instead of becoming a
+// visible "Untitled" profile / empty URL card.
+function isRowObject(entry) {
+    return entry !== null && typeof entry === "object" && !Array.isArray(entry);
+}
 
 // Allow-list for thumbIconName. IconPickerDialog emits exactly three
 // shapes (theme name, "bundled:<name>", "file:///<abs path>"; a bare path

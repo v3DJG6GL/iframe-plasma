@@ -55,6 +55,16 @@ TestCase {
     function test_undefinedEntry_yieldsDefaultRow() {
         compare(Schema.normaliseTabRow(undefined), _defaults());
     }
+    // ...but ConfigUrls.repopulate never feeds such a row to the
+    // normaliser: it skips whatever isRowObject rejects (and re-persists),
+    // so a null / string / array row can't become a blank URL card that
+    // the widget's parseTabs would have dropped.
+    function test_isRowObject_rejectsNonObjectRows() {
+        verify(!Schema.isRowObject(null));
+        verify(!Schema.isRowObject("https://x"));
+        verify(!Schema.isRowObject([{ url: "https://x" }]));
+        verify(Schema.isRowObject({ url: "https://x" }));
+    }
 
     // ===== individual field round-trip ==============================
     function test_labelKept() {

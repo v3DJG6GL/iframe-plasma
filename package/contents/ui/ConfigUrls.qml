@@ -132,6 +132,9 @@ KCM.SimpleKCM {
             let mutated = false;
             if (Array.isArray(arr)) {
                 for (const entry of arr) {
+                    // Drop non-object junk (see RowSchema.isRowObject) and
+                    // re-persist so it leaves disk too.
+                    if (!RowSchema.isRowObject(entry)) { mutated = true; continue; }
                     const row = RowSchema.normaliseTabRow(entry);
                     // Detect load-time legacy inference (thumbMode /
                     // popupMode synthesised from selector presence) so the

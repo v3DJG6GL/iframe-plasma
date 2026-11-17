@@ -93,6 +93,9 @@ KCM.SimpleKCM {
             if (!Array.isArray(arr)) return;
             let synthesized = false;
             for (const entry of arr) {
+                // Drop non-object junk (see RowSchema.isRowObject) and
+                // re-persist so it leaves disk too.
+                if (!RowSchema.isRowObject(entry)) { synthesized = true; continue; }
                 const norm = RowSchema.normaliseAuthProfileRow(entry, newUuid);
                 // Re-persist when sanitize actually mutates a stored value,
                 // otherwise an on-disk autheliaHost carrying a ZWSP/bidi byte

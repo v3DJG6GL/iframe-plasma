@@ -291,4 +291,25 @@ TestCase {
         compare(Schema.serialiseAuthProfileRow({ preempt: 1 }).preempt, false);
         compare(Schema.serialiseAuthProfileRow({ preempt: true }).preempt, true);
     }
+
+    // ===== isRowObject: repopulate skips non-object rows ============
+    // ConfigAuth.repopulate drops (and re-persists away) every entry this
+    // rejects. normaliseAuthProfileRow would otherwise turn null / "x" /
+    // 42 / [1] into a blank profile under a fresh UUID, while the widget's
+    // UrlUtils.parseAuthProfiles drops the same rows.
+    function test_isRowObject_data() {
+        return [
+            { tag: "null",   entry: null,          want: false },
+            { tag: "undef",  entry: undefined,     want: false },
+            { tag: "string", entry: "x",           want: false },
+            { tag: "number", entry: 42,            want: false },
+            { tag: "bool",   entry: true,          want: false },
+            { tag: "array",  entry: [1],           want: false },
+            { tag: "empty",  entry: {},            want: true  },
+            { tag: "row",    entry: { id: "a" },   want: true  },
+        ];
+    }
+    function test_isRowObject(d) {
+        compare(Schema.isRowObject(d.entry), d.want);
+    }
 }
