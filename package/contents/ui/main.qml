@@ -206,22 +206,10 @@ PlasmoidItem {
             console.warn(Log.config, "iframe-plasma[thumb] rejected invalid thumbTimeRange=" + range);
             range = "";
         }
-        if (range.length > 0) {
-            // Split off the fragment first: the from/to strip char class `[^&]*`
-            // does not terminate on `#`, so a tab URL with a trailing fragment
-            // (e.g. Grafana's `Share → Direct link` appends `#viewPanel-N`) would
-            // have the second strip greedily eat through the fragment, and the
-            // append would land params after `#`, silently absorbed by Grafana
-            // as fragment text. Same regex-terminator class as Runs #4/#9.
-            const hashIdx = url.indexOf('#');
-            let path = hashIdx === -1 ? url : url.slice(0, hashIdx);
-            const frag = hashIdx === -1 ? "" : url.slice(hashIdx);
-            path = path.replace(/[?&]from=[^&]*/g, function(m) { return m.charAt(0) === '?' ? '?' : ''; });
-            path = path.replace(/[?&]to=[^&]*/g,   function(m) { return m.charAt(0) === '?' ? '?' : ''; });
-            path = path.replace(/\?&/, '?').replace(/[?&]$/, '');
-            const sep = path.indexOf('?') === -1 ? '?' : '&';
-            url = path + sep + 'from=now-' + range + '&to=now' + frag;
-        }
+        // Left as-is when already on `range`: an override equal to the tab's
+        // own range (e.g. the first popup open binding activeTab) must not
+        // re-navigate the thumbnail.
+        url = UrlUtils.withThumbRange(url, range);
         return url.replace(/\$\{theme\}/g, resolveTheme());
     }
 

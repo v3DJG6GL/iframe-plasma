@@ -294,6 +294,34 @@ TestCase {
         compare(U.thumbRangeFor(null, undefined), "");
     }
 
+    // ===== withThumbRange: the thumbnail URL rewrite =================
+    function test_withThumbRange_rewritesOtherRange() {
+        compare(U.withThumbRange("https://g/d/abc/s?orgId=1&from=now-24h&to=now&refresh=1m", "7d"),
+                "https://g/d/abc/s?orgId=1&refresh=1m&from=now-7d&to=now");
+    }
+    function test_withThumbRange_appendsWhenAbsent() {
+        compare(U.withThumbRange("https://g/d/abc/s", "1h"), "https://g/d/abc/s?from=now-1h&to=now");
+        compare(U.withThumbRange("https://g/d/abc/s?orgId=1#viewPanel-2", "1h"),
+                "https://g/d/abc/s?orgId=1&from=now-1h&to=now#viewPanel-2");
+    }
+    function test_withThumbRange_emptyRangeKeepsUrl() {
+        compare(U.withThumbRange("https://g/d/abc/s?from=now-6h&to=now&x=1", ""),
+                "https://g/d/abc/s?from=now-6h&to=now&x=1");
+    }
+    // An override equal to the URL's own range (the first popup open binds
+    // activeTab and reports the tab's range as a pick) moved from/to to the
+    // end, so the thumbnail re-navigated to the range it already showed.
+    function test_withThumbRange_sameRangeLeavesUrlAlone() {
+        const u = "https://g/d/abc/s?orgId=1&from=now-24h&to=now&timezone=browser&refresh=1m";
+        compare(U.withThumbRange(u, "24h"), u);
+        const f = "https://g/d-solo/abc/s?from=now-7d&to=now&panelId=2#frag";
+        compare(U.withThumbRange(f, "7d"), f);
+    }
+    function test_withThumbRange_absoluteOrNonNowToIsRewritten() {
+        compare(U.withThumbRange("https://g/d/abc/s?from=now-24h&to=now-1h", "24h"),
+                "https://g/d/abc/s?from=now-24h&to=now");
+    }
+
     // ===== Picker save: popup isolation restore ======================
     // Replays savePickedSelector's in-place write on a live row and
     // returns whether it must re-apply the popup isolation itself.

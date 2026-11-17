@@ -13,6 +13,7 @@
  * resolveUrl / isGrafanaEmbed) are now one-line forwarders to these.
  */
 .pragma library
+.import "QueryUtils.js" as QueryUtils
 
 // Tab URLs must be http(s). Pasted `data:`, `file:`, `javascript:`, `blob:`
 // etc. would execute in the per-profile cookie/storage origin or read
@@ -309,6 +310,32 @@ function themeChangesAuthKeys(tabs) {
 function thumbRangeFor(tab, overrideRange) {
     if (tab && tab.thumbTimeRange && tab.thumbTimeRange !== "auto") return tab.thumbTimeRange;
     return (overrideRange && overrideRange.length > 0) ? overrideRange : "";
+}
+
+// `url` with its from/to rewritten to `now-<range>` / `now` ("" keeps
+// them). Splits off the fragment first: the from/to strip char class
+// `[^&]*` does not terminate on `#`, so a tab URL with a trailing fragment
+// (e.g. Grafana's `Share → Direct link` appends `#viewPanel-N`) would have
+// the second strip greedily eat through the fragment, and the append would
+// land params after `#`, silently absorbed by Grafana as fragment text.
+// A URL already on `range` comes back unchanged: the rewrite moves from/to
+// to the end of the query, so the string would differ and the thumbnail
+// would re-navigate (flicker, full refetch) for a range it already shows.
+function withThumbRange(url, range) {
+    url = String(url);
+    if (!range) return url;
+    if (QueryUtils.matchTimeRangePreset(QueryUtils.readQuery(url, "from"),
+                                        QueryUtils.readQuery(url, "to")) === range) {
+        return url;
+    }
+    const hashIdx = url.indexOf('#');
+    let path = hashIdx === -1 ? url : url.slice(0, hashIdx);
+    const frag = hashIdx === -1 ? "" : url.slice(hashIdx);
+    path = path.replace(/[?&]from=[^&]*/g, function(m) { return m.charAt(0) === '?' ? '?' : ''; });
+    path = path.replace(/[?&]to=[^&]*/g,   function(m) { return m.charAt(0) === '?' ? '?' : ''; });
+    path = path.replace(/\?&/, '?').replace(/[?&]$/, '');
+    const sep = path.indexOf('?') === -1 ? '?' : '&';
+    return path + sep + 'from=now-' + range + '&to=now' + frag;
 }
 
 // Same heuristic main.qml's toolbar uses to gate Time-range / Refresh
