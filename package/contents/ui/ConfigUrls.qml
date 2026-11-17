@@ -902,10 +902,11 @@ KCM.SimpleKCM {
                         // add-chip button, refresh-interval field).
                         ColumnLayout {
                             Layout.fillWidth: true
-                            visible: thumbMode === "chartOnly"
-                                  || thumbMode === "chartWithAxes"
-                                  || thumbMode === "custom"
-                                  || thumbMode === "fullPanel"
+                            // Same negative test as main.qml's wantLive: an
+                            // unknown stored mode (import, hand edit) still
+                            // renders live and still applies its keywords, so
+                            // the user must be able to see and remove them.
+                            visible: thumbMode !== "text" && thumbMode !== "icon"
                             enabled: !excludeFromRotation
                             spacing: Kirigami.Units.smallSpacing
                             QQC.Label {
