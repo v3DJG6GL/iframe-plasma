@@ -1347,58 +1347,6 @@ PlasmoidItem {
     // Bound expression — re-evaluates on currentTabIndex or repeater.count change.
     property var activeTab: null
 
-    // --- Keyboard shortcuts (scoped to popup-open so panel use isn't grabby) ---
-    // Ctrl+R is the browser muscle-memory chord; StandardKey.Refresh is F5
-    // on Linux/KDE (the platform-conventional reload key). Both bound here
-    // so either works. Some platform themes (generic, qt6ct, gtk3) also put
-    // the literal key in the StandardKey expansion, so this Shortcut holds
-    // two identical entries and every press arrives as activatedAmbiguously;
-    // handle it the same way (one event per press, so no double fire).
-    Shortcut {
-        sequences: ["Ctrl+R", StandardKey.Refresh]
-        enabled: root.expanded
-        onActivated: root._tabReloadRequested(root.currentTabIndex, "soft")
-        onActivatedAmbiguously: root._tabReloadRequested(root.currentTabIndex, "soft")
-    }
-    Shortcut {
-        sequence: "Ctrl+Shift+R"
-        enabled: root.expanded
-        onActivated: root._tabReloadRequested(root.currentTabIndex, "hard")
-    }
-    Shortcut {
-        sequence: "Ctrl+W"
-        enabled: root.expanded
-        onActivated: root.expanded = false
-    }
-    // Ambiguous for the same reason as the reload Shortcut above.
-    Shortcut {
-        sequences: ["Ctrl+Tab", StandardKey.NextChild]
-        enabled: root.expanded && root.tabs.length > 1
-        onActivated: root.setCurrentTab((root.currentTabIndex + 1) % root.tabs.length)
-        onActivatedAmbiguously: root.setCurrentTab((root.currentTabIndex + 1) % root.tabs.length)
-    }
-    Shortcut {
-        sequences: ["Ctrl+Shift+Tab", StandardKey.PreviousChild]
-        enabled: root.expanded && root.tabs.length > 1
-        onActivated: root.setCurrentTab(
-            (root.currentTabIndex - 1 + root.tabs.length) % root.tabs.length)
-        onActivatedAmbiguously: root.setCurrentTab(
-            (root.currentTabIndex - 1 + root.tabs.length) % root.tabs.length)
-    }
-    // Ctrl+1..9 → jump to tab N (Konsole/Dolphin convention).
-    // Instantiator hosts non-Item delegates fine — one Shortcut per index,
-    // each gated on its own slot being populated.
-    Instantiator {
-        model: 9
-        active: root.expanded
-        delegate: Shortcut {
-            required property int index
-            sequence: "Ctrl+" + (index + 1)
-            enabled: root.tabs.length > index
-            onActivated: root.setCurrentTab(index)
-        }
-    }
-
     // Compact representation — when the widget is on a Plasma panel.
     // Renders a live mini-WebEngineView showing one configured tab's URL at
     // panel-slot size. For Grafana URLs (d-solo + kiosk) the chart auto-scales
@@ -2585,6 +2533,62 @@ PlasmoidItem {
         Layout.preferredWidth:  800
         Layout.preferredHeight: 500
         spacing: 0
+
+        // --- Keyboard shortcuts (scoped to popup-open so panel use isn't grabby) ---
+        // They live here, not on root: a Shortcut belongs to the window of
+        // its parent item, and on a panel the fullRepresentation is shown in
+        // its own popup window, which gets every key press. Declared on
+        // root they belonged to the panel window and never fired.
+        // Ctrl+R is the browser muscle-memory chord; StandardKey.Refresh is F5
+        // on Linux/KDE (the platform-conventional reload key). Both bound here
+        // so either works. Some platform themes (generic, qt6ct, gtk3) also put
+        // the literal key in the StandardKey expansion, so this Shortcut holds
+        // two identical entries and every press arrives as activatedAmbiguously;
+        // handle it the same way (one event per press, so no double fire).
+        Shortcut {
+            sequences: ["Ctrl+R", StandardKey.Refresh]
+            enabled: root.expanded
+            onActivated: root._tabReloadRequested(root.currentTabIndex, "soft")
+            onActivatedAmbiguously: root._tabReloadRequested(root.currentTabIndex, "soft")
+        }
+        Shortcut {
+            sequence: "Ctrl+Shift+R"
+            enabled: root.expanded
+            onActivated: root._tabReloadRequested(root.currentTabIndex, "hard")
+        }
+        Shortcut {
+            sequence: "Ctrl+W"
+            enabled: root.expanded
+            onActivated: root.expanded = false
+        }
+        // Ambiguous for the same reason as the reload Shortcut above.
+        Shortcut {
+            sequences: ["Ctrl+Tab", StandardKey.NextChild]
+            enabled: root.expanded && root.tabs.length > 1
+            onActivated: root.setCurrentTab((root.currentTabIndex + 1) % root.tabs.length)
+            onActivatedAmbiguously: root.setCurrentTab((root.currentTabIndex + 1) % root.tabs.length)
+        }
+        Shortcut {
+            sequences: ["Ctrl+Shift+Tab", StandardKey.PreviousChild]
+            enabled: root.expanded && root.tabs.length > 1
+            onActivated: root.setCurrentTab(
+                (root.currentTabIndex - 1 + root.tabs.length) % root.tabs.length)
+            onActivatedAmbiguously: root.setCurrentTab(
+                (root.currentTabIndex - 1 + root.tabs.length) % root.tabs.length)
+        }
+        // Ctrl+1..9 → jump to tab N (Konsole/Dolphin convention).
+        // Instantiator hosts non-Item delegates fine — one Shortcut per index,
+        // each gated on its own slot being populated.
+        Instantiator {
+            model: 9
+            active: root.expanded
+            delegate: Shortcut {
+                required property int index
+                sequence: "Ctrl+" + (index + 1)
+                enabled: root.tabs.length > index
+                onActivated: root.setCurrentTab(index)
+            }
+        }
 
         // Cancel any active picker across all WebTab delegates. Called
         // from root.onExpandedChanged when the popup is collapsing —
