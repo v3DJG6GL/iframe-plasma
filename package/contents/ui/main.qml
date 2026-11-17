@@ -2835,9 +2835,19 @@ PlasmoidItem {
                     // same profile shares that cookie jar and was parked on
                     // the same login page, so all of them reload (on the
                     // shared auth=None jar, only those on the same host).
+                    // Sibling popup tabs parked on the login page ("auth")
+                    // reload too: a Frozen one would otherwise resume on the
+                    // stale "Authentication required" overlay. A Discarded
+                    // one is left alone, it reloads when it is next shown.
                     onAuthSucceeded: {
-                        for (const i of UrlUtils.tabIndicesSharingProfile(root.tabs, index, root.resolveTheme()))
+                        for (const i of UrlUtils.tabIndicesSharingProfile(root.tabs, index, root.resolveTheme())) {
                             root._compactReloadRequested(i);
+                            if (i === index) continue;
+                            const sib = repeater.itemAt(i);
+                            if (sib && sib.loadStatus === "auth" && sib.webView
+                                && sib.webView.lifecycleState !== WebEngineView.LifecycleState.Discarded)
+                                sib.reload();
+                        }
                     }
 
                     // Broadcast reload from the popup toolbar / shortcuts /
