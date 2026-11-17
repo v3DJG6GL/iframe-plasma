@@ -140,6 +140,13 @@ PlasmoidItem {
             Kirigami.Theme.backgroundColor);
     }
 
+    // The interceptor keys come from the theme-resolved URL, so a ${theme}
+    // placeholder in the HOST changes them when the theme flips (colour
+    // scheme or themeMode). The views re-navigate through their url
+    // bindings; re-prime so the new host carries its header.
+    readonly property string _resolvedTheme: resolveTheme()
+    on_ResolvedThemeChanged: root.primeAuthProfiles()
+
     function resolveUrl(tab) {
         if (!tab || !tab.url) return "about:blank";
         return UrlUtils.substituteTheme(tab.url, resolveTheme());
