@@ -185,6 +185,16 @@ KCM.SimpleKCM {
             visible: !page.kwalletAvailable
             text: i18n("KDE Wallet integration unavailable — build the bundled C++ plugin with cmake to enable secure password storage. Without it, secrets are not persisted (you'd need to re-enter them after every plasmashell restart).")
         }
+        // A staged secret is only written on Apply (saveConfig); without
+        // this the pill's "Saved" was the last word on a write that failed.
+        Kirigami.InlineMessage {
+            Layout.fillWidth: true
+            type: Kirigami.MessageType.Error
+            visible: page._secretWriteFailures > 0
+            text: i18np("KDE Wallet did not store %1 secret. Check that the wallet is enabled and unlocked, then enter it again.",
+                        "KDE Wallet did not store %1 secrets. Check that the wallet is enabled and unlocked, then enter them again.",
+                        page._secretWriteFailures)
+        }
         Kirigami.InlineMessage {
             Layout.fillWidth: true
             type: Kirigami.MessageType.Information
@@ -393,7 +403,7 @@ KCM.SimpleKCM {
                             checkable: true
                         }
                         // Transient capture-confirmation pill. A wallet
-                        // write that fails on Apply is logged by saveConfig.
+                        // write that fails on Apply shows in the header.
                         HintPill {
                             id: savedHint
                             iconSource: "emblem-success"
@@ -501,6 +511,8 @@ KCM.SimpleKCM {
     // entry, so the latest map per profile wins. Reassigned, not mutated, so
     // hasStoredSecret re-evaluates.
     property var _pendingSecretWrites: ({})
+    // setMap failures of the last saveConfig(), shown in the header.
+    property int _secretWriteFailures: 0
     function stageSecretWrite(profileId, map) {
         const next = Object.assign({}, _pendingSecretWrites);
         next[profileId] = map;
@@ -519,12 +531,15 @@ KCM.SimpleKCM {
         }
         // Writes first, then removals; a profile deleted after its secret was
         // typed is skipped here, the removal below covers it.
+        let failed = 0;
         for (const id of Object.keys(writes)) {
             if (ids.indexOf(id) >= 0) continue;
             if (!authSupport.setMap(authSupport.profileKey(id), writes[id])) {
+                failed++;
                 console.warn(Log.auth, "iframe-plasma[auth] could not write the wallet entry of profile", id);
             }
         }
+        _secretWriteFailures = failed;
         // Cleared only after the writes: this reassignment is what re-runs
         // each card's hasStoredSecret, which must then see the new entries.
         _pendingSecretWrites = ({});
