@@ -380,6 +380,16 @@ KCM.SimpleKCM {
                             inputMethodHints: Qt.ImhSensitiveData | Qt.ImhNoPredictiveText | Qt.ImhNoAutoUppercase
                             placeholderText: card.hasStoredSecret ? i18n("(stored — type to replace)")
                                                                   : i18n("(not set)")
+                            // Probe on focus too: the editingFinished probe
+                            // below runs on the same OK / Return press that
+                            // closes the dialog, so its red pill is never
+                            // seen there. Showing it here warns before the
+                            // secret is typed.
+                            onActiveFocusChanged: {
+                                if (!activeFocus || !page.authSupport) return;
+                                page.authSupport.has(page.authSupport.profileKey(card.id));
+                                if (!page.authSupport.isWalletReady()) failedHint.show();
+                            }
                             onEditingFinished: {
                                 if (text.length === 0) return;
                                 if (!page.authSupport) return;
