@@ -2189,12 +2189,11 @@ PlasmoidItem {
                     // root.setRuntimeExcluded map so the next cycleTimer
                     // tick can skip this tab. The receiver dedupes by
                     // current value, so duplicate emits (re-apply after
-                    // reload) are free.
-                    const kw = safe.indexOf('[ifp-keyword]');
-                    if (kw !== -1) {
-                        const hit = safe.indexOf('hit=true', kw) !== -1;
+                    // reload) are free. Only state lines count: other
+                    // [ifp-keyword] diagnostics (bad regex) are ignored.
+                    const hit = CropEngine.parseKeywordState(safe);
+                    if (hit !== null)
                         root.setRuntimeExcluded(miniView.ownIndex, hit);
-                    }
                 }
 
                 // True for a crop selector, and also for a selector-less

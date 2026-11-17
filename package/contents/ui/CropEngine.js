@@ -991,6 +991,15 @@ function needsEngine(selector, keywords) {
         || (Array.isArray(keywords) && keywords.length > 0);
 }
 
+// Parse one console line for the engine's keyword exclusion state: true or
+// false for a '[ifp-keyword] hit=…' state line, null for anything else. The
+// same tag also prefixes diagnostics such as the bad-regex warning, which
+// must not move the exclusion map.
+function parseKeywordState(message) {
+    const m = /\[ifp-keyword\] hit=(true|false)\b/.exec(String(message));
+    return m ? m[1] === "true" : null;
+}
+
 function buildClearJs() {
     return _CLEAR_BODY;
 }

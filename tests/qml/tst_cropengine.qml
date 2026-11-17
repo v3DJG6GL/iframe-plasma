@@ -83,6 +83,18 @@ TestCase {
         verify(!CropEngine.needsEngine(undefined, null));
     }
 
+    function test_parseKeywordState_onlyStateLines() {
+        compare(CropEngine.parseKeywordState("[ifp-keyword] hit=true"), true);
+        compare(CropEngine.parseKeywordState("[ifp-keyword] hit=false"), false);
+        // The engine's bad-regex warning shares the tag but is not a state
+        // report: read as hit=false it dropped a sticky exclusion.
+        compare(CropEngine.parseKeywordState(
+            "[ifp-keyword] bad regex \"/(down/\": Invalid regular expression"), null);
+        compare(CropEngine.parseKeywordState("[ifp-keyword] hit=trueish"), null);
+        compare(CropEngine.parseKeywordState("[ifp-thumb] CROP 10x10"), null);
+        compare(CropEngine.parseKeywordState(""), null);
+    }
+
     function test_iifeReturn_propagatesCanvasPending() {
         const js = CropEngine.buildApplyJs(".u-wrap > canvas", {});
         // The top-level return distinguishes canvas-pending from the
