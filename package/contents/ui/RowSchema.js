@@ -20,6 +20,9 @@
  *
  * isRowObject(entry)         — true for a plain-object row; both KCM
  *                              repopulate loops skip anything else.
+ * tabRowNeedsRewrite(entry, row)
+ *                            — true when ConfigUrls must re-persist the
+ *                              row it loaded (row = normaliseTabRow(entry)).
  *
  * Neither function mutates `entry`.
  */
@@ -176,6 +179,25 @@ function normaliseTabRow(entry) {
         popupMode:            pmode,
         popupSelector:        psel,
     };
+}
+
+// True when the KCM shows `row` (= normaliseTabRow(entry)) differently
+// from what is on disk, so the load must re-persist it. main.qml reads
+// urlsJson raw and sanitises some fields its own way (an unknown
+// thumbScaleMode renders as stretch, a numeric keyword stays active), so
+// a value the KCM normalised but did not save would render one way in
+// the widget and silently change on the next unrelated Apply.
+// A missing thumbMode / popupMode counts too (pre-0.5.0 rows); any other
+// missing field does not, because main.qml's fallback for it is the same
+// default, and flagging it would mark older saved configs dirty on open.
+function tabRowNeedsRewrite(entry, row) {
+    if ((entry.thumbMode || "") !== row.thumbMode
+     || (entry.popupMode || "") !== row.popupMode) return true;
+    for (const key of TAB_FIELDS) {
+        if (Object.prototype.hasOwnProperty.call(entry, key)
+         && JSON.stringify(entry[key]) !== JSON.stringify(row[key])) return true;
+    }
+    return false;
 }
 
 // Pure serialise of ONE already-normalised tab row to its on-disk shape.

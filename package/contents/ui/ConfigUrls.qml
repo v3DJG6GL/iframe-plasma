@@ -147,21 +147,11 @@ KCM.SimpleKCM {
                     // re-persist so it leaves disk too.
                     if (!RowSchema.isRowObject(entry)) { mutated = true; continue; }
                     const row = RowSchema.normaliseTabRow(entry);
-                    // Detect load-time legacy inference (thumbMode /
-                    // popupMode synthesised from selector presence) so the
-                    // sanitised display is also persisted. Mirror of
-                    // ConfigAuth's synthesized-UUID / autheliaHost gate-
-                    // drop pattern: without this, a pre-0.5.0 entry
-                    // carrying `thumbSelector` but no `thumbMode` is shown
-                    // as "custom" in this KCM, but main.qml:520 + L2076
-                    // both fall back to `entry.thumbMode || "chartOnly"`
-                    // and `popupMode === "custom"` checks raw, so the
-                    // popup slot renders chartOnly and ignores the user's
-                    // selector until any other field is touched.
-                    if ((entry && entry.thumbMode || "") !== row.thumbMode
-                     || (entry && entry.popupMode || "") !== row.popupMode) {
-                        mutated = true;
-                    }
+                    // Persist whatever normalising changed, so the widget
+                    // (which reads urlsJson raw) renders what this page
+                    // shows. Mirror of ConfigAuth's synthesized-UUID /
+                    // autheliaHost gate-drop pattern.
+                    if (RowSchema.tabRowNeedsRewrite(entry, row)) mutated = true;
                     // Adapt the keywords array → JSON string for
                     // ListModel storage (see delegate's required-
                     // property comment); serialize() reverses this.

@@ -168,6 +168,36 @@ TestCase {
         compare(entry.popupMode, row.popupMode);
     }
 
+    // ===== tabRowNeedsRewrite: ConfigUrls' re-persist gate ===========
+    // The gate used to compare only thumbMode / popupMode. A junk value
+    // in another field showed sanitised in the KCM while main.qml kept
+    // rendering the raw one (an unknown scale mode as stretch, a numeric
+    // keyword as an active "42") until an unrelated Apply changed it.
+    function _needsRewrite(entry) {
+        return Schema.tabRowNeedsRewrite(entry, Schema.normaliseTabRow(entry));
+    }
+    function test_rewrite_savedRowUnchanged() {
+        verify(!_needsRewrite(Schema.serialiseTabRow({ url: "https://x" })));
+    }
+    function test_rewrite_missingThumbMode() {
+        verify(_needsRewrite({ url: "https://x", popupMode: "fullPanel" }));
+    }
+    function test_rewrite_missingOtherFieldIgnored() {
+        verify(!_needsRewrite({ url: "https://x", thumbMode: "chartOnly",
+                                popupMode: "fullPanel" }));
+    }
+    function test_rewrite_unknownScaleMode() {
+        verify(_needsRewrite({ url: "https://x", thumbMode: "custom",
+                               popupMode: "fullPanel", thumbScaleMode: "Stretch" }));
+    }
+    function test_rewrite_nonStringKeyword() {
+        verify(_needsRewrite({ url: "https://x", thumbMode: "chartOnly",
+                               popupMode: "fullPanel", thumbExcludeKeywords: [42, "ok"] }));
+    }
+    function test_rewrite_nonStringLabel() {
+        verify(_needsRewrite({ label: 7, thumbMode: "chartOnly", popupMode: "fullPanel" }));
+    }
+
     // ===== thumbIconName allow-list ==================================
     //
     // BackupBridge.importFromFile does not introspect urlsJson contents,
