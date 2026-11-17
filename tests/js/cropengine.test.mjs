@@ -399,6 +399,35 @@ test("isolate: the target is sized by its border box and ignores the page's min 
     }
 });
 
+test("isolate: a target that hides itself is shown", () => {
+    // An inactive carousel slide or a faded-out card carries the opacity or
+    // visibility itself; isolated as is, the crop would be blank.
+    for (const scaleMode of ["stretch", "fit", "original"]) {
+        const dom = new JSDOM(
+            "<!doctype html><html><head><style>" +
+            ".slide{opacity:0;visibility:hidden}" +
+            "</style></head><body><div><div id='t' class='slide'>x</div></div></body></html>",
+            { runScripts: "outside-only" });
+        const w = dom.window;
+        w.MutationObserver = class { observe() {} disconnect() {} takeRecords() { return []; } };
+        w.ResizeObserver = class { observe() {} disconnect() {} };
+        w.requestAnimationFrame = (cb) => { cb(); return 0; };
+        w.cancelAnimationFrame = () => {};
+        w.setInterval = () => 0;
+        w.clearInterval = () => {};
+        w.console = { info: () => {}, warn: () => {}, error: () => {} };
+        const el = w.document.getElementById("t");
+
+        w.eval(`(${ce.buildApplyJs("#t", { scaleMode })})`);
+        assert.equal(w.getComputedStyle(el).opacity, "1", scaleMode);
+        assert.equal(w.getComputedStyle(el).visibility, "visible", scaleMode);
+
+        w.eval(ce.buildClearJs());
+        assert.equal(w.getComputedStyle(el).opacity, "0", scaleMode);
+        assert.equal(w.getComputedStyle(el).visibility, "hidden", scaleMode);
+    }
+});
+
 test("isolate: a match inside an <svg> isolates the outer <svg>", () => {
     // The picker hands back the deepest shape of an SVG chart. position:fixed
     // does not apply to SVG children, and tagging the <g> chain as kept would
