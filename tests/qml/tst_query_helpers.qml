@@ -9,6 +9,23 @@ import "../../package/contents/ui/QueryUtils.js" as Q
 TestCase {
     name: "QueryHelpers"
 
+    // ===== applyRefreshChoice: override kept on a URL re-push =========
+    function test_applyRefreshChoice_noChoice_keepsUrl() {
+        compare(Q.applyRefreshChoice("https://g/d/x?refresh=30s&a=1", ""),
+                "https://g/d/x?refresh=30s&a=1");
+    }
+    function test_applyRefreshChoice_off_stripsRefresh() {
+        compare(Q.applyRefreshChoice("https://g/d/x?theme=dark&refresh=30s", "off"),
+                "https://g/d/x?theme=dark");
+    }
+    function test_applyRefreshChoice_interval_replacesRefresh() {
+        compare(Q.applyRefreshChoice("https://g/d/x?refresh=30s#v", "5m"),
+                "https://g/d/x?refresh=5m#v");
+    }
+    function test_applyRefreshChoice_interval_addsRefresh() {
+        compare(Q.applyRefreshChoice("https://g/d/x", "1m"), "https://g/d/x?refresh=1m");
+    }
+
     // ===== editQuery: insertions =====================================
     function test_editQuery_addToEmptyQuery() {
         compare(Q.editQuery("https://x", { a: "1" }), "https://x?a=1");

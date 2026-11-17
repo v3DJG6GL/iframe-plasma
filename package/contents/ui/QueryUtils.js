@@ -76,6 +76,14 @@ function editQuery(urlStr, updates, logCategory) {
     }
 }
 
+// Apply a toolbar refresh override (WebTab.userRefreshChoice: "" none,
+// "off", or an interval) to a URL being re-pushed into the view, so the
+// reloaded page refreshes the way the chip says. "" leaves the URL as is.
+function applyRefreshChoice(urlStr, choice, logCategory) {
+    if (!choice) return urlStr;
+    return editQuery(urlStr, { refresh: choice === "off" ? null : choice }, logCategory);
+}
+
 function readQuery(urlStr, name) {
     try {
         const hashIdx = urlStr.indexOf('#');

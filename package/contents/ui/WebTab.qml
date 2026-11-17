@@ -383,11 +383,17 @@ Item {
     // `${theme}` URL re-resolved on a light/dark switch) has to be pushed
     // to the view by hand. While the binding is intact it does the job
     // itself, and a second assignment here would navigate twice.
+    // A refresh override stays in force across the push: Grafana reads
+    // `refresh` from the initial URL, so pushing the configured one would
+    // restart auto-refresh while the chip still shows the user's choice.
     property bool _urlOverridden: false
     onUrlChanged: {
         const v = tab.webView;
         if (!tab._urlOverridden || !v) return;
-        v.url = /^https?:\/\//i.test(String(tab.url)) ? tab.url : "about:blank";
+        const u = String(tab.url);
+        v.url = /^https?:\/\//i.test(u)
+            ? QueryUtils.applyRefreshChoice(u, tab.userRefreshChoice, Log.load)
+            : "about:blank";
     }
 
     // Manual query-string edit + read — implementations live in
