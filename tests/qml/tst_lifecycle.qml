@@ -423,6 +423,26 @@ TestCase {
         compare(r.pid, 4343);
         compare(r.sinceMs, 90000);
     }
+
+    // ============================================================
+    //  mayRetryRendererCrash — popup and thumbnail crash budget
+    // ============================================================
+    function test_rendererCrash_firstCrashRetries() {
+        verify(P.mayRetryRendererCrash(0, Date.now()));
+    }
+    function test_rendererCrash_withinWindowGivesUp() {
+        verify(!P.mayRetryRendererCrash(1e12, 1e12));
+        verify(!P.mayRetryRendererCrash(1e12, 1e12 + 59999));
+    }
+    function test_rendererCrash_afterWindowRetries() {
+        verify(P.mayRetryRendererCrash(1e12, 1e12 + 60000));
+    }
+    // The wall clock stepped back after a retry: the gap stayed negative,
+    // so every crash until the clock passed the old stamp went unrecovered.
+    function test_rendererCrash_clockSteppedBackRetries() {
+        verify(P.mayRetryRendererCrash(1e12, 1e12 - 1));
+        verify(P.mayRetryRendererCrash(1e12, 1e12 - 3600 * 1000));
+    }
     function test_recycle_frozenDueDiscardsInOneSecond() {
         const a = P.decideOnChange("frozen", false, 5000, 5, 10800, 0, 6000, false, true);
         compare(a.scheduleMs, 1000);

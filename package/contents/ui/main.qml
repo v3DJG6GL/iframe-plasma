@@ -12,6 +12,7 @@ import org.kde.plasma.plasmoid 2.0
 import org.kde.plasma.core as PlasmaCore
 import org.kde.kirigami as Kirigami
 import "./CropEngine.js" as CropEngine
+import "./LifecyclePolicy.js" as LifecyclePolicy
 import "./PageScripts.js" as PageScripts
 import "./RowSchema.js" as RowSchema
 import "./ThumbRetryPolicy.js" as ThumbRetryPolicy
@@ -2008,7 +2009,7 @@ PlasmoidItem {
                         + " exitCode=" + exitCode + " idx=" + miniView.ownIndex);
                     if (status === WebEngineView.NormalTerminationStatus) return;
                     const now = Date.now();
-                    if (now - miniView._lastRenderRetryMs < 60000) {
+                    if (!LifecyclePolicy.mayRetryRendererCrash(miniView._lastRenderRetryMs, now)) {
                         console.warn(Log.load, "iframe-plasma[mini-render] crash within 60s window, not retrying idx="
                             + miniView.ownIndex);
                         miniView.loadStatus = "err";

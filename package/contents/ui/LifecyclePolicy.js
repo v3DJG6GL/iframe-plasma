@@ -101,6 +101,18 @@ function isRecycleDue(rendererSinceMs, recycleAfterSec, now) {
     return (now - rendererSinceMs) >= recycleAfterSec * 1000;
 }
 
+// Whether a crashed renderer is reloaded: once per window, so a crash loop
+// backs off while a later, unrelated crash still recovers. Used by the
+// popup WebTab and the thumbnail. lastRetryMs is the Date.now() of the last
+// retry (0 = none). A negative gap means the wall clock stepped back (NTP
+// fix on a kiosk without RTC): treat the window as expired, or every crash
+// until the clock catches up with the old stamp would stay unrecovered.
+const RENDER_RETRY_WINDOW_MS = 60000;
+function mayRetryRendererCrash(lastRetryMs, nowMs) {
+    const dt = nowMs - lastRetryMs;
+    return !(dt >= 0 && dt < RENDER_RETRY_WINDOW_MS);
+}
+
 // Called from the Timer onTriggered handler. Only invoked when
 // desiredActive === false (the caller's timer wouldn't run otherwise).
 //

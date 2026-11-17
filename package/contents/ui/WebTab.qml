@@ -5,6 +5,7 @@
 import QtQuick
 import QtWebEngine
 import "./CropEngine.js" as CropEngine
+import "./LifecyclePolicy.js" as LifecyclePolicy
 import "./PageScripts.js" as PageScripts
 import "./QueryUtils.js" as QueryUtils
 
@@ -786,7 +787,7 @@ Item {
                     if (status === WebEngineView.NormalTerminationStatus) return;
                     tab.loginInProgress = false;
                     const now = Date.now();
-                    if (now - _lastRenderRetryMs < 60000) {
+                    if (!LifecyclePolicy.mayRetryRendererCrash(_lastRenderRetryMs, now)) {
                         console.warn(Log.load, "iframe-plasma[render] crash within 60s window, not retrying");
                         tab.loadStatus = "err";
                         tab.httpStatus = 0;
