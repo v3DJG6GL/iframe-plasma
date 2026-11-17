@@ -73,6 +73,23 @@ TestCase {
         verify(!Q.isAutheliaHost("https://[::1]/login", "[::1]"));
     }
 
+    function test_idnHost_unicodeConfig_matchesPunycodeUrlHost() {
+        // Off Qt's IDN TLD whitelist, URL.host is the punycode form.
+        verify(Q.isAutheliaHost("https://authélia.example/x", "authélia.example"));
+        verify(Q.isAutheliaHost("https://sso.authélia.example/x", "authélia.example"));
+    }
+
+    function test_idnHost_punycodeConfig_matchesUnicodeUrlHost() {
+        // On a whitelisted TLD, URL.host is the Unicode form.
+        verify(Q.isAutheliaHost("https://authélia.example.ch/x", "xn--authlia-eya.example.ch"));
+        verify(Q.isAutheliaHost("https://xn--authlia-eya.example.ch/x", "authélia.example.ch"));
+    }
+
+    function test_idnHost_portRuleKept() {
+        verify(!Q.isAutheliaHost("https://authélia.example:9000/x", "authélia.example"));
+        verify(Q.isAutheliaHost("https://authélia.example:9000/x", "authélia.example:9000"));
+    }
+
     function test_malformedUrl_returnsFalse() {
         verify(!Q.isAutheliaHost("not a url", "auth.example.com"));
         verify(!Q.isAutheliaHost("https://", "auth.example.com"));

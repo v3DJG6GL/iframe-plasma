@@ -116,8 +116,15 @@ function isAutheliaHost(currentUrl, autheliaHost) {
         // overlay disengaged so the operator types credentials into the
         // bare upstream login page.
         const host = new URL(currentUrl).host;
-        const want = Sanitize.stripTrim(String(autheliaHost).toLowerCase());
+        let want = Sanitize.stripTrim(String(autheliaHost).toLowerCase());
         if (!want) return false;
+        // URL.host is QUrl's display form of an internationalised name:
+        // punycode or Unicode depending on Qt's TLD whitelist. Put an IDN
+        // value through the same parser so either spelling matches. Gated
+        // on IDN so the plain-host, host:port and bare-IPv6 rules stay.
+        if (/[^\x00-\x7f]|(^|\.)xn--/.test(want)) {
+            try { want = new URL("https://" + want).host || want; } catch (e) {}
+        }
         return host === want
             || host.endsWith("." + want);
     } catch (e) {
