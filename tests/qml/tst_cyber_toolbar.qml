@@ -28,6 +28,12 @@ Item {
         name: "CyberToolbar"
         when: windowShown
 
+        function init() {
+            toolbar.isGrafana = true;
+            toolbar.refreshInterval = "";
+            toolbar.fullRepVisible = false;
+        }
+
         // ============================================================
         //  host chip
         // ============================================================
@@ -52,6 +58,24 @@ Item {
             tryVerify(function() { return chip.width >= chip.implicitWidth; });
             verify(!label.truncated);
             verify(chip.mapToItem(toolbar, chip.width, 0).x <= toolbar.width);
+        }
+
+        // ============================================================
+        //  refresh chip pulse
+        // ============================================================
+        function test_refreshChip_nonGrafanaPage_hiddenAndNotPulsing() {
+            toolbar.host = "grafana.example.com";
+            toolbar.fullRepVisible = true;
+            toolbar.refreshInterval = "30s";
+            const chip = findChild(toolbar, "refreshChip");
+            verify(chip !== null);
+            verify(chip.visible);
+            verify(chip.pulseEnabled);
+            // Navigated off the /d/ embed: the chip hides and the pulse
+            // must stop with it, though refreshInterval is still "30s".
+            toolbar.isGrafana = false;
+            verify(!chip.visible);
+            verify(!chip.pulseEnabled);
         }
     }
 }

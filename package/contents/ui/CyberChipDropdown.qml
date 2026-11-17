@@ -67,7 +67,10 @@ Rectangle {
             font.pixelSize: chip.iconPixelSize
             color: chip.iconColor
             SequentialAnimation on opacity {
-                running: chip.pulseEnabled && chip.fullRepVisible
+                // chip.visible too: a hidden chip (e.g. refresh chip on a
+                // non-Grafana page) would otherwise tick the animation
+                // timer for an icon nobody can see.
+                running: chip.pulseEnabled && chip.fullRepVisible && chip.visible
                 loops: Animation.Infinite
                 NumberAnimation { from: 0.55; to: 1.0; duration: 1400; easing.type: Easing.InOutSine }
                 NumberAnimation { from: 1.0; to: 0.55; duration: 1400; easing.type: Easing.InOutSine }

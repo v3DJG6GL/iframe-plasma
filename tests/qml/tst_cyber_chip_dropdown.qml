@@ -92,5 +92,17 @@ Item {
             chip.fullRepVisible = false;
             compare(icon.opacity, 1.0);
         }
+
+        function test_pulseChipHidden_stopsAndRestoresIconOpacity() {
+            const icon = findChild(chip, "chipIcon");
+            chip.fullRepVisible = true;
+            chip.pulseEnabled = true;
+            tryVerify(function() { return icon.opacity < 1.0; });
+            chip.visible = false;
+            compare(icon.opacity, 1.0);
+            // A still-running pulse would move the opacity again.
+            wait(300);
+            compare(icon.opacity, 1.0);
+        }
     }
 }

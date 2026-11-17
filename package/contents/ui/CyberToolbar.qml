@@ -281,6 +281,7 @@ Rectangle {
         // --- Refresh-interval chip dropdown ---------------------------------
         CyberChipDropdown {
             id: refreshChip
+            objectName: "refreshChip"
             visible: tb.isGrafana && tb.host.length > 0
             icon: "⟳"   // distinct from the reload button's ↻
             iconPixelSize: 10
@@ -289,8 +290,10 @@ Rectangle {
             emptyText: i18nc("refresh off", "off")
             tooltipText: i18n("Auto-refresh interval (session only)")
             menu: refreshMenu
-            // Pulse the icon while auto-refresh is on (and chip is shown).
-            pulseEnabled: tb.host.length > 0 && tb.refreshInterval.length > 0
+            // Pulse the icon while auto-refresh is on and the chip is shown
+            // (same gate as `visible` above — refreshInterval survives a
+            // navigation off the Grafana embed).
+            pulseEnabled: tb.isGrafana && tb.host.length > 0 && tb.refreshInterval.length > 0
             fullRepVisible: tb.fullRepVisible
         }
 
