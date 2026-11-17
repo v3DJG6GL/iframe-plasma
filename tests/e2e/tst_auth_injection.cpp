@@ -64,7 +64,10 @@ private Q_SLOTS:
         // Without an interceptor the server never sees the "user:secret"
         // header — only whatever Chromium's auto-retry happened to send
         // (empty creds at best).
+        // An unreachable /_report parses as {}, and "" != EXPECTED_HEADER
+        // would pass without testing anything.
         const QJsonObject rep = fetchReport(fixture.port());
+        QVERIFY2(rep.contains(u"lastAuthorization"_s), "fixture /_report unreachable");
         const QString auth = rep.value(u"lastAuthorization"_s).toString();
         QVERIFY2(auth != EXPECTED_HEADER,
                  qPrintable(u"unexpected interceptor-style header: "_s + auth));
@@ -129,6 +132,7 @@ private Q_SLOTS:
         // Host-mismatch — the interceptor must not have injected our
         // real credentials onto this request.
         const QJsonObject rep = fetchReport(fixture.port());
+        QVERIFY2(rep.contains(u"lastAuthorization"_s), "fixture /_report unreachable");
         const QString auth = rep.value(u"lastAuthorization"_s).toString();
         QVERIFY2(auth != EXPECTED_HEADER,
                  qPrintable(u"interceptor leaked credentials to wrong host: "_s + auth));

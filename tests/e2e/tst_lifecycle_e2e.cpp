@@ -122,7 +122,11 @@ private Q_SLOTS:
         // grace for an already-in-flight fetch landing after the
         // state change committed.
         QTest::qWait(2000);
-        const int afterFreeze = heartbeats(fixture.port());
+        // Read the report directly: an unreachable /_report gives 0 beats,
+        // a negative delta, and a pass that tested nothing.
+        const QJsonObject frozenRep = fetchReport(fixture.port());
+        QVERIFY2(frozenRep.contains(u"heartbeats"_s), "fixture /_report unreachable");
+        const int afterFreeze = frozenRep.value(u"heartbeats"_s).toInt();
         const int frozenDelta = afterFreeze - baseline;
         QVERIFY2(frozenDelta <= 1,
                  qPrintable(QStringLiteral("expected freeze to stall beats; "
