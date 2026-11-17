@@ -734,6 +734,10 @@ const _APPLY_BODY = `(function(sel, opts){
           try { matchedEl = document.querySelector(sel); } catch (e) { matchedEl = null; }
           // Same as apply(): a body/html match means "scan the whole page".
           if (matchedEl === document.body || matchedEl === document.documentElement) matchedEl = null;
+          // Also as apply(): a uPlot canvas with no crop drawn yet is
+          // 'canvas-pending' and scans <body>; the bare canvas has no text,
+          // so scanning it would clear a hit the visible page just reported.
+          if (matchedEl && isUplotCanvas(matchedEl) && !window.__ifpLastCropKey) matchedEl = null;
         }
         runKeywordScan();
       }

@@ -1245,6 +1245,18 @@ test("hidden page: a target that comes back is scanned again", () => {
     assert.deepEqual(t.kw(), ["[ifp-keyword] hit=true", "[ifp-keyword] hit=false"]);
 });
 
+test("hidden page: a pending uPlot canvas scans the body, as apply() does", () => {
+    // jsdom lays nothing out, so the canvas is 0x0 and its crop stays
+    // pending; apply() then scans <body>, and the hidden tick must too.
+    const hidden = { value: true };
+    const t = runKeywordApply(hidden,
+        "<div class='u-wrap'><canvas id='c'></canvas><div class='u-over'></div></div>" +
+        "<p>Datasource error</p>", "#c", ["datasource error"]);
+    t.tickInterval();
+    t.tickInterval();
+    assert.deepEqual(t.kw(), ["[ifp-keyword] hit=true"]);
+});
+
 test("visible page: interval still goes through rAF", () => {
     const hidden = { value: false };
     const t = runKeywordApply(hidden);
