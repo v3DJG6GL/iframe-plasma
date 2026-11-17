@@ -54,6 +54,17 @@ Item {
             verify(label.truncated);
         }
 
+        // The squeezed host must keep its tail (the registrable domain),
+        // or a phishing host reads as the trusted one it starts with.
+        function test_hostChip_crampedToolbar_keepsRegistrableDomain() {
+            toolbar.width = 300;
+            toolbar.host = "login.grafana.example.com.attacker-phish.net";
+            const label = findChild(toolbar, "hostLabel");
+            verify(label !== null);
+            tryVerify(function() { return label.truncated; });
+            compare(label.elide, Text.ElideLeft);
+        }
+
         function test_hostChip_roomyToolbar_showsWholeHost() {
             toolbar.width = 900;
             toolbar.host = "grafana.example.com";

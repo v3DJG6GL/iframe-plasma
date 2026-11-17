@@ -476,7 +476,10 @@ Rectangle {
                                     Math.max(0, hostChip.width - lockGlyph.implicitWidth
                                                 - hostRow.spacing - Theme.chipPadding * 2))
                     text: tb.hostSafe
-                    elide: Text.ElideRight
+                    // Elide from the left, as browsers do: the tail is the
+                    // registrable domain, so "login.grafana.example.com.
+                    // attacker.net" must not shrink to "login.grafana.…".
+                    elide: Text.ElideLeft
                     font.family: Theme.fontBody
                     font.pixelSize: 9
                     color: Theme.fg
