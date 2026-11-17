@@ -185,8 +185,7 @@ const _APPLY_BODY = `(function(sel, opts){
       // transform-style:preserve-3d or content-visibility:auto becomes the
       // containing block of the fixed target below (react-grid-layout cards
       // are transform-positioned), which would pin and clip the target to
-      // that card instead of the viewport. The target itself is left
-      // alone: fit mode writes its inline transform.
+      // that card instead of the viewport.
       'html[data-ifp-isolate="1"] [data-ifp-keep="1"]{transform:none!important;translate:none!important;rotate:none!important;scale:none!important;filter:none!important;backdrop-filter:none!important;contain:none!important;will-change:auto!important;perspective:none!important;transform-style:flat!important;content-visibility:visible!important;}',
       // Target placement: three scale-mode variants. The element is
       // always positioned fixed at the viewport top-left and elevated
@@ -208,9 +207,14 @@ const _APPLY_BODY = `(function(sel, opts){
       // All three are gated on data-ifp-isolate as well: a selector miss
       // drops only that attribute, and a former target still in the page
       // must then fall back into the normal flow instead of covering it.
-      'html[data-ifp-isolate="1"][data-ifp-scale="stretch"] [data-ifp-target="1"],html[data-ifp-isolate="1"]:not([data-ifp-scale]) [data-ifp-target="1"]{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:100vw!important;max-height:100vh!important;margin:0!important;z-index:2147483647!important;overflow:auto!important;}',
-      'html[data-ifp-isolate="1"][data-ifp-scale="fit"] [data-ifp-target="1"]{position:fixed!important;top:0!important;left:0!important;margin:0!important;z-index:2147483647!important;overflow:auto!important;}',
-      'html[data-ifp-isolate="1"][data-ifp-scale="original"] [data-ifp-target="1"]{position:fixed!important;top:0!important;left:0!important;margin:0!important;z-index:2147483647!important;overflow:auto!important;}'
+      // The target's own transform/translate/rotate/scale is dropped too: an
+      // element placed by one (translate(-50%,-50%) centering, a
+      // react-grid-layout item) would otherwise be shifted off the viewport.
+      // Fit mode leaves 'transform' out of its rule because applyFitTransform
+      // owns it inline (an !important sheet value would beat the scale).
+      'html[data-ifp-isolate="1"][data-ifp-scale="stretch"] [data-ifp-target="1"],html[data-ifp-isolate="1"]:not([data-ifp-scale]) [data-ifp-target="1"]{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:100vw!important;max-height:100vh!important;margin:0!important;z-index:2147483647!important;overflow:auto!important;transform:none!important;translate:none!important;rotate:none!important;scale:none!important;}',
+      'html[data-ifp-isolate="1"][data-ifp-scale="fit"] [data-ifp-target="1"]{position:fixed!important;top:0!important;left:0!important;margin:0!important;z-index:2147483647!important;overflow:auto!important;translate:none!important;rotate:none!important;scale:none!important;}',
+      'html[data-ifp-isolate="1"][data-ifp-scale="original"] [data-ifp-target="1"]{position:fixed!important;top:0!important;left:0!important;margin:0!important;z-index:2147483647!important;overflow:auto!important;transform:none!important;translate:none!important;rotate:none!important;scale:none!important;}'
     ].join('');
     (document.head||document.documentElement).appendChild(s);
   }
@@ -410,7 +414,10 @@ const _APPLY_BODY = `(function(sel, opts){
     if (s <= 1.0001) {
       // Content already overflows or matches the viewport — leave the
       // element at its natural box; overflow:auto on the CSS rule will
-      // surface scrollbars on the rare oversize case.
+      // surface scrollbars on the rare oversize case. The page's own
+      // transform would still shift it off the viewport; teardown puts the
+      // saved one back.
+      el.style.transform = 'none';
       window.__ifpFitTarget = el;
       forgetOwnMutations();
       return;

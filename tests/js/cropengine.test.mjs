@@ -285,6 +285,57 @@ test("isolate: a kept ancestor's individual transform, preserve-3d and content-v
     }
 });
 
+test("isolate: the target's own transform does not shift it off the viewport", () => {
+    // translate(-50%,-50%) centering, or a grid item placed by translate.
+    for (const scaleMode of ["stretch", "fit", "original"]) {
+        const dom = new JSDOM(
+            "<!doctype html><html><head><style>" +
+            ".t{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);" +
+            "translate:10px 5px;rotate:1deg;scale:1.1}" +
+            "</style></head><body><div><div id='t' class='t'>x</div></div></body></html>",
+            { runScripts: "outside-only" });
+        const w = dom.window;
+        w.MutationObserver = class { observe() {} disconnect() {} takeRecords() { return []; } };
+        w.ResizeObserver = class { observe() {} disconnect() {} };
+        w.requestAnimationFrame = (cb) => { cb(); return 0; };
+        w.cancelAnimationFrame = () => {};
+        w.setInterval = () => 0;
+        w.clearInterval = () => {};
+        w.console = { info: () => {}, warn: () => {}, error: () => {} };
+        // jsdom has no layout; content larger than the viewport keeps fit
+        // mode at its natural size (no inline scale).
+        Object.defineProperty(w.Element.prototype, "scrollWidth", { configurable: true, get: () => 5000 });
+        Object.defineProperty(w.Element.prototype, "scrollHeight", { configurable: true, get: () => 5000 });
+        const el = w.document.getElementById("t");
+
+        w.eval(`(${ce.buildApplyJs("#t", { scaleMode })})`);
+        const cs = w.getComputedStyle(el);
+        assert.equal(cs.translate, "none", scaleMode);
+        assert.equal(cs.rotate, "none", scaleMode);
+        assert.equal(cs.scale, "none", scaleMode);
+        // Fit mode owns `transform` inline (scale, or 'none' at natural size).
+        if (scaleMode === "fit") assert.equal(el.style.transform, "none", scaleMode);
+        else assert.equal(cs.transform, "none", scaleMode);
+
+        w.eval(ce.buildClearJs());
+        assert.notEqual(w.getComputedStyle(el).transform, "none", scaleMode);
+        assert.equal(el.style.transform, "", scaleMode);
+    }
+});
+
+test("fit: at natural size the page's inline transform is neutralised, and restored on clear", () => {
+    // Content larger than the viewport: s <= 1, no scale written.
+    const t = runFitApply("transform:translate(400px, 500px)");
+    t.size.cw = 800;
+    t.size.ch = 600;
+    t.tick();
+    assert.equal(t.el.style.transform, "none");
+    t.tick();
+    assert.equal(t.el.style.transform, "none");
+    t.w.eval(ce.buildClearJs());
+    assert.equal(t.el.style.transform, "translate(400px, 500px)");
+});
+
 test("apply: re-injection clears previous data-ifp-keep markers", () => {
     const dom = new JSDOM(
         "<!doctype html><html><body><section id='a'><div id='t1'/></section><article id='b'><div id='t2'/></article></body></html>",
