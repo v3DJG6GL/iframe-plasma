@@ -51,10 +51,21 @@ const _TEARDOWN_BODY = `
     // Puts back the inline styles the page itself had on a fit-mode target
     // (saved in __ifpFitOrig before the first scale): a grid item positioned
     // by its own inline transform/width/height must get those back, not ''.
+    // A property that no longer holds what we last wrote (__ifpFitWrote) was
+    // rewritten by the page during the crop (react-grid-layout moves and
+    // resizes its items on a container resize): that value is the page's
+    // own now, so it replaces the stale one in the snapshot.
     var _ifpFitRestore = function(t) {
         if (!t || !t.style) return;
         var o = t.__ifpFitOrig || {};
+        var w = t.__ifpFitWrote;
         try {
+            if (w && t.__ifpFitOrig) {
+                ['transform', 'transformOrigin', 'width', 'height'].forEach(function(p) {
+                    if (t.style[p] !== w[p]) o[p] = t.style[p];
+                });
+            }
+            t.__ifpFitWrote = null;
             t.style.transform = o.transform || '';
             t.style.transformOrigin = o.transformOrigin || '';
             t.style.width = o.width || '';
@@ -372,6 +383,17 @@ const _APPLY_BODY = `(function(sel, opts){
     var wo = window.__ifpThumbWrapObserver;
     if (wo) { try { wo.takeRecords(); } catch (e) {} }
   }
+  // Records the inline values the fit target holds after our writes, read
+  // back so the browser's normalised form compares equal later; any later
+  // difference is the page's own write (see _ifpFitRestore).
+  function noteFitWrites(el) {
+    el.__ifpFitWrote = {
+      transform: el.style.transform,
+      transformOrigin: el.style.transformOrigin,
+      width: el.style.width,
+      height: el.style.height
+    };
+  }
   // Un-scales the current fit target and forgets it.
   function releaseFitTarget() {
     var t = window.__ifpFitTarget;
@@ -406,7 +428,7 @@ const _APPLY_BODY = `(function(sel, opts){
     var ch = el.scrollHeight;
     var vw = window.innerWidth;
     var vh = window.innerHeight;
-    if (cw <= 0 || ch <= 0 || vw <= 0 || vh <= 0) { forgetOwnMutations(); return; }
+    if (cw <= 0 || ch <= 0 || vw <= 0 || vh <= 0) { noteFitWrites(el); forgetOwnMutations(); return; }
     var s = Math.min(vw / cw, vh / ch);
     var key = (s <= 1.0001) ? 'natural' : (s + '|' + vw + '|' + vh);
     var changed = el.__ifpFitKey !== key;
@@ -418,6 +440,7 @@ const _APPLY_BODY = `(function(sel, opts){
       // transform would still shift it off the viewport; teardown puts the
       // saved one back.
       el.style.transform = 'none';
+      noteFitWrites(el);
       window.__ifpFitTarget = el;
       forgetOwnMutations();
       return;
@@ -429,6 +452,7 @@ const _APPLY_BODY = `(function(sel, opts){
     // viewport-sized output, so the pre-scale box is viewport/s).
     el.style.width  = (vw / s) + 'px';
     el.style.height = (vh / s) + 'px';
+    noteFitWrites(el);
     window.__ifpFitTarget = el;
     forgetOwnMutations();
     // Help responsive widgets (uPlot's ResizeObserver, embedded iframes)

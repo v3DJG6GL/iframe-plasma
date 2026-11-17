@@ -1373,6 +1373,40 @@ test("fit: clear puts the page's own inline styles back", () => {
     assert.equal(t.el.style.transformOrigin, "");
 });
 
+test("fit: inline styles the page rewrites during the crop are what a clear puts back", () => {
+    // react-grid-layout moves and resizes its item on a container resize
+    // while it is cropped; the first-seen values are stale from then on.
+    const t = runFitApply("width:300px;height:200px;transform:translate(10px, 20px)");
+    t.tick();
+    assert.equal(t.el.style.transform, "scale(4)");
+    t.el.style.width = "500px";
+    t.el.style.height = "250px";
+    t.el.style.transform = "translate(40px, 80px)";
+    // The re-apply measures the page's new box, not the old one.
+    const measured = [];
+    Object.defineProperty(t.el, "scrollWidth", { configurable: true,
+        get() { measured.push(this.style.width); return t.size.cw; } });
+    t.tick();
+    assert.deepEqual(measured, ["500px"]);
+    assert.equal(t.el.style.transform, "scale(4)");
+    t.w.eval(ce.buildClearJs());
+    assert.equal(t.el.style.width, "500px");
+    assert.equal(t.el.style.height, "250px");
+    assert.equal(t.el.style.transform, "translate(40px, 80px)");
+    assert.equal(t.el.style.transformOrigin, "");
+});
+
+test("fit: a page rewrite just before a clear is kept too", () => {
+    const t = runFitApply("width:300px;height:200px;transform:translate(10px, 20px)");
+    t.tick();
+    t.el.style.transform = "translate(40px, 80px)";
+    t.w.eval(ce.buildClearJs());
+    assert.equal(t.el.style.transform, "translate(40px, 80px)");
+    // Properties the page left alone get their original values back.
+    assert.equal(t.el.style.width, "300px");
+    assert.equal(t.el.style.height, "200px");
+});
+
 test("fit: a match that moves to another element un-scales the old one", () => {
     const t = runFitApply();
     t.tick();
