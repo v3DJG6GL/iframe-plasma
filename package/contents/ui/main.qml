@@ -2361,7 +2361,15 @@ PlasmoidItem {
 
                     // Post-auth refresh targeted at the compact view only
                     // (the popup tab that authenticated is already current).
+                    // A Discarded view is skipped: waking it here would start
+                    // a renderer for an invisible view, and WebEngine reloads
+                    // it anyway (with the new cookies) on its next landing.
                     function on_CompactReloadRequested(tabIdx) {
+                        if (tabIdx !== miniView.ownIndex) return;
+                        if (miniView.lifecycleState === WebEngineView.LifecycleState.Discarded) {
+                            console.debug(Log.load, "iframe-plasma[compact] post-login reload skipped (discarded) idx=" + tabIdx);
+                            return;
+                        }
                         on_TabReloadRequested(tabIdx, "soft");
                     }
 
