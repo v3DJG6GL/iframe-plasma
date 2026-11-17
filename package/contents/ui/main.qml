@@ -2118,7 +2118,8 @@ PlasmoidItem {
 
                 // Bounded-backoff retry for a failed ("err") or blank-rendered
                 // ("blank") thumbnail. arm() escalates the delay each attempt
-                // and gives up after the schedule is exhausted; the budget is
+                // and gives up after the schedule is exhausted (a failed slot
+                // then falls back to a slow 5 min retry); the budget is
                 // reset once a frame is confirmed, on a URL change, and each time
                 // the auto-cycle lands on this tab (so a permanently-broken URL
                 // backs off instead of being hammered, but a tab the user keeps
@@ -2127,6 +2128,9 @@ PlasmoidItem {
                 Timer {
                     id: thumbRetryTimer
                     repeat: false
+                    // True while running the slow post-exhaustion retry
+                    // (ThumbRetryPolicy.slowRetryMs) instead of the schedule.
+                    property bool slow: false
                     function arm() {
                         const ms = ThumbRetryPolicy.backoffMs(miniView._retryAttempt);
                         if (ms < 0) {
@@ -2139,14 +2143,30 @@ PlasmoidItem {
                             // be skipped for good.
                             if (miniView.loadStatus === "err")
                                 root.setRuntimeExcluded(miniView.ownIndex, false);
+                            // A slot that never gets a landing still heals once
+                            // the outage ends.
+                            const slowMs = ThumbRetryPolicy.slowRetryMs(miniView.loadStatus);
+                            if (slowMs > 0) {
+                                slow = true;
+                                interval = slowMs;
+                                restart();
+                            }
                             return;
                         }
+                        slow = false;
                         interval = ms;
                         miniView._retryAttempt++;
                         restart();
                     }
                     onTriggered: {
-                        if (!ThumbRetryPolicy.shouldFireRetry(miniView.loadStatus,
+                        if (slow) {
+                            if (!ThumbRetryPolicy.shouldFireSlowRetry(miniView.loadStatus,
+                                    miniView.ownIsCurrent, root.compactObservable)) {
+                                // Off screen: wait another round while still failed.
+                                if (ThumbRetryPolicy.slowRetryMs(miniView.loadStatus) > 0) restart();
+                                return;
+                            }
+                        } else if (!ThumbRetryPolicy.shouldFireRetry(miniView.loadStatus,
                                 miniView.ownIsCurrent, root.compactObservable)) return;
                         console.debug(Log.load, "iframe-plasma[mini-retry] attempt=" + miniView._retryAttempt
                             + " idx=" + miniView.ownIndex);

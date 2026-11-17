@@ -26,6 +26,46 @@ TestCase {
     }
 
     // ============================================================
+    //  slowRetryMs / shouldFireSlowRetry
+    // ============================================================
+    function test_slowRetry_onlyFailedSlot() {
+        compare(R.slowRetryMs("err"), 300000);
+        compare(R.slowRetryMs("blank"), -1);
+        compare(R.slowRetryMs("ok"), -1);
+        compare(R.slowRetryMs("loading"), -1);
+    }
+    function test_slowRetry_firesOnlyOnScreen() {
+        verify(R.shouldFireSlowRetry("err", true, true));
+        verify(!R.shouldFireSlowRetry("err", false, true));
+        verify(!R.shouldFireSlowRetry("err", true, false));
+        verify(!R.shouldFireSlowRetry("ok", true, true));
+        verify(!R.shouldFireSlowRetry("loading", true, true));
+    }
+    function test_sequence_failedSlotWithoutLandings_keepsRetrying() {
+        // Replays main.qml with a single tab (no landings) whose host comes
+        // back after the schedule ran out: every load fails until load 6.
+        let attempt = 0;
+        let slow = false;
+        let reloads = 0;
+        let healed = false;
+        for (let load = 0; load < 10 && !healed; load++) {
+            if (load >= 6) { healed = true; break; }
+            // LoadFailed → arm()
+            const ms = R.backoffMs(attempt);
+            if (ms >= 0) { attempt++; slow = false; }
+            else if (R.slowRetryMs("err") > 0) slow = true;
+            else break;                  // nothing armed: stuck on "err"
+            // Timer fires.
+            if (slow ? R.shouldFireSlowRetry("err", true, true)
+                     : R.shouldFireRetry("err", true, true)) reloads++;
+            else break;
+        }
+        verify(healed);
+        compare(attempt, 3);             // the slow retry does not grow it
+        compare(reloads, 6);
+    }
+
+    // ============================================================
     //  attemptAfterLoadSucceeded
     // ============================================================
     function test_loadSucceeded_cropPending_keepsBudget() {

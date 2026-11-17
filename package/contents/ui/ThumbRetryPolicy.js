@@ -20,6 +20,24 @@ function backoffMs(attempt) {
     return (attempt >= 0 && attempt < BACKOFF_MS.length) ? BACKOFF_MS[attempt] : -1;
 }
 
+// Delay of the slow retry a slot falls back to once the schedule is
+// exhausted, or -1 for none. Only a failed ("err") slot gets one: its
+// other recovery path is the per-landing retry, and a single-tab widget,
+// auto-cycle off or a user who never switches tabs gives it no landing,
+// so a transient outage (VPN up late) would show "Failed to load" for
+// good. The slow retry does not grow the attempt counter.
+const SLOW_RETRY_MS = 300000;
+function slowRetryMs(loadStatus) {
+    return loadStatus === "err" ? SLOW_RETRY_MS : -1;
+}
+
+// Whether a due slow retry reloads now. Unlike the bounded schedule it runs
+// without end, so it only reloads the thumbnail on screen; otherwise it
+// waits another round (a landing re-arms the fast schedule anyway).
+function shouldFireSlowRetry(loadStatus, isCurrent, observable) {
+    return slowRetryMs(loadStatus) > 0 && isCurrent && observable;
+}
+
 // Retry counter after a LoadSucceeded. A page that still has to be
 // cropped has not proven it renders yet, so its budget is kept; a page
 // with no crop step is done and gets a fresh budget.
