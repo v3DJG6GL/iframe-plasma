@@ -24,6 +24,10 @@
  *   paramIsOn(u, key, onValues) — whether a query param carries one of
  *                            the values that switch it on.
  *
+ *   kioskIsOn(u) / kioskIsForeign(u) — the Edit dialog's Kiosk switch
+ *                            state, and whether the URL's kiosk value is
+ *                            one to keep verbatim (kiosk=tv).
+ *
  *   splitFragment(u) → [base, "#frag"] — preserves an anchor through
  *                            subsequent stripParam/appendParam ops.
  *
@@ -211,4 +215,35 @@ function paramIsOn(url, key, onValues) {
         return eq !== -1 && kv.substring(0, eq) === key
             && onValues.indexOf(kv.substring(eq + 1)) !== -1;
     });
+}
+
+// Value of the first `kiosk` query param (fragment ignored): null when
+// absent, "" for the bare flag transform() emits.
+function _kioskValue(url) {
+    const base = splitFragment(String(url || ""))[0];
+    const q = base.indexOf("?");
+    if (q === -1) return null;
+    const kvs = base.substring(q + 1).split("&");
+    for (let i = 0; i < kvs.length; i++) {
+        const eq = kvs[i].indexOf("=");
+        if ((eq === -1 ? kvs[i] : kvs[i].substring(0, eq)) === "kiosk")
+            return eq === -1 ? "" : kvs[i].substring(eq + 1);
+    }
+    return null;
+}
+
+// Edit dialog's Kiosk switch: the value, not the key's presence, like
+// paramIsOn. Grafana reads kiosk=0 / kiosk=false as off, so a row with
+// either opened with the switch on and OK rewrote it to a bare `kiosk`.
+function kioskIsOn(url) {
+    const v = _kioskValue(url);
+    return v !== null && v !== "0" && v !== "false";
+}
+
+// A kiosk value the dialog neither emits nor reads as off (legacy
+// kiosk=tv). Edit mode keeps it verbatim while the switch stays on —
+// strip + re-append would silently turn it into full kiosk.
+function kioskIsForeign(url) {
+    const v = _kioskValue(url);
+    return v !== null && ["", "1", "true", "0", "false"].indexOf(v) === -1;
 }

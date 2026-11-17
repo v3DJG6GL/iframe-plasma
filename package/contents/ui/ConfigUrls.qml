@@ -1517,7 +1517,8 @@ KCM.SimpleKCM {
             }
             return {
                 timeRange: tr,
-                kiosk:        /[?&]kiosk(=|&|$)/.test(u),
+                // Value, not presence: kiosk=0 / kiosk=false read as off.
+                kiosk:        GrafanaUrl.kioskIsOn(u),
                 // Any `theme=…` value (literal `light`/`dark` or our
                 // ${theme} sentinel) counts as on — saving will normalize
                 // to ${theme}, overwriting hand-edited literals.
@@ -1534,7 +1535,9 @@ KCM.SimpleKCM {
         // Strip every param the helper manages so onAccepted can cleanly
         // reapply them per the current toggle state. Anything else
         // (panelId, orgId, var-*, dashboard-specific flags) is preserved.
-        function stripManagedParams(url) {
+        // `keepKiosk` leaves every kiosk param in place (a kiosk=tv the
+        // switch still shows on); transform() then appends none.
+        function stripManagedParams(url, keepKiosk) {
             let u = url;
             // `from`/`to` are intentionally NOT stripped: when the combo
             // sits on the head row "(keep URL's range)", `transformUrl`
@@ -1553,7 +1556,7 @@ KCM.SimpleKCM {
             // leading-`?` rewrite so `?kiosk[=v]&other=…` collapses to
             // `?other=…` instead of dropping the leading `?`.
             const [base, frag] = splitFragment(u);
-            let b = base
+            let b = keepKiosk ? base : base
                 .replace(/[?]kiosk(?:=[^&]*)?(?:&|$)/, function(m) {
                     return m.endsWith("&") ? "?" : "";
                 })
@@ -1604,7 +1607,8 @@ KCM.SimpleKCM {
                 // (GrafanaUrl.optsFor), so a /d/ row that still carries
                 // viewPanel stays a full dashboard.
                 const row = listModel.get(editingIndex);
-                const stripped = stripManagedParams(row.url);
+                const stripped = stripManagedParams(row.url,
+                    addKiosk.checked && GrafanaUrl.kioskIsForeign(row.url));
                 const out = transformUrl(stripped);
                 if (!out) return;
                 page._setRowField(editingIndex, "url", out);

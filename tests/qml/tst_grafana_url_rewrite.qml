@@ -454,4 +454,43 @@ TestCase {
         compare(G.paramIsOn("https://g/x", "hideLogo", ["true"]), false);
         compare(G.paramIsOn(null, "hideLogo", ["true"]), false);
     }
+
+    // ===== kioskIsOn / kioskIsForeign (Edit dialog Kiosk switch) =====
+    // Value, not presence: kiosk=0 / kiosk=false opened the switch on and
+    // an unrelated-edit OK rewrote them to a bare (on) `kiosk`.
+    function test_kioskIsOn_valueRead() {
+        compare(G.kioskIsOn("https://g/d-solo/a/b?panelId=2&kiosk"), true);
+        compare(G.kioskIsOn("https://g/d-solo/a/b?kiosk&panelId=2"), true);
+        compare(G.kioskIsOn("https://g/d-solo/a/b?kiosk=1"), true);
+        compare(G.kioskIsOn("https://g/d-solo/a/b?kiosk=true"), true);
+        compare(G.kioskIsOn("https://g/d-solo/a/b?kiosk=tv"), true);
+        compare(G.kioskIsOn("https://g/d-solo/a/b?panelId=2&kiosk=0"), false);
+        compare(G.kioskIsOn("https://g/d-solo/a/b?panelId=2&kiosk=false"), false);
+        compare(G.kioskIsOn("https://g/d-solo/a/b?panelId=2"), false);
+    }
+    function test_kioskIsOn_exactKeyAndFragmentIgnored() {
+        compare(G.kioskIsOn("https://g/x?kioskMode=tv"), false);
+        compare(G.kioskIsOn("https://kiosk.example.com/x?a=1"), false);
+        compare(G.kioskIsOn("https://g/x?a=1#kiosk"), false);
+        compare(G.kioskIsOn(null), false);
+    }
+    // kiosk=tv is kept verbatim while the switch stays on; the values the
+    // dialog itself writes or reads as off are normalised as before.
+    function test_kioskIsForeign() {
+        compare(G.kioskIsForeign("https://g/x?kiosk=tv"), true);
+        compare(G.kioskIsForeign("https://g/x?kiosk"), false);
+        compare(G.kioskIsForeign("https://g/x?kiosk=1"), false);
+        compare(G.kioskIsForeign("https://g/x?kiosk=true"), false);
+        compare(G.kioskIsForeign("https://g/x?kiosk=0"), false);
+        compare(G.kioskIsForeign("https://g/x?kiosk=false"), false);
+        compare(G.kioskIsForeign("https://g/x?a=1"), false);
+        compare(G.kioskIsForeign("https://g/x?a=1#kiosk=tv"), false);
+    }
+    // With kiosk=tv left in place, transform() must not append a second
+    // (bare) kiosk — that is what makes keepKiosk in stripManagedParams safe.
+    function test_transform_keepsExistingKioskTv() {
+        const opts = G.optsFor(true, { kiosk: true });
+        compare(G.transform("https://g/d-solo/a/b?panelId=2&kiosk=tv", opts),
+                "https://g/d-solo/a/b?panelId=2&kiosk=tv");
+    }
 }
