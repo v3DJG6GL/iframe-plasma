@@ -23,8 +23,9 @@
 .pragma library
 
 // Allow-list for thumbIconName. IconPickerDialog emits exactly three
-// shapes (theme name, "bundled:<name>", "file:///<abs path>"); anything
-// else can only arrive via attacker-crafted backup JSON (BackupBridge
+// shapes (theme name, "bundled:<name>", "file:///<abs path>"; a bare path
+// from KIconDialog's own Browse… goes through iconNameFromThemePick
+// first); anything else can only arrive via attacker-crafted backup JSON (BackupBridge
 // does not introspect urlsJson contents). Without this gate, a payload
 // like "http://attacker/p?h=KIOSK-A" would reach Kirigami.Icon, which
 // actually issues outbound HTTP via QQmlEngine::networkAccessManager —
@@ -46,6 +47,16 @@ function sanitizeIconName(name) {
     // slip through; no `:` or `/` anywhere, so no URL scheme can form.
     if (/^[A-Za-z0-9][A-Za-z0-9._+-]*$/.test(s)) return s;
     return "";
+}
+
+// KIconDialog (the "Theme icons" tab) reports a theme pick as a bare name
+// but a file chosen through its Browse… button as a bare absolute path.
+// sanitizeIconName rejects the path, which silently dropped that pick on
+// save, so turn it into the percent-encoded file URL the File tab yields.
+function iconNameFromThemePick(picked) {
+    const s = String(picked || "");
+    if (s.charAt(0) !== "/") return s;
+    return "file://" + s.split("/").map(encodeURIComponent).join("/");
 }
 
 // Three explicit modes for how the panel-slot thumbnail sizes the

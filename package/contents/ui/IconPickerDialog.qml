@@ -22,6 +22,7 @@ import QtQuick.Dialogs
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.kde.iconthemes as KIconThemes
+import "./RowSchema.js" as RowSchema
 
 Kirigami.Dialog {
     id: dialog
@@ -158,11 +159,12 @@ Kirigami.Dialog {
 
     // Wrapped KDE picker — instantiated inside the dialog so its signal
     // can be forwarded as our own iconNameChanged. Stores the bare theme
-    // name with no prefix.
+    // name with no prefix, or a file URL for a file picked via its Browse….
     KIconThemes.IconDialog {
         id: themePicker
         onIconNameChanged: (picked) => {
-            if (picked && picked.length > 0) dialog._emit(picked);
+            if (picked && picked.length > 0)
+                dialog._emit(RowSchema.iconNameFromThemePick(picked));
         }
     }
 

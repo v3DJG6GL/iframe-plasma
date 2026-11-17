@@ -225,6 +225,23 @@ TestCase {
         // What a real pick of such a file looks like: percent-encoded.
         compare(Schema.sanitizeIconName("file:///tmp/a%3Cb%3E.svg"), "file:///tmp/a%3Cb%3E.svg");
     }
+    function test_iconName_themePickPathBecomesFileUrl() {
+        // KIconDialog's Browse… hands back a bare absolute path, which the
+        // allow-list rejects; the picker must store it as a file URL.
+        const v = Schema.iconNameFromThemePick("/home/op/icons/x.svg");
+        compare(v, "file:///home/op/icons/x.svg");
+        compare(Schema.serialiseTabRow({ thumbIconName: v }).thumbIconName,
+                "file:///home/op/icons/x.svg");
+    }
+    function test_iconName_themePickPathIsPercentEncoded() {
+        const v = Schema.iconNameFromThemePick("/tmp/my icons/a<b>#1.svg");
+        compare(v, "file:///tmp/my%20icons/a%3Cb%3E%231.svg");
+        compare(Schema.sanitizeIconName(v), v);
+    }
+    function test_iconName_themePickNameUnchanged() {
+        compare(Schema.iconNameFromThemePick("applications-internet"), "applications-internet");
+        compare(Schema.iconNameFromThemePick("text-x-c++src"), "text-x-c++src");
+    }
     function test_iconName_leadingDotRejected() {
         // FreeDesktop spec disallows; also blocks a stray "://" slipping past.
         compare(Schema.normaliseTabRow({ thumbIconName: ".hidden" }).thumbIconName, "");
