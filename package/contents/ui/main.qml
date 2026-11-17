@@ -1426,7 +1426,9 @@ PlasmoidItem {
             // the const-assigned read, mutating t.label / t.thumbShowLabel
             // in place leaves the overlay painting the pre-Apply value.
             const _tick = root._tabsMetadataSerial;
-            if (previewTabIdx < 0) return "";
+            // No label over the fallback icon (preview off, or no eligible
+            // tab): it belongs to a thumbnail that is not being shown.
+            if (!slotShowsContent) return "";
             const t = root.tabs[previewTabIdx];
             if (!t) return "";
             // Per-URL opt-IN for the label overlay. Folding this into
