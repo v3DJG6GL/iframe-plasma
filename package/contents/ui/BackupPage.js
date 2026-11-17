@@ -38,7 +38,8 @@ function importOutcome(before, wanted, after) {
 //              are the persisted ones) or "unusable" (the file carried
 //              settings but every one was skipped, so nothing was compared
 //              and "matches" would claim a match for a discarded file)
-//   warning  — not a plain success: something was skipped, or the
+//   warning  — not a plain success: something was skipped, a value was
+//              adjusted to fit (the file's value was replaced, too), or the
 //              revert-point snapshot reported an error / caveat
 function importBanner(result, outcome) {
     const r = result || {};
@@ -47,7 +48,9 @@ function importBanner(result, outcome) {
     let headline;
     if (used === 0 && skipped > 0) headline = "unusable";
     else headline = (outcome && outcome.changed) ? "changed" : "matches";
-    return { headline: headline, warning: skipped > 0 || !!(r.error || r.warning) };
+    const adjusted = (outcome && outcome.adjusted) ? outcome.adjusted.length : 0;
+    return { headline: headline,
+             warning: skipped > 0 || adjusted > 0 || !!(r.error || r.warning) };
 }
 
 // File URL of `fileName` inside the folder `folderUrl` ("file:///…", as

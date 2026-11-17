@@ -101,6 +101,18 @@ TestCase {
         compare(out.warning, false);
     }
 
+    // An out-of-range value clamped back to the persisted one: nothing
+    // changed and nothing was skipped, but the file's value was replaced,
+    // so the banner must not be a green success.
+    function test_importBanner_clampedToPersisted_warning() {
+        const result = { ok: true, config: { zoomFactor: 9999 }, skipped: [],
+                         error: "", warning: "" };
+        const out = B.importBanner(result, B.importOutcome({ zoomFactor: 500 },
+                                                           { zoomFactor: 9999 },
+                                                           { zoomFactor: 500 }));
+        compare(out.warning, true);
+    }
+
     function test_importBanner_snapshotCaveat_warning() {
         const result = { ok: true, config: { zoomFactor: 150 }, skipped: [],
                          error: "", warning: "perms" };
