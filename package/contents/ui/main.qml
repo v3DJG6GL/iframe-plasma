@@ -932,23 +932,16 @@ PlasmoidItem {
     function primeAuthProfiles() {
         if (!root.authSupport) return;
         root._basicAuthAnswered = ({});
-        // Group hosts per profile-in-use.
-        const profilesInUse = {};   // id -> { profile, hosts: [] }
-        for (const t of root.tabs) {
-            if (!t.authProfileId || !t.url) continue;
-            // Resolve ${theme} (and any future placeholders) before parsing:
-            // `new URL("https://${theme}.example.com/")` throws because
-            // `$`/`{`/`}` are invalid in a WHATWG host, and the inner catch
-            // would silently `continue` — the tab would never get its host
-            // added to profilesInUse, so applyProfile would not register
-            // a header for it and the tab would land unauthenticated.
-            let host;
-            try { host = UrlUtils.authKey(root.resolveUrl(t)); } catch (e) { continue; }
-            const p = root.profileById(t.authProfileId);
-            if (!p) continue;
-            if (!profilesInUse[p.id]) profilesInUse[p.id] = { profile: p, hosts: [] };
-            if (!profilesInUse[p.id].hosts.includes(host)) profilesInUse[p.id].hosts.push(host);
-        }
+        // Group hosts per profile-in-use (id -> { profile, hosts: [] }).
+        // Resolve ${theme} (and any future placeholders) before parsing:
+        // `new URL("https://${theme}.example.com/")` throws because
+        // `$`/`{`/`}` are invalid in a WHATWG host, and the throw would
+        // skip the tab — its host would never get added to profilesInUse,
+        // so applyProfile would not register a header for it and the tab
+        // would land unauthenticated.
+        const profilesInUse = UrlUtils.groupAuthHosts(root.tabs,
+            id => root.profileById(id),
+            t => UrlUtils.authKey(root.resolveUrl(t)));
         // Reset every per-profile interceptor (covers profiles whose URLs got
         // reassigned away — old host→header entries shouldn't outlive the
         // reassignment).

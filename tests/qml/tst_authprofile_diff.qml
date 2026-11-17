@@ -110,6 +110,46 @@ TestCase {
             U.authProfileBodies([{ id: "hasOwnProperty" }])), []);
     }
 
+    // ===== groupAuthHosts (primeAuthProfiles' grouping) ==============
+    function _group(tabs, profiles) {
+        const byId = Object.create(null);
+        for (const p of profiles) byId[p.id] = p;
+        return U.groupAuthHosts(tabs, id => byId[id], t => U.authKey(t.url));
+    }
+    function test_group_hostsPerProfile() {
+        const g = _group([
+            { url: "https://a.example/x", authProfileId: "p" },
+            { url: "https://a.example/y", authProfileId: "p" },
+            { url: "https://b.example/", authProfileId: "p" },
+            { url: "https://c.example/", authProfileId: "" },
+            { url: "https://d.example/", authProfileId: "missing" }
+        ], [{ id: "p" }]);
+        compare(Object.keys(g), ["p"]);
+        compare(g.p.hosts, [U.authKey("https://a.example/x"), U.authKey("https://b.example/")]);
+    }
+    function test_group_hostThrowSkipsOnlyThatTab() {
+        const g = U.groupAuthHosts([
+            { url: "bad", authProfileId: "p" },
+            { url: "https://a.example/", authProfileId: "p" }
+        ], id => ({ id: id }), t => {
+            if (t.url === "bad") throw new Error("unparsable");
+            return U.authKey(t.url);
+        });
+        compare(g.p.hosts, [U.authKey("https://a.example/")]);
+    }
+    // A plain {} map read an inherited member for these ids and threw on
+    // `.hosts`, which aborted the priming of every profile.
+    function test_group_prototypeNameIdsAreOwnKeys() {
+        const ids = ["constructor", "toString", "__proto__", "valueOf", "hasOwnProperty"];
+        const tabs = [{ url: "https://good.example/", authProfileId: "good" }];
+        for (const id of ids) tabs.push({ url: "https://" + id.replace(/_/g, "u") + ".example/", authProfileId: id });
+        const g = _group(tabs, [{ id: "good" }].concat(ids.map(id => ({ id: id }))));
+        compare(Object.keys(g).sort(), ["good"].concat(ids).sort());
+        compare(g.good.hosts, [U.authKey("https://good.example/")]);
+        compare(g["__proto__"].hosts, [U.authKey("https://uuprotouu.example/")]);
+        compare(g.constructor.hosts, [U.authKey("https://constructor.example/")]);
+    }
+
     // ===== First change of a session =================================
     function test_firstConfigChange_reportsEditedProfile() {
         // Seed as main.qml's Component.onCompleted does. No test above

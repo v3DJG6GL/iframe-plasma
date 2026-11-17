@@ -190,6 +190,27 @@ function changedAuthProfileIds(oldBodies, newBodies) {
     return changed;
 }
 
+// id -> { profile, hosts: [] } for every tab bound to an auth profile:
+// the grouping main.qml's primeAuthProfiles registers headers from.
+// `profileOf(id)` resolves a profile (falsy: skip the tab), `hostOf(tab)`
+// its host key (throws: skip the tab). Null-prototype map for the same
+// reason as authProfileBodies: with a plain {} an id like "constructor"
+// read an inherited member and the `.hosts` access threw, aborting the
+// priming of every profile.
+function groupAuthHosts(tabs, profileOf, hostOf) {
+    const out = Object.create(null);
+    for (const t of (tabs || [])) {
+        if (!t || !t.authProfileId || !t.url) continue;
+        let host;
+        try { host = hostOf(t); } catch (e) { continue; }
+        const p = profileOf(t.authProfileId);
+        if (!p) continue;
+        if (!out[p.id]) out[p.id] = { profile: p, hosts: [] };
+        if (!out[p.id].hosts.includes(host)) out[p.id].hosts.push(host);
+    }
+    return out;
+}
+
 // Whether a Basic-auth challenge may be auto-answered with the stored
 // credentials. `lastAnsweredMs` is when the same challenge was last
 // auto-answered (falsy: never). A challenge that comes straight back means
