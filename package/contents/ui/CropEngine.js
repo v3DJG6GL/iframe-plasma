@@ -1026,6 +1026,17 @@ ${_TEARDOWN_BODY}
     return structural(el);
   }
 
+  // uPlot's transparent .u-over (with its cursor children) covers the plot
+  // area and takes the pointer, .u-under sits below it: either one isolated
+  // crops to a blank box. Hand back the chart's canvas, which the crop
+  // blits instead.
+  function retarget(t) {
+    const layer = t && t.closest ? t.closest('.u-over, .u-under') : null;
+    const c = layer && layer.parentElement
+      && layer.parentElement.querySelector(':scope > canvas');
+    return c || t;
+  }
+
   let lastHover = null;
   let lastPoint = null;
   function move(e) {
@@ -1033,7 +1044,7 @@ ${_TEARDOWN_BODY}
     // Hide the outline so elementFromPoint returns the underlying element,
     // not the outline itself.
     outline.style.display = 'none';
-    const t = document.elementFromPoint(e.clientX, e.clientY);
+    const t = retarget(document.elementFromPoint(e.clientX, e.clientY));
     outline.style.display = 'block';
     if (!t || t === outline || t === banner) return;
     // Measured on every move, even over the same element: the page may have
@@ -1055,7 +1066,7 @@ ${_TEARDOWN_BODY}
     outline.style.display = 'none';
     const bannerWasVisible = banner.style.display !== 'none';
     banner.style.display = 'none';
-    const t = document.elementFromPoint(e.clientX, e.clientY) || lastHover;
+    const t = retarget(document.elementFromPoint(e.clientX, e.clientY)) || lastHover;
     if (bannerWasVisible) banner.style.display = 'block';
     e.preventDefault();
     e.stopImmediatePropagation();

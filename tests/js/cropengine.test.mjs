@@ -1249,6 +1249,26 @@ test("picker: the structural fallback keeps the case of SVG element names", () =
     assert.equal(p.doc.querySelector(picked), target, picked);
 });
 
+test("picker: a pick on a uPlot chart's overlay picks its canvas", () => {
+    // uPlot's transparent .u-over (and its cursor children) sits on top of
+    // the plot area; isolated, it would crop to a blank box.
+    const chart = "<div class='u-wrap'><div class='u-under'></div>" +
+        "<canvas id='c' width='600' height='300'></canvas>" +
+        "<div class='u-over'><div class='u-cursor-pt'></div></div></div>";
+    for (const sel of [".u-over", ".u-cursor-pt", ".u-under"]) {
+        const p = runPicker(`<!doctype html><html><body><p>title</p>${chart}</body></html>`);
+        const canvas = p.doc.getElementById("c");
+        canvas.getBoundingClientRect = () => ({ left: 0, top: 30, width: 600, height: 300 });
+        const outline = p.doc.getElementById("__ifpPickerOutline");
+        const layer = p.doc.querySelector(sel);
+        p.pointAt(layer);
+        p.fire(layer, "mousemove");
+        assert.equal(outline.style.top, "30px", sel);
+        p.fire(layer, "pointerdown");
+        assert.equal(p.doc.querySelector(p.w.__ifpPicked), canvas, sel);
+    }
+});
+
 test("picker: picking <body> yields 'body', not a cancel", () => {
     const p = runPicker("<!doctype html><html><body><p>x</p></body></html>");
     p.pointAt(p.doc.body);
