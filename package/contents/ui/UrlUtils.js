@@ -196,6 +196,24 @@ function substituteTheme(url, theme) {
     return String(url).replace(/\$\{theme\}/g, theme);
 }
 
+// Whether a light/dark flip changes any interceptor key, i.e. some auth tab
+// has ${theme} in its scheme/host/port. Only then is a re-prime needed; the
+// common `?theme=${theme}` query keeps the keys, and a needless re-prime
+// clears every header and may block on a wallet-unlock prompt.
+function themeChangesAuthKeys(tabs) {
+    if (!Array.isArray(tabs)) return false;
+    function keyFor(url, theme) {
+        try { return authKey(substituteTheme(url, theme)); } catch (e) { return null; }
+    }
+    for (const t of tabs) {
+        if (!t || !t.authProfileId || !t.url) continue;
+        const url = String(t.url);
+        if (url.indexOf("${theme}") === -1) continue;
+        if (keyFor(url, "light") !== keyFor(url, "dark")) return true;
+    }
+    return false;
+}
+
 // Relative range ("24h", "7d", …) a thumbnail URL's from/to is rewritten to;
 // "" keeps the URL's own. A fixed per-tab thumbTimeRange wins: the session
 // override only lets an "auto" tab follow the popup, and one left over from

@@ -66,6 +66,30 @@ TestCase {
         compare(U.pickThemeForBackground("auto", { r: 1 }), "dark");
     }
 
+    // ----- themeChangesAuthKeys: when a theme flip must re-prime ---------
+    function test_themeChangesAuthKeys_queryPlaceholder_noReprime() {
+        // The common Grafana `?theme=${theme}` keeps the interceptor key.
+        verify(!U.themeChangesAuthKeys([
+            { url: "https://g.example.com/d/x?theme=${theme}", authProfileId: "p1" }]));
+    }
+    function test_themeChangesAuthKeys_noPlaceholder_noReprime() {
+        verify(!U.themeChangesAuthKeys([
+            { url: "https://g.example.com/d/x", authProfileId: "p1" }]));
+    }
+    function test_themeChangesAuthKeys_hostPlaceholderWithoutAuth_noReprime() {
+        verify(!U.themeChangesAuthKeys([
+            { url: "https://${theme}.example.com/", authProfileId: "" }]));
+    }
+    function test_themeChangesAuthKeys_hostPlaceholderWithAuth_reprimes() {
+        verify(U.themeChangesAuthKeys([
+            { url: "https://g.example.com/", authProfileId: "p1" },
+            { url: "https://${theme}.example.com/", authProfileId: "p1" }]));
+    }
+    function test_themeChangesAuthKeys_badInput() {
+        verify(!U.themeChangesAuthKeys(null));
+        verify(!U.themeChangesAuthKeys([null]));
+    }
+
     // ----- substituteTheme: dollar placeholder -----------------------
     function test_substituteTheme_singleOccurrence() {
         compare(U.substituteTheme("https://g/?theme=${theme}", "dark"),

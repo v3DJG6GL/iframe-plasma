@@ -134,9 +134,13 @@ PlasmoidItem {
     // The interceptor keys come from the theme-resolved URL, so a ${theme}
     // placeholder in the HOST changes them when the theme flips (colour
     // scheme or themeMode). The views re-navigate through their url
-    // bindings; re-prime so the new host carries its header.
+    // bindings; re-prime so the new host carries its header. Only then:
+    // a re-prime clears every header and reads the wallet, which can block
+    // on an unlock prompt and leave preempt tabs headerless if cancelled.
     readonly property string _resolvedTheme: resolveTheme()
-    on_ResolvedThemeChanged: root.primeAuthProfiles()
+    on_ResolvedThemeChanged: {
+        if (UrlUtils.themeChangesAuthKeys(root.tabs)) root.primeAuthProfiles();
+    }
 
     function resolveUrl(tab) {
         if (!tab || !tab.url) return "about:blank";
