@@ -21,8 +21,13 @@
 // any page script can shadow it. The first call waits a random fraction
 // of the interval, spreading the (synchronous) GC pauses of several views.
 // Returns "" when intervalSec <= 0 (workaround disabled).
+//
+// Capped at the settings page's 300 s: a larger value from a hand-edited
+// config or an imported backup can pass 2^31-1 ms, which setTimeout /
+// setInterval wrap to a negative delay and run as 0 (a gc() every few ms).
+const GC_MAX_INTERVAL_MS = 300000;
 function gcWorkaroundSource(intervalSec) {
-    const ms = Math.round(Number(intervalSec) * 1000);
+    const ms = Math.min(Math.round(Number(intervalSec) * 1000), GC_MAX_INTERVAL_MS);
     if (!(ms > 0)) return "";
     return "(function(){\n" +
            "  if (window.__ifpGcArmed) return;\n" +

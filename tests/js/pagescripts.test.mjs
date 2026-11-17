@@ -57,6 +57,14 @@ test("gcWorkaroundSource: embeds the interval in milliseconds", () => {
     assert.match(ps.gcWorkaroundSource(20), /var ms = 20000;/);
 });
 
+test("gcWorkaroundSource: caps the interval at the 300 s settings maximum", () => {
+    assert.match(ps.gcWorkaroundSource(300), /var ms = 300000;/);
+    assert.match(ps.gcWorkaroundSource(301), /var ms = 300000;/);
+    // 3e9 ms would wrap to a negative timer delay, i.e. a gc() every few ms.
+    assert.match(ps.gcWorkaroundSource(3000000), /var ms = 300000;/);
+    assert.match(ps.gcWorkaroundSource(Infinity), /var ms = 300000;/);
+});
+
 test("with gc: first call after a random offset, then every interval", () => {
     const p = makePage({ withGc: true, random: 0.25 });
     p.run(ps.gcWorkaroundSource(20));
