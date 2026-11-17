@@ -16,7 +16,7 @@
  *                            dialog's Add or Edit mode.
  *
  *   parseRefreshSeconds(u, min, max) — a URL's refresh=<N>s|m|h as
- *                            clamped seconds, -1 when absent/unreadable.
+ *                            clamped seconds, -1 when absent/unreadable/0.
  *
  *   parseTimeRange(u, presets) — the preset a URL's from/to window is,
  *                            "" when it is none of them.
@@ -176,6 +176,10 @@ function parseRefreshSeconds(url, minSec, maxSec) {
     const m = base.match(/[?&]refresh=([0-9]+)([smhd])(?:&|$)/);
     if (!m) return -1;
     const sec = parseInt(m[1], 10) * { s: 1, m: 60, h: 3600, d: 86400 }[m[2]];
+    // refresh=0<unit> is no auto-refresh in Grafana (a count must be > 0);
+    // clamping it to minSec would let an untouched Edit-dialog OK turn it
+    // into a live minSec poll.
+    if (sec <= 0) return -1;
     return Math.max(minSec, Math.min(maxSec, sec));
 }
 

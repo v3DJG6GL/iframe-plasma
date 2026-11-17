@@ -399,6 +399,14 @@ TestCase {
         compare(G.parseRefreshSeconds("https://g/x#a?refresh=1m", 5, 3600), -1);
         compare(G.parseRefreshSeconds(null, 5, 3600), -1);
     }
+    // A zero interval is Grafana's "no auto-refresh", not a value below
+    // the minimum: clamping it to 5 opened the Edit dialog with the switch
+    // on and an untouched OK wrote refresh=5s.
+    function test_parseRefreshSeconds_zeroIsOff() {
+        compare(G.parseRefreshSeconds("https://g/x?refresh=0s", 5, 3600), -1);
+        compare(G.parseRefreshSeconds("https://g/x?refresh=0m&kiosk", 5, 3600), -1);
+        compare(G.parseRefreshSeconds("https://g/x?refresh=00h", 5, 3600), -1);
+    }
 
     // ===== parseTimeRange (Edit dialog pre-fill) =====================
     readonly property var _presets: ["", "5m", "1h", "24h", "7d"]
