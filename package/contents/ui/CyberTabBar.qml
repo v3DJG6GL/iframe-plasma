@@ -72,6 +72,16 @@ Rectangle {
     onCurrentIndexChanged: Qt.callLater(scrollToCurrent)
     onFullRepVisibleChanged: if (fullRepVisible) Qt.callLater(scrollToCurrent)
     Component.onCompleted: Qt.callLater(scrollToCurrent)
+    // An in-place relabel (metadataSerial bump) widens or narrows tabs
+    // without touching currentIndex/count/width, so none of the triggers
+    // above fire. Scrolling right away is too early: the delegates' Rows
+    // only relayout on the next polish. Wait for the contentWidth change
+    // that relayout produces instead. The flag (not a bare
+    // onContentWidthChanged) keeps the delegate-estimate churn of an
+    // ordinary flick from yanking the strip back to the active tab, and
+    // user scrolling clears it in case the relabel changed no width.
+    property bool _relayoutPending: false
+    onMetadataSerialChanged: _relayoutPending = true
 
     // 1px hairline under the tab strip
     Rectangle {
@@ -97,6 +107,11 @@ Rectangle {
 
         onWidthChanged: Qt.callLater(bar.scrollToCurrent)
         onCountChanged: Qt.callLater(bar.scrollToCurrent)
+        onContentWidthChanged: if (bar._relayoutPending) {
+            bar._relayoutPending = false;
+            Qt.callLater(bar.scrollToCurrent);
+        }
+        onMovementStarted: bar._relayoutPending = false
 
         delegate: Item {
             id: tabDel
@@ -271,6 +286,7 @@ Rectangle {
                      : wheel.pixelDelta.y !== 0 ? wheel.pixelDelta.y
                      : (wheel.angleDelta.x !== 0 ? wheel.angleDelta.x
                                                  : wheel.angleDelta.y) / 8
+            bar._relayoutPending = false
             tabList.contentX -= dx
             tabList.returnToBounds()
             wheel.accepted = true
