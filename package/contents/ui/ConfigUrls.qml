@@ -1075,8 +1075,15 @@ KCM.SimpleKCM {
                                     // OK/Apply without Enter would drop it.
                                     // Clearing the text makes a following
                                     // Add click / Enter a no-op, not a
-                                    // second add.
+                                    // second add. Not while the field's
+                                    // own context menu holds focus: the
+                                    // org.kde.desktop menu sets
+                                    // persistentSelection before it opens
+                                    // and hands focus back on close, so a
+                                    // half-typed pattern must survive a
+                                    // Paste from it.
                                     onEditingFinished: {
+                                        if (persistentSelection) return;
                                         if (text.trim().length > 0) {
                                             page._addKeyword(urlRow.index, text);
                                             text = "";
