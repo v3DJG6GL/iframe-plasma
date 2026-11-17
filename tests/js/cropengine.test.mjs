@@ -1973,6 +1973,17 @@ test("fit: same scale re-applied does not dispatch resize again", () => {
     assert.equal(t.resizes(), 1);
 });
 
+test("fit: the target is measured by its border box", () => {
+    // The counter-size is a border-box size; measured from scrollWidth alone
+    // the content would overflow by 2×border and get a scaled-up scrollbar.
+    const t = runFitApply("border:10px solid");
+    // 100×60 content + 20 px of border: min(400/120, 300/80).
+    const s = 400 / 120;
+    assert.equal(t.el.style.transform, `scale(${s})`);
+    assert.equal(t.el.style.width, "120px");
+    assert.equal(t.el.style.height, `${300 / s}px`);
+});
+
 test("fit: a viewport change re-scales and dispatches resize once", () => {
     const t = runFitApply();
     t.tick();

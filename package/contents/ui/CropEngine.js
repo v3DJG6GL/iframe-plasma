@@ -473,8 +473,14 @@ const _APPLY_BODY = `(function(sel, opts){
     _ifpFitRestore(el);
     // Force layout so scrollWidth/scrollHeight reflect post-reset state.
     void el.offsetWidth;
-    var cw = el.scrollWidth;
-    var ch = el.scrollHeight;
+    // scrollWidth/Height leave out the border, but the counter-size below is
+    // a border-box size (the fit rule sets box-sizing:border-box): measured
+    // without it, the content overflows by 2×border and overflow:auto shows a
+    // scrollbar, scaled up by s. Computed style, not offsetWidth: an outer
+    // <svg> target has none.
+    var bcs = getComputedStyle(el);
+    var cw = el.scrollWidth + (parseFloat(bcs.borderLeftWidth) || 0) + (parseFloat(bcs.borderRightWidth) || 0);
+    var ch = el.scrollHeight + (parseFloat(bcs.borderTopWidth) || 0) + (parseFloat(bcs.borderBottomWidth) || 0);
     var vw = window.innerWidth;
     var vh = window.innerHeight;
     if (cw <= 0 || ch <= 0 || vw <= 0 || vh <= 0) { noteFitWrites(el); forgetOwnMutations(); return; }
