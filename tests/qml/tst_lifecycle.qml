@@ -423,6 +423,15 @@ TestCase {
         compare(r.pid, 4343);
         compare(r.sinceMs, 90000);
     }
+    // The wall clock stepped back a day while the renderer lived: keeping
+    // the future stamp left the recycle overdue by the whole step.
+    function test_trackRenderer_clockSteppedBackRestartsClock() {
+        const day = 24 * 3600 * 1000;
+        const r = P.trackRenderer(4242, 1e12, 4242, 1e12 - day);
+        compare(r.pid, 4242);
+        compare(r.sinceMs, 1e12 - day);
+        verify(P.isRecycleDue(r.sinceMs, 7200, 1e12 - day + 7200 * 1000));
+    }
 
     // ============================================================
     //  mayRetryRendererCrash — popup and thumbnail crash budget

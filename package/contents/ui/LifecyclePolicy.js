@@ -86,9 +86,13 @@ function decideOnChange(currentState, desiredActive, frozenAtMs,
 // pid 0 (no renderer, e.g. Discarded) clears it. Sampling instead of
 // renderProcessPidChanged because that signal was not observed to fire on
 // Qt 6.10 (tests/e2e/tst_lifecycle_e2e.cpp discard_replacesRenderProcess).
+// A stamp in the future means the wall clock stepped back (NTP fix on a
+// kiosk without RTC): restart the clock too, or the recycle would wait for
+// the whole size of the step instead of at most one recycleAfterSec.
 // Returns { pid, sinceMs }.
 function trackRenderer(prevPid, prevSinceMs, pid, now) {
-    if (pid === prevPid) return { pid: prevPid, sinceMs: prevSinceMs };
+    if (pid === prevPid && !(now < prevSinceMs))
+        return { pid: prevPid, sinceMs: prevSinceMs };
     return { pid: pid, sinceMs: pid > 0 ? now : 0 };
 }
 
