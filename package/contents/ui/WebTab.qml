@@ -759,17 +759,19 @@ Item {
                 // genuine later crash recover while still stopping a crash-loop from
                 // hammering plasmashell.
                 //
-                // Reset loginInProgress for the same reason tab.reload()/hardReload()
-                // do (see contract at L90-95): the crash destroyed any in-flight form
-                // contents and the post-reload LoadSucceeded on Authelia would
-                // otherwise take the "hide overlay" branch and leave the operator
-                // typing into a bare Authelia form with no trust signal. Same
-                // bug-class as bb69913's broadcast-reload latch leak.
+                // Reset loginInProgress, on the no-retry branch too, for the same
+                // reason tab.reload()/hardReload() do (see the contract above
+                // reload()): the crash destroyed any in-flight form contents and
+                // the next LoadSucceeded on Authelia would otherwise take the
+                // "hide overlay" branch and leave the operator typing into a bare
+                // Authelia form with no trust signal. Same bug-class as bb69913's
+                // broadcast-reload latch leak.
                 property double _lastRenderRetryMs: 0
                 onRenderProcessTerminated: function(status, exitCode) {
                     console.warn(Log.load, "iframe-plasma[render] terminated status=" + status
                         + " exitCode=" + exitCode);
                     if (status === WebEngineView.NormalTerminationStatus) return;
+                    tab.loginInProgress = false;
                     const now = Date.now();
                     if (now - _lastRenderRetryMs < 60000) {
                         console.warn(Log.load, "iframe-plasma[render] crash within 60s window, not retrying");
@@ -780,7 +782,6 @@ Item {
                         return;
                     }
                     _lastRenderRetryMs = now;
-                    tab.loginInProgress = false;
                     webview.reload();
                 }
 
@@ -945,7 +946,9 @@ Item {
     StatusOverlay {
         id: statusOverlay
         anchors.fill: parent
-        onReloadClicked: tab.webView?.reload()
+        // Through the wrapper, not the raw view: it clears loginInProgress
+        // and promotes a Discarded view (see reload() above).
+        onReloadClicked: tab.reload()
         onOpenExternalClicked: openExternal()
         onLoginClicked: tab.loginInProgress = true
     }
