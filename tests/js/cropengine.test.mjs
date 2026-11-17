@@ -930,6 +930,20 @@ test("picker: the structural fallback anchors on a unique ancestor id", () => {
     assert.equal(p.doc.querySelector(p.w.__ifpPicked), target);
 });
 
+test("picker: the structural fallback keeps the case of SVG element names", () => {
+    // Labels inside <foreignObject> (Mermaid, D3); 'foreignobject' would
+    // not match the SVG element.
+    const node = "<svg><foreignObject><div><span>a</span></div></foreignObject></svg>";
+    const p = runPicker(`<!doctype html><html><body>${node}${node}</body></html>`);
+    const target = p.doc.querySelectorAll("span")[1];
+    p.pointAt(target);
+    p.fire(target, "pointerdown");
+    const picked = p.w.__ifpPicked;
+    assert.match(picked, /foreignObject/, picked);
+    assert.equal(p.doc.querySelectorAll(picked).length, 1, picked);
+    assert.equal(p.doc.querySelector(picked), target, picked);
+});
+
 test("picker: picking <body> yields 'body', not a cancel", () => {
     const p = runPicker("<!doctype html><html><body><p>x</p></body></html>");
     p.pointAt(p.doc.body);

@@ -856,7 +856,10 @@ ${_TEARDOWN_BODY}
     while (cur && cur.tagName && cur !== document.body) {
       const byId = cur.id ? uniq('#' + cssEscape(cur.id)) : null;
       if (byId) { parts.unshift(byId); return parts.join(' > '); }
-      let part = cur.tagName.toLowerCase();
+      // localName, not tagName.toLowerCase(): in an HTML document a type
+      // selector matches SVG elements case-sensitively, so 'foreignobject'
+      // would never match <foreignObject>.
+      let part = cur.localName;
       const sibs = cur.parentElement
         ? Array.from(cur.parentElement.children).filter(c => c.tagName === cur.tagName)
         : [];
