@@ -1879,6 +1879,42 @@ test("apply: a hidden first match gives way to a rendered one", () => {
     assert.equal(t.$("d").getAttribute("data-ifp-target"), "1");
 });
 
+test("apply: a later match the page shows after isolation is followed", () => {
+    // A carousel moves on from the isolated slide: our own isolation hides
+    // the newly active pane, so the page's visibility must decide, not ours.
+    const t = runRenderedApply(
+        "<style>.slide{display:none}.slide.active{display:block}</style>" +
+        "<div id='s1' class='slide active'><p id='x1' class='x'>1</p></div>" +
+        "<div id='s2' class='slide'><p id='x2' class='x'>2</p></div>", ".x");
+    assert.equal(t.result, "matched-and-observing");
+    assert.equal(t.$("x1").getAttribute("data-ifp-target"), "1");
+    t.$("s1").classList.remove("active");
+    t.$("s2").classList.add("active");
+    t.w.__ifpThumbSchedule();
+    assert.equal(t.$("x2").getAttribute("data-ifp-target"), "1");
+    assert.equal(t.$("x1").hasAttribute("data-ifp-target"), false);
+    assert.equal(t.w.document.documentElement.getAttribute("data-ifp-isolate"), "1");
+    assert.equal(t.$("x2").checkVisibility(), true);
+});
+
+test("apply: a re-mounted visible match beats a hidden duplicate that comes first", () => {
+    // The SPA replaces the isolated node: the new one is not the target yet,
+    // so our isolation hides it, and the first match is the page's own
+    // display:none mobile copy.
+    const t = runRenderedApply(
+        "<div style='display:none'><div id='m' class='t'>mobile</div></div>" +
+        "<div id='wrap'><div id='d' class='t'>desktop</div></div>", ".t");
+    assert.equal(t.$("d").getAttribute("data-ifp-target"), "1");
+    const d2 = t.w.document.createElement("div");
+    d2.id = "d2";
+    d2.className = "t";
+    t.$("d").replaceWith(d2);
+    t.w.__ifpThumbSchedule();
+    assert.equal(d2.getAttribute("data-ifp-target"), "1");
+    assert.equal(t.$("m").hasAttribute("data-ifp-target"), false);
+    assert.equal(d2.checkVisibility(), true);
+});
+
 test("apply: with no rendered match the first one is still isolated", () => {
     for (const cv of [true, false]) {
         const t = runRenderedApply(

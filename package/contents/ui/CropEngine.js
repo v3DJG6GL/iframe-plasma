@@ -633,12 +633,26 @@ const _APPLY_BODY = `(function(sel, opts){
   // DOM, and isolating it would blank the crop while reporting a match.
   // Falls back to the first match when none is rendered, or without
   // checkVisibility (jsdom). The common case costs one querySelector.
+  // Our own isolation hides every match but the current target, so once the
+  // page hides that one (a carousel or tab pane moving on, an SPA re-mount)
+  // no match tests rendered: the page's own visibility must decide, so the
+  // scan is repeated with isolation lifted. Isolation can only hide, never
+  // show, so a match rendered under it is rendered without it too. The
+  // attribute goes back in the same task (no flash); isolateElement re-sets
+  // it for the new target anyway.
   function firstRendered() {
     const first = document.querySelector(sel);
     if (!first || !first.checkVisibility || first.checkVisibility()) return first;
     const all = document.querySelectorAll(sel);
     for (let i = 1; i < all.length; i++) if (all[i].checkVisibility()) return all[i];
-    return first;
+    const root = document.documentElement;
+    const iso = root.getAttribute('data-ifp-isolate');
+    if (iso === null) return first;
+    root.removeAttribute('data-ifp-isolate');
+    let found = first;
+    for (let i = 0; i < all.length; i++) if (all[i].checkVisibility()) { found = all[i]; break; }
+    root.setAttribute('data-ifp-isolate', iso);
+    return found;
   }
   function apply() {
     // Picker-armed guard: same as isolateElement(). Short-circuits
