@@ -27,8 +27,13 @@ QtObject {
     // distro, and Qt resolves an unknown family to the default *sans*
     // (QML font.family can't carry a monospace style hint), so a missing
     // font falls back to fontconfig's "monospace" alias explicitly.
-    function monoFamily(preferred) {
-        return Qt.fontFamilies().indexOf(preferred) >= 0 ? preferred : "monospace";
+    // A family installed from more than one foundry is listed only as
+    // "Family [foundry]" entries, so also compare with that suffix stripped;
+    // the bare name is still what Qt resolves. `families` is a test seam.
+    function monoFamily(preferred, families) {
+        const list = families || Qt.fontFamilies();
+        return list.some(f => f === preferred || f.replace(/ \[[^\]]*\]$/, "") === preferred)
+            ? preferred : "monospace";
     }
     readonly property string fontHeader: monoFamily("Hack")
     readonly property string fontBody:   monoFamily("IBM Plex Mono")
