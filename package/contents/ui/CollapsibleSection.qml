@@ -45,7 +45,7 @@ ColumnLayout {
     spacing: Kirigami.Units.smallSpacing
 
     // --- Clickable, focusable disclosure header ---
-    // AbstractButton gives Space/Enter activation and a focus stop for free;
+    // AbstractButton gives Space activation and a focus stop for free;
     // mirrors the AbstractButton usage in CyberToolbar.qml. Padding follows
     // KDE's FormHeader/ListSectionHeader rhythm (12px top of breathing room,
     // 8px each side of the click target) so the row never feels cramped.
@@ -64,6 +64,18 @@ ColumnLayout {
             ? i18n("Expanded. Activate to collapse.")
             : i18n("Collapsed. Activate to expand.")
         onClicked: root.expanded = !root.expanded
+        // AbstractButton activates on Space only. Return/Enter must toggle
+        // too and be swallowed: unhandled, they reach Plasma's
+        // AppletConfiguration, whose Keys.onReturnPressed applies every
+        // page and closes the config dialog.
+        Keys.onReturnPressed: (event) => {
+            root.expanded = !root.expanded;
+            event.accepted = true;
+        }
+        Keys.onEnterPressed: (event) => {
+            root.expanded = !root.expanded;
+            event.accepted = true;
+        }
 
         // Subtle hover / focus wash. Qt.rgba over a theme role (the
         // nonexistent Qt.alpha() is intentionally avoided) — same tinting
