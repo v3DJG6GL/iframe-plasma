@@ -72,7 +72,7 @@ jobs:
     steps:
       # persist-credentials: false — both pushes below carry their credential
       # explicitly, so the run token never sits in .git/config.
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -133,7 +133,7 @@ jobs:
       tag: ${{ steps.rel.outputs.tag }}
       release_id: ${{ steps.draft.outputs.id }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           # On a bump run, read the tagged commit (not the pre-bump dispatch ref).
           ref: ${{ needs.version.outputs.tag || github.ref }}
@@ -233,7 +233,7 @@ jobs:
             qt6-webengine-dev qt6-webengine-dev-tools
           flock "$APT_ARCHIVES.lock" apt-get autoclean -qq
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           # On a bump run, build the tagged commit (not the pre-bump dispatch ref).
           ref: ${{ needs.version.outputs.tag || github.ref }}
@@ -335,7 +335,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # The helper script comes from the release commit.
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.draft.outputs.tag }}
           persist-credentials: false

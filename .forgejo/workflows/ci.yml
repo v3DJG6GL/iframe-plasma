@@ -51,8 +51,8 @@ jobs:
     name: Lint (pre-commit)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: https://github.com/actions/setup-python@v6
+      - uses: actions/checkout@v7
+      - uses: https://github.com/actions/setup-python@v7
         with:
           python-version: '3.14.10'
       - run: pip install pre-commit
@@ -150,7 +150,7 @@ jobs:
           flock "$APT_ARCHIVES.lock" apt-get autoclean -qq
           ccache --zero-stats
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Configure
         run: cmake -S . -B build -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Debug
